@@ -1,0 +1,9 @@
+dist-newstyle
+build
+.xmake
+.vscode
+
+*.bin
+
+runtime/lib
+runtime/bin
