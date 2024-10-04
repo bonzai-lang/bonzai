@@ -6,3 +6,11 @@
 (native / [A] (-> A A A))
 (native exit [A] (-> A))
 (native value [A] (-> (mutable A) A))
+
+(native == [A] (-> A A bool))
+(native != [A] (-> A A bool))
+(native < [A] (-> A A bool))
+(native > [A] (-> A A bool))
+(native <= [A] (-> A A bool))
+(native >= [A] (-> A A bool))
+(native unit unit)

@@ -1,47 +1,20 @@
 (require "natives")
 
-
-(event Counter
-  (on count-up [counter] {
-    (set counter (+ (value counter) 1))
-    (print (value counter))
-  })
-
-  (on exit [] (exit))
+(interface Loopable [a]
+  (defn loop [(ev Loopable)])
 )
 
-(event Main
-  (on ping [user] {
-    (print user)
-  })
+(defn Loop [msg] {
 
-  (on exit [] (exit))
-)
+  (actor (implements Loopable)
+    (on loop [(ev Loopable)] {
+      (print msg)
+      (send ev loop ev)
 
-(mut counter 0)
-(let c (spawn Counter))
+      unit
+    })
+  )
+})
 
-(send c count-up counter)
-(send c count-up counter)
-(send c count-up counter)
-
-
-(let m (spawn Main))
-(send m ping "Hello, World!")
-
-(send c exit)
-(send m exit)
-
-(event IntrinsicCounter 
-  (mut counter 0)
-
-  (on count-up [] {
-    (set counter (+ (value counter) 1))
-    (print (value counter))
-  })
-)
-
-(let ic (spawn IntrinsicCounter))
-(send ic count-up)
-(send ic count-up)
-(send ic count-up)
+(let l (spawn (Loop "loop")))
+(send l loop l)
