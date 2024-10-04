@@ -167,7 +167,9 @@ parseActor = localize $ do
   implemented <- Lex.parens $ do
     void $ Lex.reserved "implements"
     Lex.identifier
-  HLIR.MkExprLet (HLIR.MkAnnotation name Nothing) . HLIR.MkExprActor implemented <$> P.many parseExpression
+  HLIR.MkExprLet (HLIR.MkAnnotation name Nothing) 
+    . HLIR.MkExprActor implemented 
+      <$> P.many (Lex.parens parseOn)
 
 parseAnonActor :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseAnonActor = localize $ do
@@ -175,7 +177,7 @@ parseAnonActor = localize $ do
   implemented <- Lex.parens $ do
     void $ Lex.reserved "implements"
     Lex.identifier
-  HLIR.MkExprActor implemented <$> P.many parseExpression
+  HLIR.MkExprActor implemented <$> P.many (Lex.parens parseOn)
 
 parseOn :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseOn = localize $ do
