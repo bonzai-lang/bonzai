@@ -6,6 +6,19 @@ import qualified Language.Bonzai.Frontend.Parser.Internal.Literal as Lit
 import qualified Language.Bonzai.Syntax.HLIR as HLIR
 import qualified Language.Bonzai.Frontend.Parser.Internal.Type as Typ
 
+parseAnnotation :: MonadIO m => P.Parser m a -> P.Parser m (HLIR.Annotation (Maybe a))
+parseAnnotation p = P.choice [
+    Lex.parens $ do
+      name <- Lex.identifier
+      ty <- P.optional p
+
+      pure $ HLIR.MkAnnotation name ty,
+    HLIR.MkAnnotation <$> Lex.identifier <*> pure Nothing
+  ]
+
+parseAnnotation' :: MonadIO m => P.Parser m a -> P.Parser m (HLIR.Annotation a)
+parseAnnotation' p = Lex.parens $ HLIR.MkAnnotation <$> Lex.identifier <*> p
+
 localize :: (MonadIO m, HLIR.Locate a) => P.Parser m a -> P.Parser m a
 localize p = do
   start <- P.getSourcePos
@@ -61,6 +74,26 @@ parseModule = localize $ do
 
   HLIR.MkExprModule name <$> P.many parseToplevel
 
+parseInterface :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseInterface = localize $ do
+  void $ Lex.reserved "interface"
+  name <- Lex.identifier
+  gens <- Lex.brackets (P.many Lex.identifier)
+
+  HLIR.MkExprInterface (HLIR.MkAnnotation name gens) <$> P.many parseDef
+
+  where
+    parseDef :: MonadIO m => P.Parser m (HLIR.Annotation HLIR.Type)
+    parseDef = Lex.parens $ do
+      void $ Lex.reserved "defn"
+      name <- Lex.identifier
+
+      args <- Lex.brackets (P.many (parseAnnotation' Typ.parseType))
+
+      let funTy = map (.value) args HLIR.:->: HLIR.MkTyUnit
+
+      pure $ HLIR.MkAnnotation name funTy
+
 parseBlock :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseBlock = localize $ do
   void $ Lex.symbol "{"
@@ -73,16 +106,16 @@ parseFunction :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseFunction = localize $ do
   void $ Lex.reserved "defn"
   name <- Lex.identifier
-  args <- Lex.brackets (P.many Lex.identifier)
+  args <- Lex.brackets (P.many (parseAnnotation Typ.parseType))
 
-  HLIR.MkExprLet (HLIR.MkAnnotation name Nothing) . HLIR.MkExprLambda (map (`HLIR.MkAnnotation` Nothing) args) Nothing <$> parseExpression
+  HLIR.MkExprLet (HLIR.MkAnnotation name Nothing) . HLIR.MkExprLambda args Nothing <$> parseExpression
 
 parseLambda :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseLambda = localize $ do
   void $ Lex.reserved "fn"
-  args <- Lex.brackets (P.many Lex.identifier)
+  args <- Lex.brackets (P.many (parseAnnotation Typ.parseType))
 
-  HLIR.MkExprLambda (map (`HLIR.MkAnnotation` Nothing) args) Nothing <$> parseExpression
+  HLIR.MkExprLambda args Nothing <$> parseExpression
 
 parseUpdate :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseUpdate = localize $ do
@@ -121,24 +154,30 @@ parseApplication = localize $ do
 
   pure $ HLIR.MkExprApplication expr args
 
-parseEvent :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseEvent = localize $ do
-  void $ Lex.reserved "event"
+parseActor :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseActor = localize $ do
+  void $ Lex.reserved "actor"
   name <- Lex.identifier
-  HLIR.MkExprLet (HLIR.MkAnnotation name Nothing) . HLIR.MkExprEvent <$> P.many parseExpression
+  implemented <- Lex.parens $ do
+    void $ Lex.reserved "implements"
+    Lex.identifier
+  HLIR.MkExprLet (HLIR.MkAnnotation name Nothing) . HLIR.MkExprActor implemented <$> P.many parseExpression
 
-parseAnonEvent :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseAnonEvent = localize $ do
-  void $ Lex.reserved "event"
-  HLIR.MkExprEvent <$> P.many parseExpression
+parseAnonActor :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseAnonActor = localize $ do
+  void $ Lex.reserved "actor"
+  implemented <- Lex.parens $ do
+    void $ Lex.reserved "implements"
+    Lex.identifier
+  HLIR.MkExprActor implemented <$> P.many parseExpression
 
 parseOn :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseOn = localize $ do
   void $ Lex.reserved "on"
   name <- Lex.identifier
-  args <- Lex.brackets (P.many Lex.identifier)
+  args <- Lex.brackets (P.many (parseAnnotation Typ.parseType))
 
-  HLIR.MkExprOn name (map (`HLIR.MkAnnotation` Nothing) args) <$> parseExpression
+  HLIR.MkExprOn name args <$> parseExpression
 
 parseSpawn :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseSpawn = localize $ do
@@ -150,7 +189,7 @@ parseSend = localize $ do
   void $ Lex.reserved "send"
   expr <- parseExpression
   name <- Lex.identifier
-  
+
   HLIR.MkExprSend expr name <$> P.many parseExpression
 
 parseRequire :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
@@ -166,8 +205,8 @@ parseExpression =
     parseMut,
     parseFunction,
     parseUpdate,
-    P.try parseEvent,
-    parseAnonEvent,
+    P.try parseActor,
+    parseAnonActor,
     parseOn,
     parseLambda,
     parseSend,
@@ -182,9 +221,10 @@ parseExpression =
     ]
 
 parseToplevel :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseToplevel = 
+parseToplevel =
   P.try (Lex.parens (P.choice [
     parseModule,
+    parseInterface,
     parseRequire,
     parseNative
   ])) <|>
