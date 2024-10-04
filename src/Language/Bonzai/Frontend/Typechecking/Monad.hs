@@ -23,7 +23,7 @@ import qualified Language.Bonzai.Syntax.Internal.Type as HLIR
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 
-type MonadChecker m = (MonadIO m, MonadError Error m)
+type MonadChecker m = (MonadIO m, MonadError Error m, MonadFail m)
 type Substitution = Map Text HLIR.Type
 
 {-# NOINLINE typeCounter #-}

@@ -127,7 +127,7 @@ typecheck (HLIR.MkExprActor i es) = do
     Just tys -> mapM M.instantiate tys
     Nothing -> throw (M.EventNotFound i)
 
-  (es', tys) <- unzip <$> traverse typecheck es
+  (es', tys) <- unzip <$> traverse (`typecheckEvent` methodsTys) es
 
   let names = map getName es
 
@@ -137,27 +137,39 @@ typecheck (HLIR.MkExprActor i es) = do
       Nothing -> throw (M.EventNotFound name)
 
   pure (HLIR.MkExprActor i es', HLIR.MkTyId i)
-typecheck (HLIR.MkExprOn ev args body) = do
-  args' <- traverse (\(HLIR.MkAnnotation ann ty) -> case ty of
-      Just annotation -> pure (ann, annotation)
-      Nothing -> do
-        ty' <- M.fresh
-        pure (ann, ty')
-    ) args
 
-  let schemes = map (second $ HLIR.Forall []) args'
+  where
+    typecheckEvent :: M.MonadChecker m => HLIR.HLIR "expression" -> Map Text HLIR.Type -> m (HLIR.TLIR "expression", HLIR.Type)
+    typecheckEvent (HLIR.MkExprOn ev args body) m = do
+      argsTys HLIR.:->:_ <- case Map.lookup ev m of
+        Just s -> pure s
+        Nothing -> throw (M.EventNotFound ev)
 
-  body' <- M.with
-    M.checkerState
-    (\st -> st { M.variables = Map.union (Map.fromList schemes) st.variables })
-    $ do
-      (body', ret') <- typecheck body
-      ret' `U.unifiesWith` HLIR.MkTyId "unit"
-      pure body'
+      args' <- traverse (\(HLIR.MkAnnotation ann ty, expectedTy) -> case ty of
+          Just annotation -> pure (ann, annotation)
+          Nothing -> pure (ann, expectedTy)
+        ) (zip args argsTys)
 
-  let wfArgs = map (uncurry HLIR.MkAnnotation . second Identity) args'
+      let schemes = map (second $ HLIR.Forall []) args'
 
-  pure (HLIR.MkExprOn ev wfArgs body', map snd args' HLIR.:->: HLIR.MkTyId "unit")
+      body' <- M.with
+        M.checkerState
+        (\st -> st { M.variables = Map.union (Map.fromList schemes) st.variables })
+        $ do
+          (body', ret') <- typecheck body
+          ret' `U.unifiesWith` HLIR.MkTyId "unit"
+          pure body'
+
+      let wfArgs = map (uncurry HLIR.MkAnnotation . second Identity) args'
+
+      pure (HLIR.MkExprOn ev wfArgs body', map snd args' HLIR.:->: HLIR.MkTyId "unit")
+    typecheckEvent (HLIR.MkExprLoc e p) m = do
+      HLIR.pushPosition p
+      (e', ty) <- typecheckEvent e m
+      void HLIR.popPosition
+      pure (HLIR.MkExprLoc e' p, ty)
+    typecheckEvent e _ = compilerError $ "typecheck: event block should only contain let bindings or events, received " <> toText e
+typecheck (HLIR.MkExprOn {}) = compilerError "typecheck: event block should only contain let bindings or events"
 typecheck (HLIR.MkExprSend e ev a) = do
   (e', ty) <- typecheck e
   (a', elTys) <- mapAndUnzipM typecheck a
@@ -176,7 +188,7 @@ typecheck (HLIR.MkExprSend e ev a) = do
         Nothing -> throw (M.EventNotFound actorName)
     _ -> throw (M.ExpectedAnActor ty)
 
-  pure (HLIR.MkExprSend e' ev a', ty)
+  pure (HLIR.MkExprSend e' ev a', HLIR.MkTyId "unit")
 typecheck (HLIR.MkExprSpawn e) = do
   (e', ty) <- typecheck e
   pure (HLIR.MkExprSpawn e', ty)
@@ -218,7 +230,7 @@ typecheckUpdate (HLIR.MkUpdtIndex u e) = do
 
   pure (HLIR.MkUpdtIndex u' e', elTy)
 
-runTypechecking :: MonadIO m => [HLIR.HLIR "expression"] -> m (Either M.Error [HLIR.TLIR "expression"])
+runTypechecking :: (MonadIO m, MonadFail m) => [HLIR.HLIR "expression"] -> m (Either M.Error [HLIR.TLIR "expression"])
 runTypechecking es = do
   let st =
         M.MkCheckerState
