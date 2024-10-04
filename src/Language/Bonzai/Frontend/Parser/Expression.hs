@@ -30,6 +30,12 @@ localize p = do
 parseLiteral :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseLiteral = localize . Lex.lexeme $ HLIR.MkExprLiteral <$> Lit.parseLiteral
 
+parseTernary :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseTernary = localize $ do
+  void $ Lex.reserved "if"
+  
+  HLIR.MkExprTernary <$> parseExpression <*> parseExpression <*> parseExpression
+
 parseList :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseList = localize $ do
   void $ Lex.symbol "["
@@ -204,6 +210,7 @@ parseExpression =
     parseLet,
     parseMut,
     parseFunction,
+    parseTernary,
     parseUpdate,
     P.try parseActor,
     parseAnonActor,
