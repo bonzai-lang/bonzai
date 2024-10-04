@@ -7,6 +7,11 @@ hoist
   :: MonadIO m 
   => MLIR.MLIR "expression" 
   -> m (MLIR.MLIR "expression", [MLIR.MLIR "expression"])
+hoist (MLIR.MkExprEvent es) = do
+  name <- CC.freshLambda "hoist"
+  (es', hoisted) <- mapAndUnzipM hoist es
+
+  pure (MLIR.MkExprVariable name, MLIR.MkExprLet name (MLIR.MkExprEvent es') : concat hoisted)
 hoist (MLIR.MkExprLambda args e) = do
   name <- CC.freshLambda "hoist"
   (e', es) <- hoist e
@@ -16,10 +21,6 @@ hoist (MLIR.MkExprBlock es) = do
   (es', hoisted) <- mapAndUnzipM hoist es
 
   pure (MLIR.MkExprBlock es', concat hoisted)
-hoist (MLIR.MkExprEvent es) = do
-  (es', hoisted) <- mapAndUnzipM hoist es
-
-  pure (MLIR.MkExprEvent es', concat hoisted)
 hoist (MLIR.MkExprOn ev args e) = do
   (e', hoisted) <- hoist e
 
