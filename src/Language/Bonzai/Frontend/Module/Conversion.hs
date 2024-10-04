@@ -29,7 +29,7 @@ buildModule :: MonadIO m => Text -> m Text
 buildModule m = do
   ms <- readIORef moduleStack
   pure $ Text.intercalate "." (reverse (m : ms))
-  
+
 buildVariable :: MonadIO m => Text -> m Text
 buildVariable v = do
   mdv <- readIORef moduleDefinedVariables
@@ -108,9 +108,9 @@ convertModule (HLIR.MkExprTernary c t e) = do
   e' <- convertModule e
   pure $ HLIR.MkExprTernary c' t' e'
 convertModule (HLIR.MkExprLiteral l) = pure $ HLIR.MkExprLiteral l
-convertModule (HLIR.MkExprEvent e) = do
+convertModule (HLIR.MkExprActor i e) = do
   e' <- mapM convertModule e
-  pure $ HLIR.MkExprEvent e'
+  pure $ HLIR.MkExprActor i e'
 convertModule (HLIR.MkExprOn ev as e) = do
   e' <- convertModule e
   pure $ HLIR.MkExprOn ev as e'
@@ -124,6 +124,15 @@ convertModule (HLIR.MkExprSpawn e) = do
 convertModule (HLIR.MkExprList es) = do
   es' <- mapM convertModule es
   pure $ HLIR.MkExprList es'
+convertModule (HLIR.MkExprInterface ann defs) = do
+  defs' <- mapM convertModuleD defs
+  pure $ HLIR.MkExprInterface ann defs'
+  where
+    convertModuleD (HLIR.MkAnnotation name ty) = do
+      a' <- buildModule name
+      addVariable name
+
+      pure $ HLIR.MkAnnotation a' ty
 convertModule (HLIR.MkExprRequire _) = compilerError "convertModule: require should not appear in module conversion"
 convertModule (HLIR.MkExprModule _ _) = compilerError "convertModule: module should not appear in module conversion"
 
