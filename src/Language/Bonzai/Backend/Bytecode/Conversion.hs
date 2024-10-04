@@ -4,6 +4,7 @@ import qualified Language.Bonzai.Syntax.Bytecode as BC
 import qualified Data.Map as Map
 import qualified Language.Bonzai.Syntax.LLIR as LLIR
 import qualified Data.Set as Set
+import Control.Monad.Result (compilerError)
 
 {-# NOINLINE localPool #-}
 localPool :: IORef (Map Text Int)
@@ -78,13 +79,18 @@ instance Assemble LLIR.Instruction where
   assemble LLIR.Special = pure [BC.Special]
   assemble LLIR.Halt = pure [BC.Halt]
 
-  assemble (LLIR.MakeEvent eq lq len _) = pure [BC.MakeEvent eq lq len]
-  assemble (LLIR.EventOn event args body) = pure [BC.EventOn event args body]
+  assemble (LLIR.MakeEvent {}) = compilerError "Anonymous events should not appear in the bytecode"
   assemble (LLIR.Send args body) = pure [BC.Send args body]
   assemble LLIR.Spawn = pure [BC.Spawn]
   assemble LLIR.MakeMutable = pure [BC.MakeMutable]
 
 instance Assemble LLIR.Segment where
+  assemble (LLIR.EventOn id' arity bodyLength ls instructions) = do
+    let freed' = Map.fromList ls
+    instructions' <- withLocals freed' $ assemble instructions
+    
+    pure (BC.EventOn id' arity bodyLength (length ls) : instructions')
+
   assemble (LLIR.Function name _ ls freed instructions) = do
     let freed' = Map.fromList freed
 
@@ -92,18 +98,18 @@ instance Assemble LLIR.Segment where
     case Map.lookup name globals of
       Just addr -> do
         instructions' <- withLocals freed' $ assemble instructions
-        pure (BC.MakeFunctionAndStore addr (length instructions') ls : instructions')
+        pure (BC.MakeFunctionAndStore addr (length instructions' + 1) ls : instructions' <> [BC.Return])
       
       Nothing -> error $ "Global " <> name <> " not found"
 
-  assemble (LLIR.Event name _ ls instructions eq lq) = do
+  assemble (LLIR.Event name _ ls instructions eq) = do
     let freed' = Map.fromList ls
 
     globals <- readIORef globalPool
     case Map.lookup name globals of
       Just addr -> do
         instructions' <- withLocals freed' $ assemble instructions
-        pure (BC.MakeEvent eq lq (length instructions' + 1) : instructions' <> [BC.ReturnEvent, BC.StoreGlobal addr])
+        pure (BC.MakeEvent eq (length instructions' + 1) : instructions' <> [BC.ReturnEvent, BC.StoreGlobal addr])
       
       Nothing -> error $ "Global " <> name <> " not found"
 

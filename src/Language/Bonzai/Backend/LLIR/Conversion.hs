@@ -91,6 +91,7 @@ extractFrom :: LLIR.Segment -> [LLIR.Instruction]
 extractFrom (LLIR.Function {}) = error "Not implemented"
 extractFrom (LLIR.Event {}) = error "Not implemented"
 extractFrom (LLIR.Instruction instr) = [instr]
+extractFrom (LLIR.EventOn _ _ _ _ instrs) = instrs
 
 instance Assemble MLIR.Expression where
   assemble (MLIR.MkExprFunction name args body) = do
@@ -126,22 +127,19 @@ instance Assemble MLIR.Expression where
     let env = M.free reserved body
 
     let ons = filter (\case MLIR.MkExprOn {} -> True; _ -> False) body
-    let lets = filter (\case MLIR.MkExprLet {} -> True; MLIR.MkExprMut {} -> True; _ -> False) body
 
     ons' <- local (<> env) $ assemble ons
-    lets' <- local (<> env) $ assemble lets
 
     let localSpaceSize = Set.size env
 
-    let body'' = filter shouldNotBeLabel (ons' <> lets')
-        finalBody = concatMap extractFrom body''
+    let body'' = filter shouldNotBeLabel ons'
 
     let locals = List.nub $ Set.toList env
         localSpace = zip locals [0..]
 
     writeIORef isFunctionCurrently False
 
-    pure [LLIR.Event name localSpaceSize localSpace finalBody (length ons) (length lets)]
+    pure [LLIR.Event name localSpaceSize localSpace body'' (length ons)]
 
   assemble (MLIR.MkExprVariable n) = do
     gs <- readIORef globals
@@ -160,7 +158,7 @@ instance Assemble MLIR.Expression where
   assemble (MLIR.MkExprApplication f args) = do
     f' <- assemble f
     args' <- assemble args
-    pure $  args' <> f' <> LLIR.instr (LLIR.Call (length args))
+    pure $ args' <> f' <> LLIR.instr (LLIR.Call (length args))
   
   assemble (MLIR.MkExprLambda _ _) = compilerError "Lambda in LLIR"
 
@@ -168,7 +166,8 @@ instance Assemble MLIR.Expression where
     c' <- assemble c
     t' <- assemble t
     e' <- assemble e
-    pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (length t' + 2)) <> t' <> LLIR.instr (LLIR.JumpRel (length e' + 1)) <> e'
+
+    pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (length t' + 2)) <> t' <> LLIR.instr (LLIR.JumpRel (length e')) <> e'
   
   -- assemble (MLIR.MkExprUpdate (MLIR.MkUpdtVariable v) e) = do
   --   e' <- assemble e
@@ -231,12 +230,24 @@ instance Assemble MLIR.Expression where
 
     let len = length ons' + length lets'
 
-    pure $ LLIR.instr (LLIR.MakeEvent len (length ons) (length lets) localSpace) <> ons' <> lets'
+    pure $ LLIR.instr (LLIR.MakeEvent len (length ons) localSpace) <> ons' <> lets'
   
   assemble (MLIR.MkExprOn event args body) = do
+    glbs <- readIORef globals
+    ntvs <- readIORef natives
+    let reserved = glbs <> ntvs <> Set.fromList args
+    let env = M.free reserved body
+
+    let locals = args <> Set.toList env
+        localSpace = zip locals [0..]
+
     body' <- assemble body
     event' <- fetchEvent event
-    pure $ LLIR.instr (LLIR.EventOn event' (length args) (length body' + 1)) <> body' <> LLIR.instr LLIR.Return
+
+    let instrs = filter shouldNotBeLabel body'
+        instrs' = concatMap extractFrom instrs
+
+    pure [LLIR.EventOn event' (length args) (length body' + 1) localSpace (instrs' <> [LLIR.Return])]
 
   assemble (MLIR.MkExprSend e event es) = do
     e' <- assemble e
@@ -266,6 +277,10 @@ instance Assemble MLIR.Expression where
           (Set.insert (LLIR.MkFunctionLibrary ann.name arity (i + 1)) fs)
 
     pure []
+
+  assemble (MLIR.MkExprIndex e (MLIR.MkExprLiteral (MLIR.MkLitInt i))) = do
+    e' <- assemble e
+    pure $ e' <> LLIR.instr (LLIR.ListGet (fromIntegral i))
 
   assemble (MLIR.MkExprIndex e i) = do
     e' <- assemble e

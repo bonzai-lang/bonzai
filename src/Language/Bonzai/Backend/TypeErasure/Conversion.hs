@@ -11,7 +11,7 @@ convert (HLIR.MkExprApplication f args) = MLIR.MkExprApplication (convert f) (ma
 convert (HLIR.MkExprLet ann e) = MLIR.MkExprLet ann.name (convert e)
 convert (HLIR.MkExprBlock es) = MLIR.MkExprBlock (map convert es)
 convert (HLIR.MkExprModule _ _) = compilerError "module is not supported in MLIR"
-convert (HLIR.MkExprEvent es) = MLIR.MkExprEvent (map convert es)
+convert (HLIR.MkExprActor _ es) = MLIR.MkExprEvent (map convert es)
 convert (HLIR.MkExprOn ev as e) = MLIR.MkExprOn ev (map (.name) as) (convert e)
 convert (HLIR.MkExprSend e ev es) = MLIR.MkExprSend (convert e) ev (map convert es)
 convert (HLIR.MkExprRequire _) = compilerError "require is not supported in MLIR"
@@ -23,6 +23,7 @@ convert (HLIR.MkExprUpdate u e) = MLIR.MkExprUpdate (convertUpdate u) (convert e
 convert (HLIR.MkExprList es) = MLIR.MkExprList (map convert es)
 convert (HLIR.MkExprNative n ty) = MLIR.MkExprNative n ty
 convert (HLIR.MkExprMut a e) = MLIR.MkExprMut a.name (convert e)
+convert (HLIR.MkExprInterface {}) = MLIR.MkExprVariable "unit"
 
 convertUpdate :: HLIR.TLIR "update" -> MLIR.MLIR "update"
 convertUpdate (HLIR.MkUpdtVariable a) = MLIR.MkUpdtVariable a.name

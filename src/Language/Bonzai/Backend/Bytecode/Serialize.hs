@@ -1,6 +1,6 @@
 module Language.Bonzai.Backend.Bytecode.Serialize where
 import Language.Bonzai.Syntax.Bytecode
-import Language.Bonzai.Syntax.LLIR hiding (Instruction(..))
+import Language.Bonzai.Syntax.LLIR hiding (Instruction(..), Segment(..))
 import Language.Bonzai.Syntax.Internal.Literal
 import Data.Binary
 import Data.Binary.Put
@@ -31,57 +31,57 @@ encodeInstr = putInt32le . fromIntegral
 
 encodeInstruction :: Instruction -> Put
 encodeInstruction (LoadLocal i) = 
-  encodeInstr 0 >> encodeInteger i >> replicateNull 2
+  encodeInstr 0 >> encodeInteger i >> replicateNull 3
 encodeInstruction (StoreLocal i) = 
-  encodeInstr 1 >> encodeInteger i >> replicateNull 2
+  encodeInstr 1 >> encodeInteger i >> replicateNull 3
 encodeInstruction (LoadConstant i) = 
-  encodeInstr 2 >> encodeInteger i >> replicateNull 2
+  encodeInstr 2 >> encodeInteger i >> replicateNull 3
 encodeInstruction (LoadGlobal i) = 
-  encodeInstr 3 >> encodeInteger i >> replicateNull 2
+  encodeInstr 3 >> encodeInteger i >> replicateNull 3
 encodeInstruction (StoreGlobal i) = 
-  encodeInstr 4 >> encodeInteger i >> replicateNull 2
+  encodeInstr 4 >> encodeInteger i >> replicateNull 3
 encodeInstruction Return = 
-  encodeInstr 5 >> replicateNull 3
+  encodeInstr 5 >> replicateNull 4
 encodeInstruction (Compare c) = 
-  encodeInstr 6 >> encodeComparator c >> replicateNull 2
+  encodeInstr 6 >> encodeComparator c >> replicateNull 3
 encodeInstruction Update =
-  encodeInstr 7 >> replicateNull 3
+  encodeInstr 7 >> replicateNull 4
 encodeInstruction (MakeList i) =
-  encodeInstr 8 >> encodeInteger i >> replicateNull 2
+  encodeInstr 8 >> encodeInteger i >> replicateNull 3
 encodeInstruction (ListGet i) =
-  encodeInstr 9 >> encodeInteger i >> replicateNull 2
+  encodeInstr 9 >> encodeInteger i >> replicateNull 3
 encodeInstruction (Call i) =
-  encodeInstr 10 >> encodeInteger i >> replicateNull 2
+  encodeInstr 10 >> encodeInteger i >> replicateNull 3
 encodeInstruction (CallGlobal i j) =
   encodeInstr 11 >> encodeInteger i >> encodeInteger j
 encodeInstruction (CallLocal i j) =
   encodeInstr 12 >> encodeInteger i >> encodeInteger j
 encodeInstruction (JumpIfFalse i) =
-  encodeInstr 13 >> encodeInteger i >> replicateNull 2
+  encodeInstr 13 >> encodeInteger i >> replicateNull 3
 encodeInstruction (JumpRel i) =
-  encodeInstr 14 >> encodeInteger i >> replicateNull 2
+  encodeInstr 14 >> encodeInteger i >> replicateNull 3
 encodeInstruction GetIndex =
-  encodeInstr 15 >> replicateNull 3
+  encodeInstr 15 >> replicateNull 4
 encodeInstruction Special =
-  encodeInstr 16 >> replicateNull 3
+  encodeInstr 16 >> replicateNull 4
 encodeInstruction Halt =
-  encodeInstr 17 >> replicateNull 3
+  encodeInstr 17 >> replicateNull 4
 encodeInstruction Spawn =
-  encodeInstr 18 >> replicateNull 3
-encodeInstruction (EventOn i j k) =
-  encodeInstr 19 >> encodeInteger i >> encodeInteger j >> encodeInteger k
+  encodeInstr 18 >> replicateNull 4
+encodeInstruction (EventOn i j k ls) =
+  encodeInstr 19 >> encodeInteger i >> encodeInteger j >> encodeInteger k >> encodeInteger ls
 encodeInstruction (Send i j) =
-  encodeInstr 20 >> encodeInteger i >> encodeInteger j >> encodeNull
+  encodeInstr 20 >> encodeInteger i >> encodeInteger j >> replicateNull 2
 encodeInstruction (MakeFunctionAndStore i j k) =
-  encodeInstr 21 >> encodeInteger i >> encodeInteger j >> encodeInteger k
+  encodeInstr 21 >> encodeInteger i >> encodeInteger j >> encodeInteger k >> replicateNull 1
 encodeInstruction (LoadNative i) =
-  encodeInstr 22 >> encodeInteger i >> replicateNull 2
-encodeInstruction (MakeEvent i j k) = 
-  encodeInstr 23 >> encodeInteger i >> encodeInteger j >> encodeInteger k
+  encodeInstr 22 >> encodeInteger i >> replicateNull 3
+encodeInstruction (MakeEvent i j) = 
+  encodeInstr 23 >> encodeInteger i >> encodeInteger j >> replicateNull 2
 encodeInstruction ReturnEvent =
-  encodeInstr 24 >> replicateNull 3
+  encodeInstr 24 >> replicateNull 4
 encodeInstruction MakeMutable =
-  encodeInstr 25 >> replicateNull 3
+  encodeInstr 25 >> replicateNull 4
 
 encodeText :: Text -> Put
 encodeText w = do
