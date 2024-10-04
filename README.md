@@ -4,7 +4,7 @@
 
 ## Introduction
 
-Bonzai is a programming language that relies on [Actor model](https://en.wikipedia.org/wiki/Actor_model) and on a strong and non-taulerant typechecker to guarantee types and computations in your code. It compiles down to native code to provide better efficiency at execution.
+Bonzai is a programming language that relies on [Actor model](https://en.wikipedia.org/wiki/Actor_model) and on a strong and non-taulerant typechecker to guarantee types and computations in your code. It compiles down to a custom bytecode with relatively good performance.
 
 ## Table of Contents
 
@@ -20,7 +20,7 @@ Bonzai is a programming language that relies on [Actor model](https://en.wikiped
 
 - **Strong typechecker**: Throw errors for incompatible types, to ensure security when running your code.
 - **Actors as expressions**: Make use of first-class actors to express every code you want to.
-- **Native compilation**: Enable blazing fast code execution.
+- **Bytecode compilation**: Enable multi-platform code-running.
 
 ## Example Code
 
