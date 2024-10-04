@@ -3,7 +3,8 @@ import qualified Data.Text as T
 
 data Segment
   = Function Text [Text] NeededLocalSpace LocalSpace [Instruction]
-  | Event Text NeededLocalSpace LocalSpace [Instruction] EventQuantity LetQuantity
+  | Event Text NeededLocalSpace LocalSpace [Segment] EventQuantity
+  | EventOn Int Int Int LocalSpace [Instruction]
   | Instruction Instruction
   deriving (Eq)
 
@@ -14,7 +15,6 @@ type LocalSpace = [(Text, Int)]
 type NeededLocalSpace = Int
 
 type EventQuantity = Int
-type LetQuantity = Int
 type InstructionLength = Int
 
 data Comparator
@@ -38,7 +38,7 @@ data Instruction
   | Return
   | Compare Comparator
   | MakeList Int
-  | MakeEvent EventQuantity LetQuantity InstructionLength LocalSpace
+  | MakeEvent EventQuantity InstructionLength LocalSpace
   | ListGet Int
   | Call Int
   | CallGlobal Text Int | CallLocal Text Int
@@ -48,7 +48,6 @@ data Instruction
   | Special
   | Halt
   | Spawn
-  | EventOn Int Int Int
   | Send Int Int
   | MakeMutable
   deriving (Eq)
@@ -86,7 +85,7 @@ instance ToText Instruction where
   toText Return = "return"
   toText (Compare c) = T.concat ["compare ", toText c]
   toText (MakeList n) = T.concat ["make_list ", T.pack (show n)]
-  toText (MakeEvent n k l _) = T.concat ["make_event ", T.pack (show n), " ", T.pack (show k), " ", T.pack (show l)]
+  toText (MakeEvent n l _) = T.concat ["make_event ", T.pack (show n), " ", T.pack (show l)]
   toText (ListGet n) = T.concat ["list_get ", T.pack (show n)]
   toText (Call n) = T.concat ["call ", T.pack (show n)]
   toText (CallGlobal n i) = T.concat ["call_global ", n, " ", T.pack (show i)]
@@ -97,14 +96,14 @@ instance ToText Instruction where
   toText Special = "special"
   toText Halt = "halt"
   toText Spawn = "spawn"
-  toText (EventOn n m o) = T.concat ["event_on ", T.pack (show n), " ", T.pack (show m), " ", T.pack (show o)]
   toText (Send n t) = T.concat ["send ", T.pack (show n), " ", T.pack (show t)]
   toText MakeMutable = "make_mutable"
 
 instance ToText Segment where
   toText (Function n as _ _ is) = T.concat ["function ", n, "(", T.intercalate ", " as, ") { ", T.intercalate "; " (map toText is), " }"]
   toText (Instruction i) = toText i
-  toText (Event n _ _ is _ _) = T.concat ["event ", n, " { ", T.intercalate "; " (map toText is), " }"]
+  toText (Event n _ _ is _) = T.concat ["event ", n, " { ", T.intercalate "; " (map toText is), " }"]
+  toText (EventOn i j k _ instrs) = T.concat ["event_on ", T.pack (show i), " ", T.pack (show j), " ", T.pack (show k), " { ", T.intercalate "; " (map toText instrs), " }"]
 
 instance ToText Comparator where
   toText LessThan = "<"

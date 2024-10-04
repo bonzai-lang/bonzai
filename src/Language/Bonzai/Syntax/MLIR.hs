@@ -73,7 +73,7 @@ instance ToText Expression where
   toText (MkExprTernary c t e) = T.concat [toText c, " ? ", toText t, " : ", toText e]
   toText (MkExprUpdate u e) = T.concat [toText u, " = ", toText e]
   toText (MkExprLet a e) = T.concat ["let ", toText a, " = ", toText e]
-  toText (MkExprBlock es) = T.concat [T.intercalate "; " (map toText es)]
+  toText (MkExprBlock es) = T.concat ["{", T.intercalate "; " (map toText es), "}"]
   toText (MkExprEvent e) = T.concat ["event ", toText e]
   toText (MkExprOn n as e) = T.concat ["on ", n, "(", T.intercalate ", " (map toText as), ") { ", toText e, " }"]
   toText (MkExprSend e n e') = T.concat ["(", toText e, ") -> ", n, "(", T.intercalate ", " (map toText e'), ")"]

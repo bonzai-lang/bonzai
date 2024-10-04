@@ -14,7 +14,7 @@ data Instruction
   | Return
   | Compare LLIR.Comparator
   | MakeList Int
-  | MakeEvent LLIR.EventQuantity LLIR.LetQuantity LLIR.InstructionLength
+  | MakeEvent LLIR.EventQuantity LLIR.InstructionLength
   | ListGet Int
   | Call Int
   | CallGlobal Int Int | CallLocal Int Int
@@ -24,7 +24,7 @@ data Instruction
   | Special
   | Halt
   | Spawn
-  | EventOn Int Int Int
+  | EventOn Int Int Int LLIR.NeededLocalSpace
   | Send Int Int
   | MakeFunctionAndStore LLIR.NameAddress LLIR.InstructionLength LLIR.NeededLocalSpace
   | ReturnEvent
@@ -45,7 +45,7 @@ instance ToText Instruction where
   toText Return = "Return"
   toText (Compare a) = "Compare " <> toText a
   toText (MakeList a) = "MakeList " <> toText a
-  toText (MakeEvent a b c) = "MakeEvent " <> toText a <> " " <> toText b <> " " <> toText c
+  toText (MakeEvent a c) = "MakeEvent " <> toText a <> " " <> toText c
   toText (ListGet a) = "ListGet " <> toText a
   toText (Call a) = "Call " <> toText a
   toText (CallGlobal a b) = "CallGlobal " <> toText a <> " " <> toText b
@@ -56,7 +56,7 @@ instance ToText Instruction where
   toText Special = "Special"
   toText Halt = "Halt"
   toText Spawn = "Spawn"
-  toText (EventOn a b c) = "EventOn " <> toText a <> " " <> toText b <> " " <> toText c
+  toText (EventOn a b c _) = "EventOn " <> toText a <> " " <> toText b <> " " <> toText c
   toText (Send a b) = "Send " <> toText a <> " " <> toText b
   toText (MakeFunctionAndStore a b c) = "MakeFunctionAndStore " <> toText a <> " " <> toText b <> " " <> toText c
   toText ReturnEvent = "ReturnEvent"
