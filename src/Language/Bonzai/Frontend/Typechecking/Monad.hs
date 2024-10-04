@@ -3,7 +3,7 @@ module Language.Bonzai.Frontend.Typechecking.Monad (
   module R,
   MonadChecker,
   CheckerState(..),
-  
+
   typeCounter,
   checkerState,
   with,
@@ -36,7 +36,7 @@ currentLevel = IO.unsafePerformIO $ newIORef 0
 
 data CheckerState = MkCheckerState {
     variables :: Map Text HLIR.Scheme
-  , interfaces :: Map Text (Map Text HLIR.Type)
+  , interfaces :: Map Text (Map Text HLIR.Scheme)
 }
 
 with :: MonadIO m => IORef a -> (a -> a) -> m b -> m b
@@ -49,8 +49,8 @@ with ref f m = do
 
 {-# NOINLINE checkerState #-}
 checkerState :: IORef CheckerState
-checkerState = IO.unsafePerformIO . newIORef $ 
-  MkCheckerState 
+checkerState = IO.unsafePerformIO . newIORef $
+  MkCheckerState
     Map.empty
     Map.empty
 

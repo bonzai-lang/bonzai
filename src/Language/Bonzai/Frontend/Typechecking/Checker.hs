@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
 module Language.Bonzai.Frontend.Typechecking.Checker where
 
 import qualified Language.Bonzai.Syntax.HLIR as HLIR
@@ -90,7 +89,7 @@ typecheck (HLIR.MkExprLet ann expr) = do
     $ typecheck expr
 
   ty `U.unifiesWith` exprTy
-  
+
   modifyIORef' M.checkerState $ \st -> st { M.variables = Map.insert ann.name scheme st.variables }
 
   pure (HLIR.MkExprLet ann { HLIR.value = Identity ty } expr', exprTy)
@@ -104,7 +103,7 @@ typecheck (HLIR.MkExprMut ann expr) = do
     $ typecheck expr
 
   ty `U.unifiesWith` exprTy
-  
+
   modifyIORef' M.checkerState $ \st -> st { M.variables = Map.insert ann.name scheme st.variables }
 
   pure (HLIR.MkExprMut ann { HLIR.value = Identity (HLIR.MkTyMutable ty) } expr', exprTy)
@@ -121,19 +120,30 @@ typecheck (HLIR.MkExprUpdate u e) = do
   ty `U.unifiesWith` HLIR.MkTyMutable exprTy
 
   pure (HLIR.MkExprUpdate u' e', ty)
-typecheck (HLIR.MkExprEvent es) = do
+typecheck (HLIR.MkExprActor i es) = do
+  checkSt <- readIORef M.checkerState
+
+  methodsTys <- case Map.lookup i checkSt.interfaces of
+    Just tys -> mapM M.instantiate tys
+    Nothing -> throw (M.EventNotFound i)
+
   (es', tys) <- unzip <$> traverse typecheck es
 
   let names = map getName es
 
-  pure (HLIR.MkExprEvent es', HLIR.MkTyEvent (Map.fromList (zip names tys)))
-typecheck (HLIR.MkExprOn ev args body) = do
-  args' <- traverse (\(HLIR.MkAnnotation ann _) -> do
-      ty' <- M.fresh
-      pure (ann, ty')
-    ) args
+  forM_ (zip names tys) $ \(name, ty) -> do
+    case Map.lookup name methodsTys of
+      Just ty' -> ty `U.unifiesWith` ty'
+      Nothing -> throw (M.EventNotFound name)
 
-  ret <- M.fresh
+  pure (HLIR.MkExprActor i es', HLIR.MkTyId i)
+typecheck (HLIR.MkExprOn ev args body) = do
+  args' <- traverse (\(HLIR.MkAnnotation ann ty) -> case ty of
+      Just annotation -> pure (ann, annotation)
+      Nothing -> do
+        ty' <- M.fresh
+        pure (ann, ty')
+    ) args
 
   let schemes = map (second $ HLIR.Forall []) args'
 
@@ -142,24 +152,29 @@ typecheck (HLIR.MkExprOn ev args body) = do
     (\st -> st { M.variables = Map.union (Map.fromList schemes) st.variables })
     $ do
       (body', ret') <- typecheck body
-      ret' `U.unifiesWith` ret
+      ret' `U.unifiesWith` HLIR.MkTyId "unit"
       pure body'
 
   let wfArgs = map (uncurry HLIR.MkAnnotation . second Identity) args'
 
-  pure (HLIR.MkExprOn ev wfArgs body', map snd args' HLIR.:->: ret)
+  pure (HLIR.MkExprOn ev wfArgs body', map snd args' HLIR.:->: HLIR.MkTyId "unit")
 typecheck (HLIR.MkExprSend e ev a) = do
   (e', ty) <- typecheck e
   (a', elTys) <- mapAndUnzipM typecheck a
 
   case ty of
-    HLIR.MkTyEvent fields -> case Map.lookup ev fields of
-      Just (args HLIR.:->: _) -> do
-        zipWithM_ U.unifiesWith elTys args
-      Just t -> M.throw (M.NotAnEvent ev t)
-      Nothing -> M.throw (M.EventNotFound ev)
-    
-    _ -> M.throw (M.UnificationFail ty (HLIR.MkTyEvent Map.empty))
+    HLIR.MkTyId actorName -> do
+      checkSt <- readIORef M.checkerState
+      case Map.lookup actorName checkSt.interfaces of
+        Just tys -> do
+          methodsTys <- mapM M.instantiate tys
+
+          case Map.lookup ev methodsTys of
+            Just (argsTy HLIR.:->: _) -> do
+              zipWithM_ U.unifiesWith elTys argsTy
+            _ -> throw (M.EventNotFound ev)
+        Nothing -> throw (M.EventNotFound actorName)
+    _ -> throw (M.ExpectedAnActor ty)
 
   pure (HLIR.MkExprSend e' ev a', ty)
 typecheck (HLIR.MkExprSpawn e) = do
@@ -172,6 +187,15 @@ typecheck (HLIR.MkExprList es) = do
   zipWithM_ U.unifiesWith tys (repeat ty)
 
   pure (HLIR.MkExprList es', HLIR.MkTyList ty)
+typecheck (HLIR.MkExprInterface ann defs) = do
+  let name = ann.name
+      generics = ann.value
+
+  let schemes = map (\(HLIR.MkAnnotation funName funTy) -> (funName, HLIR.Forall generics funTy)) defs
+
+  modifyIORef M.checkerState $ \st -> st { M.interfaces = Map.insert name (Map.fromList schemes) st.interfaces }
+
+  pure (HLIR.MkExprInterface ann defs, HLIR.MkTyId name)
 typecheck (HLIR.MkExprRequire _) = compilerError "typecheck: require should not appear in typechecking"
 typecheck (HLIR.MkExprModule _ _) = compilerError "typecheck: module should not appear in typechecking"
 
@@ -196,8 +220,8 @@ typecheckUpdate (HLIR.MkUpdtIndex u e) = do
 
 runTypechecking :: MonadIO m => [HLIR.HLIR "expression"] -> m (Either M.Error [HLIR.TLIR "expression"])
 runTypechecking es = do
-  let st = 
-        M.MkCheckerState 
+  let st =
+        M.MkCheckerState
           Map.empty
           Map.empty
   res <- M.with M.checkerState (const st) $ runExceptT $ traverse typecheck es
