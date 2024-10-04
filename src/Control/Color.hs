@@ -55,3 +55,6 @@ escAttribute Concealed = esc 8
 
 colorBold :: Color -> String -> String
 colorBold color txt = decorate txt (color, NoColor, Bold)
+
+printText :: (MonadIO m, ToText a) => a -> m ()
+printText = liftIO . putStrLn . toString . toText
