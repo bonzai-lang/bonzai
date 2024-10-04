@@ -4,7 +4,6 @@ module Language.Bonzai.Syntax.Internal.Type where
 import Prelude hiding (Type)
 import qualified GHC.IO as IO
 import qualified Data.Text as T
-import qualified Data.Map as Map
 
 -- Level represents the level of a type variable. It is used to determine the
 -- scope of a type variable.
@@ -18,7 +17,6 @@ data Type
   = MkTyId Text
   | MkTyApp Type [Type]
   | MkTyVar (IORef TyVar)
-  | MkTyEvent (Map Text Type)
   | MkTyQuantified Text
 
 -- Type variable represents a type variable in Plume. It can either be a link to
@@ -46,12 +44,13 @@ pattern MkTyFun args retTy = MkTyApp (MkTyId "#func") (retTy : args)
 pattern (:->:) :: [Type] -> Type -> Type
 pattern args :->: retTy = MkTyFun args retTy
 
-pattern MkTyInt, MkTyFloat, MkTyChar, MkTyString, MkTyBool :: Type
+pattern MkTyInt, MkTyFloat, MkTyChar, MkTyString, MkTyBool, MkTyUnit :: Type
 pattern MkTyInt = MkTyId "int"
 pattern MkTyFloat = MkTyId "float"
 pattern MkTyChar = MkTyId "char"
 pattern MkTyString = MkTyId "string"
 pattern MkTyBool = MkTyId "bool"
+pattern MkTyUnit = MkTyId "unit"
 
 pattern MkTyList :: Type -> Type
 pattern MkTyList a = MkTyApp (MkTyId "list") [a]
@@ -66,7 +65,6 @@ instance ToText Type where
   toText (MkTyVar a) = do
     let a' = IO.unsafePerformIO $ readIORef a
     toText a'
-  toText (MkTyEvent b) = T.concat ["{", T.intercalate ", " (map (\(k, v) -> T.concat [k, ":", toText v]) (Map.toList b)), "}"]
   toText (MkTyQuantified a) = a
 
 instance ToText TyVar where

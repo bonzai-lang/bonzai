@@ -76,7 +76,7 @@ instance ToText Expression where
   toText (MkExprBlock es) = T.concat [T.intercalate "; " (map toText es)]
   toText (MkExprEvent e) = T.concat ["event ", toText e]
   toText (MkExprOn n as e) = T.concat ["on ", n, "(", T.intercalate ", " (map toText as), ") { ", toText e, " }"]
-  toText (MkExprSend e n e') = T.concat ["(", toText e, ") -> ", n, "(", toText e', ")"]
+  toText (MkExprSend e n e') = T.concat ["(", toText e, ") -> ", n, "(", T.intercalate ", " (map toText e'), ")"]
   toText (MkExprSpawn e) = T.concat ["spawn ", toText e]
   toText (MkExprList es) = T.concat ["[", T.intercalate ", " (map toText es), "]"]
   toText (MkExprNative ann ty) = T.concat ["native ", toText ann.name, "<", T.intercalate ", " ann.value, "> ", toText ty]

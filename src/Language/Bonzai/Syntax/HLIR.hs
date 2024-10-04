@@ -24,7 +24,7 @@ import qualified Data.Text as T
 import GHC.TypeLits (Symbol)
 import Prelude hiding (Type)
 
-data Update f t 
+data Update f t
   = MkUpdtVariable (Annotation (f t))
   | MkUpdtField (Update f t) Text
   | MkUpdtIndex (Update f t) (Expression f t)
@@ -41,7 +41,7 @@ data Expression f t
   | MkExprMut (Annotation (f t)) (Expression f t)
   | MkExprBlock [Expression f t]
   | MkExprModule Text [Expression f t]
-  | MkExprEvent [Expression f t]
+  | MkExprActor Text [Expression f t]
   | MkExprOn Text [Annotation (f t)] (Expression f t)
   | MkExprSend (Expression f t) Text [Expression f t]
   | MkExprRequire Text
@@ -49,6 +49,7 @@ data Expression f t
   | MkExprSpawn (Expression f t)
   | MkExprList [Expression f t]
   | MkExprNative (Annotation [Text]) Ty.Type
+  | MkExprInterface (Annotation [QuVar]) [Annotation t]
   deriving (Eq)
 
 pattern MkExprBinary :: Text -> f t -> Expression f t -> Expression f t -> Expression f t
@@ -77,7 +78,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprLet a e) = T.concat ["let ", toText a, " = ", toText e]
   toText (MkExprBlock es) = T.concat [T.intercalate "; " (map toText es)]
   toText (MkExprModule n e) = T.concat ["module ", n, " { ", toText e, " }"]
-  toText (MkExprEvent e) = T.concat ["event ", toText e]
+  toText (MkExprActor i e) = T.concat ["event ",i , " ", toText e]
   toText (MkExprOn n as e) = T.concat ["on ", n, "(", T.intercalate ", " (map toText as), ") { ", toText e, " }"]
   toText (MkExprSend e n e') = T.concat ["(", toText e, ") -> ", n, "(", toText e', ")"]
   toText (MkExprRequire n) = T.concat ["require ", n]
@@ -86,6 +87,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprList es) = T.concat ["[", T.intercalate ", " (map toText es), "]"]
   toText (MkExprNative ann ty) = T.concat ["native ", toText ann.name, "<", T.intercalate ", " ann.value, "> ", toText ty]
   toText (MkExprMut a e) = T.concat ["mut ", toText a, " = ", toText e]
+  toText (MkExprInterface ann as) = T.concat ["interface ", toText ann.name, "<", T.intercalate ", " (map toText as), ">"]
 
 instance (ToText t, ToText (f t)) => ToText [Expression f t] where
   toText = T.intercalate "\n" . map toText
