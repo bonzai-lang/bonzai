@@ -25,45 +25,58 @@ handle (Right a) f = f a
 handle (Left (err, pos@(p1, _))) _ = liftIO $ do
   case err of
     ParseError e -> parseError e (P.sourceName p1) Nothing
-    CyclicModuleDependency path stack -> 
-      printErrorFromString 
-        Nothing 
-        ("Cyclic module dependency detected in " <> show (normalise path), Nothing, pos) 
+    CyclicModuleDependency path stack ->
+      printErrorFromString
+        Nothing
+        ("Cyclic module dependency detected in " <> show (normalise path), Nothing, pos)
         stackMsg
-      where 
+      where
         stackMsg = "Import stack:\n - "<> intercalate "\n - " (map normalise stack)
-    ModuleNotFound path _ -> 
-      printErrorFromString 
-        Nothing 
-        ("Module " <> show (normalise path) <> " not found", Just "check for typo issue with the module name", pos) 
+    ModuleNotFound path _ ->
+      printErrorFromString
+        Nothing
+        ("Module " <> show (normalise path) <> " not found", Just "check for typo issue with the module name", pos)
         "Resolution"
-    VariableNotFound name -> 
-      printErrorFromString 
-        Nothing 
+    VariableNotFound name ->
+      printErrorFromString
+        Nothing
         ("Variable " <> show name <> " not found", Just "check for typo issue with the variable", pos)
         "Resolution"
-    CompilerError msg -> 
-      printErrorFromString 
+    CompilerError msg ->
+      printErrorFromString
         Nothing
-          ("BONZAI INTERNAL ERROR: " <> show msg, Just "report the issue to Bonzai developers", pos) 
+          ("BONZAI INTERNAL ERROR: " <> show msg, Just "report the issue to Bonzai developers", pos)
           "Resolution"
     UnificationFail t1 t2 ->
-      printErrorFromString 
-        Nothing 
-        ("Unification failed between " <> toString (toText t1) <> " and " <> toString (toText t2), Nothing, pos) 
+      printErrorFromString
+        Nothing
+        ("Unification failed between " <> toString (toText t1) <> " and " <> toString (toText t2), Nothing, pos)
         "Unification"
 
-    EventNotFound name ->
-      printErrorFromString 
-        Nothing 
-        ("Event " <> show name <> " not found", Just "check for typo issue with the event name", pos) 
+    ActorNotFound name ->
+      printErrorFromString
+        Nothing
+        ("Event " <> show name <> " not found", Just "check for typo issue with the event name", pos)
         "Resolution"
 
-    NotAnEvent name ty ->
-      printErrorFromString 
-        Nothing 
-        ("Variable " <> show name <> " is not an event, but a " <> show (toText ty), Nothing, pos) 
+    NotAnActor name ty ->
+      printErrorFromString
+        Nothing
+        ("Variable " <> show name <> " is not an event, but a " <> show (toText ty), Nothing, pos)
+        "Typechecking"
+
+    EventNotFound name ->
+      printErrorFromString
+        Nothing
+        ("Event " <> show name <> " not found", Just "check for typo issue with the event name", pos)
         "Resolution"
+
+    ExpectedAnActor ty ->
+      printErrorFromString
+        (Just "May you have forgotten to define an interface for your actor?")
+        ("Expected an actor, but got " <> show (toText ty), Nothing, pos)
+        "Typechecking"
+
 
 type ImportStack = [FilePath]
 
@@ -76,8 +89,10 @@ data BonzaiError
   | VariableNotFound Text
   | CompilerError Text
   | UnificationFail HLIR.Type HLIR.Type
+  | ActorNotFound Text
+  | NotAnActor Text HLIR.Type
   | EventNotFound Text
-  | NotAnEvent Text HLIR.Type
+  | ExpectedAnActor HLIR.Type
 
 showError :: P.ParseError -> String
 showError = P.errorBundlePretty
@@ -135,7 +150,7 @@ printErrorFromString content (error', msg, (p1, p2)) step = do
         [ (pos', D.This step) ]
         (maybeToList msg)
 
-  -- Create the diagnostic 
+  -- Create the diagnostic
   let diagnostic  = D.addFile D.def file' x'
   let diagnostic' = D.addReport diagnostic beautifulExample
 
