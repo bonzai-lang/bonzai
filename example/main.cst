@@ -5,13 +5,10 @@
 )
 
 (defn Loop [msg] {
-
   (actor (implements Loopable)
     (on loop [(ev Loopable)] {
-      (print msg)
+      "test"
       (send ev loop ev)
-
-      unit
     })
   )
 })

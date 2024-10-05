@@ -1,3 +1,5 @@
+(require "natives")
+
 (interface Factorial []
   (defn factorial [(self Factorial) (n int)])  
 )
@@ -8,7 +10,7 @@
   (actor (implements Factorial)
     (on factorial [self n] 
       (if (== n 0) {
-        (print acc)
+        (print (value acc))
       } {
         (set acc (* (value acc) n))
         (send self factorial self (- n 1))
