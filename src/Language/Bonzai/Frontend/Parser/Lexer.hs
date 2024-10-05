@@ -8,6 +8,7 @@ import Language.Bonzai.Syntax.HLIR (Position)
 import Text.Megaparsec.Char
 import Text.Megaparsec.Char.Lexer qualified as L
 import Prelude hiding (modify)
+import qualified Data.Text as Text
 
 {-# NOINLINE defaultPosition #-}
 defaultPosition :: IORef (Maybe Position)
@@ -40,9 +41,10 @@ reservedWords =
   Set.fromList
     [ "module",
       "let",
-      "set",
-      "get",
-      "defn"
+      "send",
+      "actor",
+      "interface",
+      "on"
     ]
 
 -- | Lexeme parser that consumes whitespace after the lexeme
@@ -131,30 +133,48 @@ colon = symbol ":"
 semi :: (MonadIO m) => P.Parser m Text
 semi = symbol ";"
 
+-- | Check if the character is a valid identifier character
+-- | An identifier character is an alphanumeric character or an underscore
+-- | For instance, `'test` is not a valid identifier, but `test` is. 
+isIdentChar :: Char -> Bool
+isIdentChar c = isAlphaNum c || c == '_'
+
+-- | Check if the character is a valid identifier start character
+-- | An identifier start character is an alphabetic character or an underscore
+-- | For instance, `'test` is not a valid identifier, but `test` is.
+-- | `1` is not a valid identifier too.
+isIdentCharStart :: Text -> Bool
+isIdentCharStart cs = isAlpha (Text.head cs) || Text.head cs == '_'
+
 -- | Parse a non-lexed identifier
 -- | A non-lexed identifier is an identifier that is not lexed, meaning that
--- | it does not consume whitespace after and before the identifier. This
+-- | it does not consume whitespace after and before the identifier. This 
 -- | is useful for parsing record selections.
-nonLexedID :: (MonadIO m) => P.Parser m Text
+nonLexedID :: MonadIO m => P.Parser m Text
 nonLexedID = do
-  r <- P.takeWhile1P (Just "variable") (\c -> c /= '(' && c /= ')' && c /= '{' && c /= '}' && c /= ' ' && c /= '\n' && c /= '\t' && c /= '\r' && c /= '"' && c /= '\'')
+  r <- P.takeWhile1P Nothing isIdentChar
   -- Guarding parsed result and failing when reserved word is parsed
   -- (such as reserved keyword)
   if r `Set.member` reservedWords
     then fail $ "The identifier " ++ show r ++ " is a reserved word"
-    else return r
+    else
+      if isIdentCharStart r
+        then return r
+        else fail $ "The identifier " ++ show r ++ " is not valid"
 
 -- | Parse an identifier
 -- | An identifier is a sequence of valid identifier characters
 -- | that starts with an identifier start character
 -- | An identifier cannot be a reserved keyword
-identifier :: (MonadIO m) => P.Parser m Text
+identifier :: MonadIO m => P.Parser m Text
 identifier = lexeme $ do
-  cs <- P.takeWhile1P (Just "variable") (\c -> c /= '(' && c /= ')' && c /= '{' && c /= '}' && c /= ' ' && c /= '\n' && c /= '\t' && c /= '\r' && c /= '"' && c /= '\'' && c /= '[' && c /= ']')
-
+  cs <- P.takeWhile1P Nothing isIdentChar
   if cs `Set.member` reservedWords
     then fail $ "The identifier " ++ show cs ++ " is a reserved word"
-    else return cs
+    else
+      if isIdentCharStart cs
+        then return cs
+        else fail $ "The identifier " ++ show cs ++ " is not valid"
 
 -- | A field may be either a non-lexed identifier or an operator
 field :: (MonadIO m) => P.Parser m Text
