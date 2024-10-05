@@ -98,13 +98,12 @@ Value MAKE_MUTABLE(ugc_t *gc, Value x) {
   return MAKE_PTR(v);
 }
 
-Value MAKE_EVENT(ugc_t *gc, uint32_t ons_count, uint32_t lets_count, uint32_t ipc) {
+Value MAKE_EVENT(ugc_t *gc, uint32_t ons_count, uint32_t ipc) {
   HeapValue* v = malloc(sizeof(HeapValue));
   ugc_register(gc, &v->header);
   v->length = 0;
   v->type = TYPE_EVENT;
   v->as_event.ons_count = ons_count;
-  v->as_event.lets_count = lets_count;
   v->as_event.ipc = ipc;
   return MAKE_PTR(v);
 }
@@ -120,7 +119,7 @@ Value MAKE_FRAME(ugc_t *gc, int32_t ip, int32_t sp, int32_t bp) {
   return MAKE_PTR(v);
 }
 
-Value MAKE_EVENT_FRAME(ugc_t *gc, int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int32_t lets_count, int function_ipc) {
+Value MAKE_EVENT_FRAME(ugc_t *gc, int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int function_ipc) {
   HeapValue* v = malloc(sizeof(HeapValue));
   ugc_register(gc, &v->header);
 
@@ -129,7 +128,6 @@ Value MAKE_EVENT_FRAME(ugc_t *gc, int32_t ip, int32_t sp, int32_t bp, int32_t on
   v->as_frame.stack_pointer = sp;
   v->as_frame.base_ptr = bp;
   v->as_frame.ons_count = ons_count;
-  v->as_frame.lets_count = lets_count;
   v->as_frame.function_ipc = function_ipc;
   return MAKE_PTR(v);
 }
@@ -204,7 +202,7 @@ char* type_of(Value value) {
 
 Stack* stack_new() {
   Stack* stack = malloc(MAX_STACK_SIZE * sizeof(Value));
-  stack->stack_pointer = 12;
+  stack->stack_pointer = GLOBALS_SIZE;
   return stack;
 }
 
@@ -258,4 +256,41 @@ void print_message_queue(MessageQueue *queue) {
         msg = msg->next;
     }
     printf("\n");
+}
+
+int value_eq(Value a, Value b) {
+  ValueType ty = get_type(a);
+  ASSERT_TYPE("==", b, ty);
+
+  switch (ty) {
+    case TYPE_INTEGER:
+      return GET_INT(a) == GET_INT(b);
+    case TYPE_FLOAT:
+      return GET_FLOAT(a) == GET_FLOAT(b);
+    case TYPE_STRING:
+      return strcmp(GET_STRING(a), GET_STRING(b)) == 0;
+    case TYPE_LIST: {
+      HeapValue* list_a = GET_PTR(a);
+      HeapValue* list_b = GET_PTR(b);
+      if (list_a->length != list_b->length) {
+        return 0;
+      }
+      for (uint32_t i = 0; i < list_a->length; i++) {
+        if (!value_eq(list_a->as_ptr[i], list_b->as_ptr[i])) {
+          return 0;
+        }
+      }
+      return 1;
+    }
+    case TYPE_MUTABLE:
+      return value_eq(GET_MUTABLE(a), GET_MUTABLE(b));
+    case TYPE_SPECIAL:
+      return 1;
+    case TYPE_FUNCTION:
+      return 1;
+    case TYPE_FUNCENV:
+      return 1;
+    case TYPE_UNKNOWN: default:
+      return 0;
+  }
 }
