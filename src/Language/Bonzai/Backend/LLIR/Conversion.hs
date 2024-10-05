@@ -167,7 +167,7 @@ instance Assemble MLIR.Expression where
     t' <- assemble t
     e' <- assemble e
 
-    pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (length t' + 2)) <> t' <> LLIR.instr (LLIR.JumpRel (length e')) <> e'
+    pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (length t' + 2)) <> t' <> LLIR.instr (LLIR.JumpRel (length e' + 1)) <> e'
   
   -- assemble (MLIR.MkExprUpdate (MLIR.MkUpdtVariable v) e) = do
   --   e' <- assemble e
