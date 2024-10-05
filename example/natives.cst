@@ -1,16 +1,17 @@
-(native print [A] (-> A unit))
-(native map [A B] (-> (-> A B) (list A) (list B)))
-(native * [A] (-> A A A))
-(native + [A] (-> A A A))
-(native - [A] (-> A A A))
-(native / [A] (-> A A A))
-(native exit [A] (-> A))
-(native value [A] (-> (mutable A) A))
+extern fn print<A>(x: A)
+extern fn map<A, B>(f: fn(A): B, xs: list<A, B>): list<B>
+extern fn (*)<A>(x: A, y: A): A
+extern fn (+)<A>(x: A, y: A): A
+extern fn (-)<A>(x: A, y: A): A
+extern fn (/)<A>(x: A, y: A): A
+extern fn exit<A>(): A
+extern fn value<A>(x: mutable<A>): A
 
-(native == [A] (-> A A bool))
-(native != [A] (-> A A bool))
-(native < [A] (-> A A bool))
-(native > [A] (-> A A bool))
-(native <= [A] (-> A A bool))
-(native >= [A] (-> A A bool))
-(native unit unit)
+extern fn (==)<A>(x: A, y: A): bool
+extern fn (!=)<A>(x: A, y: A): bool
+extern fn (<)<A>(x: A, y: A): bool
+extern fn (>)<A>(x: A, y: A): bool
+extern fn (<=)<A>(x: A, y: A): bool
+extern fn (>=)<A>(x: A, y: A): bool
+extern unit: unit
+

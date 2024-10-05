@@ -1,17 +1,18 @@
-(require "natives")
+require "natives"
+interface Loopable {
+  fn loop(self: Loopable, i: int)
+}
 
-(interface Loopable [a]
-  (defn loop [(ev Loopable)])
-)
+fn Loop(msg: string) => actor < Loopable {
+  on loop(self, i) => {
+    if i == 0 then {
+      print("FINISHED")
+    } else {
+      // print(i)
+      self->loop(self, i - 1)
+    }
+  }
+}
 
-(defn Loop [msg] {
-  (actor (implements Loopable)
-    (on loop [(ev Loopable)] {
-      (print msg)
-      (send ev loop ev)
-    })
-  )
-})
-
-(let l (spawn (Loop "loop")))
-(send l loop l)
+let l = spawn Loop("loop")
+l->loop(l, 10000000)
