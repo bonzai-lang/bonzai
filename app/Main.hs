@@ -17,7 +17,13 @@ import System.FilePath
 
 main :: IO ()
 main = do
-  let file = "example/main.cst"
+  args <- getArgs
+
+  file <- case args of
+    [x] -> pure x
+    _ -> do
+      putStrLn "Usage: bonzai <file>"
+      exitFailure
   
   content <- readFileBS file
   let contentAsText = decodeUtf8 content
