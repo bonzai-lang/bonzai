@@ -7,8 +7,6 @@
 #include <string.h>
 #include <pthread.h>
 
-#include <gc.h>
-
 typedef uint64_t Value;
 
 #define GLOBALS_SIZE 1024
@@ -111,7 +109,7 @@ struct Event {
 };
 
 typedef struct Stack {
-  Value values[MAX_STACK_SIZE];
+  Value *values;
   int16_t stack_pointer;
 } Stack;
 
@@ -133,7 +131,6 @@ struct EventOn {
 
 // Container type for values
 typedef struct {
-	ugc_header_t header;
   ValueType type;
   uint32_t length;
 
@@ -157,13 +154,13 @@ typedef struct {
 #define MAKE_FUNCTION(x, y) \
   (SIGNATURE_FUNCTION | (uint16_t)(x) | ((uint16_t)(y) << 16))
 
-Value MAKE_MUTABLE(ugc_t *gc, Value x);
-Value MAKE_STRING(ugc_t *gc, char* x);
-Value MAKE_LIST(ugc_t *gc, Value* x, uint32_t len);
-Value MAKE_EVENT(ugc_t *gc, uint32_t ons_count, uint32_t ipc);
-Value MAKE_FRAME(ugc_t *gc, int32_t ip, int32_t sp, int32_t bp);
-Value MAKE_EVENT_FRAME(ugc_t *gc, int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int function_ipc);
-Value MAKE_EVENT_ON(ugc_t *gc, int id, Value func);
+Value MAKE_MUTABLE(Value x);
+Value MAKE_STRING(char* x);
+Value MAKE_LIST(Value* x, uint32_t len);
+Value MAKE_EVENT(uint32_t ons_count, uint32_t ipc);
+Value MAKE_FRAME(int32_t ip, int32_t sp, int32_t bp);
+Value MAKE_EVENT_FRAME(int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int function_ipc);
+Value MAKE_EVENT_ON(int id, Value func);
 
 #define MAKE_SPECIAL() kNull
 #define MAKE_ADDRESS(x) MAKE_INTEGER(x)

@@ -26,7 +26,6 @@ typedef struct Module {
   int32_t argc;
   Value *argv;
 
-  ugc_t *gc;
   int32_t pc;
   Value (*call_function)(struct Module *m, Value callee, int32_t argc, Value* argv);
   

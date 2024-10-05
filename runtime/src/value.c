@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <value.h>
+#include <gc.h>
 
 void native_print(Value value) {
   if (value == 0) {
@@ -70,37 +71,33 @@ void native_print(Value value) {
   }
 }
 
-Value MAKE_STRING(ugc_t *gc, char* x) {
-  HeapValue* v = malloc(sizeof(HeapValue));
-  ugc_register(gc, &v->header);
+Value MAKE_STRING(char* x) {
+  HeapValue* v = GC_malloc(sizeof(HeapValue));
   v->length = strlen(x);
   v->type = TYPE_STRING;
   v->as_string = x;
   return MAKE_PTR(v);
 }
 
-Value MAKE_LIST(ugc_t *gc, Value* x, uint32_t len) {
-  HeapValue* v = malloc(sizeof(HeapValue));
-  ugc_register(gc, &v->header);
+Value MAKE_LIST(Value* x, uint32_t len) {
+  HeapValue* v = GC_malloc(sizeof(HeapValue));
   v->length = len;
   v->type = TYPE_LIST;
   v->as_ptr = x;
   return MAKE_PTR(v);
 }
 
-Value MAKE_MUTABLE(ugc_t *gc, Value x) {
-  HeapValue* v = malloc(sizeof(HeapValue));
-  ugc_register(gc, &v->header);
+Value MAKE_MUTABLE(Value x) {
+  HeapValue* v = GC_malloc(sizeof(HeapValue));
   v->length = 1;
   v->type = TYPE_MUTABLE;
-  v->as_ptr = malloc(sizeof(Value));
+  v->as_ptr = GC_malloc(sizeof(Value));
   *v->as_ptr = x;
   return MAKE_PTR(v);
 }
 
-Value MAKE_EVENT(ugc_t *gc, uint32_t ons_count, uint32_t ipc) {
-  HeapValue* v = malloc(sizeof(HeapValue));
-  ugc_register(gc, &v->header);
+Value MAKE_EVENT(uint32_t ons_count, uint32_t ipc) {
+  HeapValue* v = GC_malloc(sizeof(HeapValue));
   v->length = 0;
   v->type = TYPE_EVENT;
   v->as_event.ons_count = ons_count;
@@ -108,9 +105,8 @@ Value MAKE_EVENT(ugc_t *gc, uint32_t ons_count, uint32_t ipc) {
   return MAKE_PTR(v);
 }
 
-Value MAKE_FRAME(ugc_t *gc, int32_t ip, int32_t sp, int32_t bp) {
-  HeapValue* v = malloc(sizeof(HeapValue));
-  ugc_register(gc, &v->header);
+Value MAKE_FRAME(int32_t ip, int32_t sp, int32_t bp) {
+  HeapValue* v = GC_malloc(sizeof(HeapValue));
 
   v->type = TYPE_FRAME;
   v->as_frame.instruction_pointer = ip;
@@ -119,9 +115,8 @@ Value MAKE_FRAME(ugc_t *gc, int32_t ip, int32_t sp, int32_t bp) {
   return MAKE_PTR(v);
 }
 
-Value MAKE_EVENT_FRAME(ugc_t *gc, int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int function_ipc) {
-  HeapValue* v = malloc(sizeof(HeapValue));
-  ugc_register(gc, &v->header);
+Value MAKE_EVENT_FRAME(int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int function_ipc) {
+  HeapValue* v = GC_malloc(sizeof(HeapValue));
 
   v->type = TYPE_FRAME;
   v->as_frame.instruction_pointer = ip;
@@ -132,9 +127,8 @@ Value MAKE_EVENT_FRAME(ugc_t *gc, int32_t ip, int32_t sp, int32_t bp, int32_t on
   return MAKE_PTR(v);
 }
 
-Value MAKE_EVENT_ON(ugc_t *gc, int id, Value func) {
-  HeapValue* v = malloc(sizeof(HeapValue));
-  ugc_register(gc, &v->header);
+Value MAKE_EVENT_ON(int id, Value func) {
+  HeapValue* v = GC_malloc(sizeof(HeapValue));
 
   v->type = TYPE_EVENT_ON;
   v->as_event_on.id = id;
@@ -201,8 +195,9 @@ char* type_of(Value value) {
 }
 
 Stack* stack_new() {
-  Stack* stack = malloc(MAX_STACK_SIZE * sizeof(Value));
+  Stack* stack = malloc(sizeof(Stack));
   stack->stack_pointer = GLOBALS_SIZE;
+  stack->values = malloc(MAX_STACK_SIZE * sizeof(Value));
   return stack;
 }
 

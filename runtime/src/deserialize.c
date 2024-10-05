@@ -6,8 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <value.h>
+#include <gc.h>
 
-Value deserialize_value(ugc_t *gc, FILE* file) {
+Value deserialize_value(FILE* file) {
   Value value;
 
   uint8_t type;
@@ -31,11 +32,11 @@ Value deserialize_value(ugc_t *gc, FILE* file) {
       int32_t length;
       fread(&length, sizeof(int32_t), 1, file);
 
-      char* string_value = malloc(length + 1);
+      char* string_value = GC_malloc(length + 1);
       fread(string_value, sizeof(char), length, file);
       string_value[length] = '\0';
 
-      value = MAKE_STRING(gc, string_value);
+      value = MAKE_STRING(string_value);
       break;
     }
 
@@ -46,16 +47,16 @@ Value deserialize_value(ugc_t *gc, FILE* file) {
   return value;
 }
 
-Constants deserialize_constants(ugc_t *gc, FILE* file) {
+Constants deserialize_constants(FILE* file) {
   Constants constants;
 
   int32_t constant_count;
   fread(&constant_count, sizeof(int32_t), 1, file);
 
   constants.size = constant_count;
-  constants.values = malloc(constant_count * sizeof(Value));
+  constants.values = GC_malloc(constant_count * sizeof(Value));
   for (int32_t i = 0; i < constant_count; i++) {
-    constants.values[i] = deserialize_value(gc, file);
+    constants.values[i] = deserialize_value(file);
   }
 
   assert(constants.values != NULL);
@@ -64,7 +65,7 @@ Constants deserialize_constants(ugc_t *gc, FILE* file) {
 }
 
 void deserialize(Module *mod, FILE* file) {
-  Constants constants_ = deserialize_constants(mod->gc, file);
+  Constants constants_ = deserialize_constants(file);
 
   int32_t instr_count;
   fread(&instr_count, sizeof(int32_t), 1, file);
