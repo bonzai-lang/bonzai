@@ -26,28 +26,28 @@ Bonzai is a programming language that relies on [Actor model](https://en.wikiped
 
 A factorial example :
 
-```lisp
-(interface Factorial []
-  (defn factorial [(self Factorial) (n int)])  
-)
+```v
+interface Factorial {
+  fn factorial(self: Factorial, n: int)
+}
 
-(defn Factorial [] {
-  (mut acc 1)
+fn Factorial() => {
+  mut acc = 1
 
-  (actor (implements Factorial)
-    (on factorial [self n] 
-      (if (== n 0) {
-        (print acc)
-      } {
-        (set acc (* (value acc) n))
-        (send self factorial self (- n 1))
-      })
-    )
-  )
-})
+  actor < Factorial {
+    on factorial(self, n) => {
+      if n == 0 then {
+        print(acc.value)
+      } else {
+        acc = acc.value * n
+        self->factorial(self, n - 1)
+      }
+    }
+  }
+}
 
-(let f (spawn (Factorial)))
-(send f factorial f 5)
+let f = spawn Factorial()
+f->factorial(f, 5)
 ```
 
 Here, let's decompose the code into steps:
