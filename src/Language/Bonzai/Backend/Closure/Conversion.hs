@@ -214,5 +214,11 @@ convertUpdate (MLIR.MkUpdtVariable x) = pure $ MLIR.MkUpdtVariable x
 convertUpdate (MLIR.MkUpdtField u f) = MLIR.MkUpdtField <$> convertUpdate u <*> pure f
 convertUpdate (MLIR.MkUpdtIndex u e) = MLIR.MkUpdtIndex <$> convertUpdate u <*> convert e
 
+convertToplevel :: MonadIO m => MLIR.Expression -> m MLIR.Expression
+convertToplevel (MLIR.MkExprFunction f args b) = do
+  modifyIORef' globals (Map.insert f (length args))
+  MLIR.MkExprFunction f args <$> convert b
+convertToplevel e = convert e
+
 runClosureConversion :: MonadIO m => [MLIR.Expression] -> m [MLIR.Expression]
-runClosureConversion = mapM convert
+runClosureConversion = mapM convertToplevel

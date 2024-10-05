@@ -87,8 +87,15 @@ hoist (MLIR.MkExprUpdate u e) = do
       pure (MLIR.MkUpdtIndex u'' e'', hoisted <> hoisted')
 hoist (MLIR.MkExprLiteral l) = pure (MLIR.MkExprLiteral l, [])
 
-runClosureHoisting :: MonadIO m => [MLIR.Expression] -> m [MLIR.Expression]
-runClosureHoisting xs = do
-  (xs', hoisted) <- mapAndUnzipM hoist xs
+hoistToplevel :: MonadIO m => MLIR.MLIR "expression" -> m [MLIR.MLIR "expression"]
+hoistToplevel (MLIR.MkExprFunction f args b) = do
+  (b', hoisted) <- hoist b
 
-  pure $ concat hoisted <> xs'
+  pure $ hoisted <> [MLIR.MkExprLet f (MLIR.MkExprLambda args b')]
+hoistToplevel e = do
+  (e', hoisted) <- hoist e
+
+  pure $ hoisted <> [e']
+
+runClosureHoisting :: MonadIO m => [MLIR.Expression] -> m [MLIR.Expression]
+runClosureHoisting xs = concat <$> mapM hoistToplevel xs
