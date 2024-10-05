@@ -46,6 +46,7 @@ resolvePath path = do
   writeIORef moduleState st'
 
   let path' = cwd </> takeFileName path <.> "cst"
+  let correctPath = normalise path'
 
   path'' <- liftIO $ makeAbsolute path'
 
@@ -60,16 +61,16 @@ resolvePath path = do
     Just m -> return m.expressions
     Nothing -> do
       let m = MkModuleUnit (fromString path') Set.empty [] []
-      modifyIORef moduleState $ \st'' -> st' { resolved = Map.insert path' m st''.resolved }
+      modifyIORef moduleState $ \st'' -> st' { resolved = Map.insert correctPath m st''.resolved }
 
       liftIO (doesFileExist path') >>= \case
-        False -> throw (ModuleNotFound path' stack)
+        False -> throw (ModuleNotFound correctPath stack)
         True -> pure ()
 
       content <- readFileBS path'
       let contentAsText = decodeUtf8 content
 
-      ast <- P.parseBonzaiFile path' contentAsText P.parseProgram
+      ast <- P.parseBonzaiFile correctPath contentAsText P.parseProgram
 
       case ast of
         Left err -> throw $ ParseError err
