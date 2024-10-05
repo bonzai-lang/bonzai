@@ -69,9 +69,10 @@ void deserialize(Module *mod, FILE* file) {
   int32_t instr_count;
   fread(&instr_count, sizeof(int32_t), 1, file);
   
-  int32_t* instrs = malloc(instr_count * 4 * sizeof(int32_t));
-  fread(instrs, sizeof(int32_t), instr_count * 4, file);
+  int32_t* instrs = malloc(instr_count * 5 * sizeof(int32_t));
+  fread(instrs, sizeof(int32_t), instr_count * 5, file);
 
+  mod->base_pointer = BASE_POINTER;
   mod->instr_count = instr_count;
   mod->instrs = instrs;
   mod->constants = constants_;
