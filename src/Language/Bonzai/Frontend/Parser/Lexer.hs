@@ -9,12 +9,24 @@ import Text.Megaparsec.Char
 import Text.Megaparsec.Char.Lexer qualified as L
 import Prelude hiding (modify)
 import qualified Data.Text as Text
+import qualified Data.List as List
 
 {-# NOINLINE defaultPosition #-}
 defaultPosition :: IORef (Maybe Position)
 defaultPosition = IO.unsafePerformIO $ newIORef Nothing
 
 -- LEXING FUNCTIONS
+-- | Make a unary operator sequence
+-- | A unary operator sequence is a sequence of unary operators
+-- | that are applied to an expression.
+-- |
+-- | example: not not a <=> not (not a)
+-- |
+-- | The sequence is applied from right to left.
+-- | This is because the postfix and prefix operators are applied *
+-- | from right to left.
+makeUnaryOp :: (Alternative f) => f (a -> a) -> f (a -> a)
+makeUnaryOp s = List.foldr1 (.) . reverse <$> some s
 
 -- | Skip inline comments
 -- | Inline comments are comments that start with // and end at the end
@@ -41,10 +53,11 @@ reservedWords =
   Set.fromList
     [ "module",
       "let",
-      "send",
       "actor",
       "interface",
-      "on"
+      "on",
+      "require",
+      "extern"
     ]
 
 -- | Lexeme parser that consumes whitespace after the lexeme

@@ -12,18 +12,10 @@ parseType =
       ret <- Lex.symbol ":" *> parseType
 
       pure $ tys HLIR.:->: ret,
-    P.try $ Lex.identifier <&> HLIR.MkTyId,
-    do
+    P.try $ do
       idt <- Lex.identifier
       tys <- Lex.angles $ P.sepBy1 parseType Lex.comma
 
-      pure $ HLIR.MkTyApp (HLIR.MkTyId idt) tys
+      pure $ HLIR.MkTyApp (HLIR.MkTyId idt) tys,
+    Lex.identifier <&> HLIR.MkTyId
   ]
-
-unsnoc :: [a] -> Maybe ([a], a)
-unsnoc [] = Nothing
-unsnoc xs = do
-  ys <- viaNonEmpty init xs
-  z <- viaNonEmpty last xs
-
-  pure (ys, z)
