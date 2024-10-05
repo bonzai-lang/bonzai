@@ -143,8 +143,8 @@ void gc(struct Module* vm) {
 
   vm->max_objects = vm->num_objects < INIT_OBJECTS ? INIT_OBJECTS : vm->num_objects * 2;
   
-  printf("Collected %d objects, %d remaining.\n", numObjects - vm->num_objects,
-         vm->num_objects);
+  // printf("Collected %d objects, %d remaining.\n", numObjects - vm->num_objects,
+  //        vm->num_objects);
 }
 
 void force_sweep(struct Module* vm) {
