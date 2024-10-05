@@ -5,6 +5,7 @@
 #include <debug.h>
 #include <threading.h>
 #include <gc.h>
+#include <library/http.h>
 
 void op_call(Module *module, Value callee, int32_t argc) {
   ASSERT_FMT(module->callstack < MAX_FRAMES, "Call stack overflow, reached %d", module->callstack);
@@ -17,7 +18,7 @@ void op_call(Module *module, Value callee, int32_t argc) {
 
   int32_t new_pc = module->pc + 5;
 
-  stack_push(module->stack, MAKE_FRAME(new_pc, old_sp, module->base_pointer));
+  stack_push(module->stack, MAKE_FRAME(module, new_pc, old_sp, module->base_pointer));
 
   module->base_pointer = module->stack->stack_pointer - 1;
   module->callstack++;
@@ -29,7 +30,7 @@ void op_native_call(Module *module, Value callee, int32_t argc) {
   ASSERT_TYPE("op_native_call", callee, TYPE_STRING);
   char* fun = GET_NATIVE(callee);
 
-  Value* args = GC_malloc(sizeof(Value) * argc);
+  Value* args = /*test*/malloc(sizeof(Value) * argc);
 
   // Pop args in reverse order
   for (int i = argc - 1; i >= 0; i--) {
@@ -119,10 +120,48 @@ void op_native_call(Module *module, Value callee, int32_t argc) {
     ASSERT_TYPE("value", args[0], TYPE_MUTABLE);
 
     stack_push(module->stack, GET_MUTABLE(args[0]));
+  } else if (strcmp(fun, "listen_http") == 0) {
+    ASSERT_ARGC("listen_http", argc, 1);
+    ASSERT_TYPE("listen_http", args[0], TYPE_INTEGER);
+
+    int port = GET_INT(args[0]);
+    int server_socket = start_http_server(module, port);
+
+    stack_push(module->stack, MAKE_INTEGER(server_socket));
+  } else if (strcmp(fun, "accept_request") == 0) {
+    ASSERT_ARGC("accept_request", argc, 1);
+    ASSERT_TYPE("accept_request", args[0], TYPE_INTEGER);
+
+    int server_socket = GET_INT(args[0]);
+    int client_socket = accept_request(module, server_socket);
+
+    stack_push(module->stack, MAKE_INTEGER(client_socket));
+  } else if (strcmp(fun, "close_client") == 0) {
+    ASSERT_ARGC("close_client", argc, 1);
+    ASSERT_TYPE("close_client", args[0], TYPE_INTEGER);
+
+    int client_socket = GET_INT(args[0]);
+    close_client(module, client_socket);
+  } else if (strcmp(fun, "get_buffer") == 0) {
+    ASSERT_ARGC("get_buffer", argc, 1);
+    ASSERT_TYPE("get_buffer", args[0], TYPE_INTEGER);
+
+    int client_socket = GET_INT(args[0]);
+    Value buffer = get_buffer(module, client_socket);
+
+    stack_push(module->stack, buffer);
+  } else if (strcmp(fun, "send_buffer") == 0) {
+    ASSERT_ARGC("send_buffer", argc, 2);
+    ASSERT_TYPE("send_buffer", args[0], TYPE_INTEGER);
+    ASSERT_TYPE("send_buffer", args[1], TYPE_STRING);
+
+    int client_socket = GET_INT(args[0]);
+    send_buffer(module, client_socket, args[1]);
   } else {
-    THROW_FMT("Unknown native function %s", fun);
+    THROW_FMT("Unknown native function: %s", fun);
   }
 
+  free(args);
   module->pc += 5;
 }
 

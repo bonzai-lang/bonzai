@@ -113,14 +113,14 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_make_list: {
-    Value* list = GC_malloc(i1 * sizeof(Value));
+    Value* list = malloc(i1 * sizeof(Value));
 
     // Loop in reverse order to pop values in the correct order
     for (int i = i1 - 1; i >= 0; i--) {
       list[i] = stack_pop(module->stack);
     }
 
-    Value value = MAKE_LIST(list, i1);
+    Value value = MAKE_LIST(module, list, i1);
     stack_push(module->stack, value);
     INCREASE_IP(module);
     goto *jmp_table[op];
@@ -200,7 +200,14 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
     HeapValue* ev = GET_PTR(event);
   
-    stack_push(module->stack, MAKE_EVENT_FRAME(module->pc + 5, module->stack->stack_pointer, module->base_pointer, ev->as_event.ons_count, ev->as_event.ipc));
+    stack_push(module->stack, MAKE_EVENT_FRAME(
+      module, 
+      module->pc + 5, 
+      module->stack->stack_pointer, 
+      module->base_pointer, 
+      ev->as_event.ons_count, 
+      ev->as_event.ipc
+    ));
 
     module->base_pointer = module->stack->stack_pointer - 1;
     module->callstack++;
@@ -213,7 +220,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     int32_t new_pc = module->pc + 5;
     Value lambda = MAKE_FUNCTION(new_pc, i4);
 
-    Value event_on = MAKE_EVENT_ON(i1, lambda);
+    Value event_on = MAKE_EVENT_ON(module, i1, lambda);
 
     stack_push(module->stack, event_on);
 
@@ -225,7 +232,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     int event_id = i2;
     int argsc = i1;
 
-    Value* args = GC_malloc(argsc * sizeof(Value));
+    Value* args = malloc(argsc * sizeof(Value));
     for (int i = 0; i < argsc; i++) {
       args[i] = stack_pop(module->stack);
     }
@@ -260,7 +267,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_make_event: {
-    Value ev = MAKE_EVENT(i1, module->pc);
+    Value ev = MAKE_EVENT(module, i1, module->pc);
     stack_push(module->stack, ev);
     INCREASE_IP_BY(module, i2 + 1);
     goto *jmp_table[op];
@@ -269,9 +276,8 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   case_return_event: {
     Frame fr = pop_frame(module);
     
-    HeapValue* hp = GC_malloc(sizeof(HeapValue));
+    HeapValue* hp = allocate(module, TYPE_EVENT);
   
-    hp->type = TYPE_EVENT;
     hp->as_event.ons_count = fr.ons_count;
     hp->as_event.ipc = fr.function_ipc;
 
@@ -294,7 +300,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
   case_make_mutable: {
     Value x = stack_pop(module->stack);
-    stack_push(module->stack, MAKE_MUTABLE(x));
+    stack_push(module->stack, MAKE_MUTABLE(module, x));
     INCREASE_IP(module);
     goto *jmp_table[op];
   }

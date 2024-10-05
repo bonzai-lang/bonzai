@@ -6,9 +6,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <stdbool.h>
 
 typedef uint64_t Value;
 
+#define INIT_OBJECTS 32
 #define GLOBALS_SIZE 1024
 #define MAX_STACK_SIZE GLOBALS_SIZE * 32
 #define VALUE_STACK_SIZE MAX_STACK_SIZE - GLOBALS_SIZE
@@ -110,7 +112,7 @@ struct Event {
 
 typedef struct Stack {
   Value *values;
-  int16_t stack_pointer;
+  int32_t stack_pointer;
 } Stack;
 
 #define MAX_FRAMES 1024
@@ -130,9 +132,11 @@ struct EventOn {
 };
 
 // Container type for values
-typedef struct {
+typedef struct HeapValue {
   ValueType type;
   uint32_t length;
+  bool is_marked;
+  struct HeapValue* next;
 
   union {
     char* as_string;
@@ -154,13 +158,16 @@ typedef struct {
 #define MAKE_FUNCTION(x, y) \
   (SIGNATURE_FUNCTION | (uint16_t)(x) | ((uint16_t)(y) << 16))
 
-Value MAKE_MUTABLE(Value x);
-Value MAKE_STRING(char* x);
-Value MAKE_LIST(Value* x, uint32_t len);
-Value MAKE_EVENT(uint32_t ons_count, uint32_t ipc);
-Value MAKE_FRAME(int32_t ip, int32_t sp, int32_t bp);
-Value MAKE_EVENT_FRAME(int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int function_ipc);
-Value MAKE_EVENT_ON(int id, Value func);
+Value MAKE_MUTABLE(struct Module* mod, Value x);
+Value MAKE_STRING(struct Module* mod, char* x);
+Value MAKE_LIST(struct Module* mod, Value* x, uint32_t len);
+Value MAKE_EVENT(struct Module* mod, uint32_t ons_count, uint32_t ipc);
+Value MAKE_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp);
+Value MAKE_EVENT_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int function_ipc);
+Value MAKE_EVENT_ON(struct Module* mod, int id, Value func);
+void gc(struct Module* vm);
+void force_sweep(struct Module* vm);
+HeapValue* allocate(struct Module* mod, ValueType type);
 
 #define MAKE_SPECIAL() kNull
 #define MAKE_ADDRESS(x) MAKE_INTEGER(x)

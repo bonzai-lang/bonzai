@@ -1,8 +1,9 @@
 #include <error.h>
+#include <gc.h>
+#include <module.h>
 #include <stdio.h>
 #include <string.h>
 #include <value.h>
-#include <gc.h>
 
 void native_print(Value value) {
   if (value == 0) {
@@ -12,7 +13,7 @@ void native_print(Value value) {
   ValueType val_type = get_type(value);
   switch (val_type) {
     case TYPE_INTEGER:
-      printf("%d", (int32_t) value);
+      printf("%d", (int32_t)value);
       break;
     case TYPE_SPECIAL:
       printf("<special>");
@@ -64,75 +65,191 @@ void native_print(Value value) {
       break;
     }
 
-    case TYPE_UNKNOWN: default: {
+    case TYPE_UNKNOWN:
+    default: {
       printf("<unknown>");
       break;
     }
   }
 }
 
-Value MAKE_STRING(char* x) {
-  HeapValue* v = GC_malloc(sizeof(HeapValue));
-  v->length = strlen(x);
-  v->type = TYPE_STRING;
+void mark_value(Value value) {
+  if (!IS_PTR(value)) return;
+
+  HeapValue* ptr = GET_PTR(value);
+  if (ptr->is_marked) return;
+
+  ptr->is_marked = true;
+
+  if (ptr->type == TYPE_LIST) {
+    for (uint32_t i = 0; i < ptr->length; i++) {
+      mark_value(ptr->as_ptr[i]);
+    }
+  } else if (ptr->type == TYPE_MUTABLE) {
+    mark_value(*(ptr->as_ptr));
+  } else if (ptr->type == TYPE_EVENT) {
+    for (int i = 0; i < ptr->as_event.ons_count; i++) {
+      mark_value(ptr->as_event.ons[i]);
+    }
+  }
+}
+
+void mark_all(struct Module* vm) {
+  for (int i = 0; i < MAX_STACK_SIZE; i++) {
+    mark_value(vm->stack->values[i]);
+  }
+}
+
+void sweep(struct Module* vm) {
+  HeapValue** object = &vm->first_object;
+  while (*object) {
+    if (!(*object)->is_marked) {
+      /* This object wasn't reached, so remove it from the list
+         and free it. */
+      HeapValue* unreached = *object;
+
+      *object = unreached->next;
+      switch (unreached->type) {
+        case TYPE_LIST: {
+          free(unreached->as_ptr);
+          break;
+        }
+
+        case TYPE_MUTABLE: {
+          free(unreached->as_ptr);
+          break;
+        }
+
+        default: break;
+      }
+
+      free(unreached);
+
+      vm->num_objects--;
+    } else {
+      /* This object was reached, so unmark it (for the next GC)
+         and move on to the next. */
+      (*object)->is_marked = 0;
+      object = &(*object)->next;
+    }
+  }
+}
+
+void gc(struct Module* vm) {
+  int numObjects = vm->num_objects;
+
+  mark_all(vm);
+  sweep(vm);
+
+  vm->max_objects = vm->num_objects < INIT_OBJECTS ? INIT_OBJECTS : vm->num_objects * 2;
+  
+  printf("Collected %d objects, %d remaining.\n", numObjects - vm->num_objects,
+         vm->num_objects);
+}
+
+void force_sweep(struct Module* vm) {
+  HeapValue* object = vm->first_object;
+  while (object) {
+    HeapValue* next = object->next;
+    switch (object->type) {
+      case TYPE_LIST: {
+        free(object->as_ptr);
+        break;
+      }
+
+      case TYPE_MUTABLE: {
+        free(object->as_ptr);
+        break;
+      }
+
+      default: break;
+    }
+    free(object);
+    object = next;
+  }
+  vm->first_object = NULL;
+  vm->num_objects = 0;
+}
+
+HeapValue* allocate(struct Module* mod, ValueType type) {
+  // printf("%d == %d\n", mod->num_objects, mod->max_objects);
+  if (mod->num_objects == mod->max_objects) gc(mod);
+
+  HeapValue* v = malloc(sizeof(HeapValue));
+
+  v->type = type;
+  v->is_marked = false;
+  v->next = mod->first_object;
+
+  mod->first_object = v;
+  mod->num_objects++;
+
+  return v;
+}
+
+Value MAKE_STRING(struct Module* mod, char* x) {
+  HeapValue* v = allocate(mod, TYPE_STRING);
   v->as_string = x;
+  v->length = strlen(x);
+
   return MAKE_PTR(v);
 }
 
-Value MAKE_LIST(Value* x, uint32_t len) {
-  HeapValue* v = GC_malloc(sizeof(HeapValue));
-  v->length = len;
-  v->type = TYPE_LIST;
+Value MAKE_LIST(struct Module* mod, Value* x, uint32_t len) {
+  HeapValue* v = allocate(mod, TYPE_LIST);
   v->as_ptr = x;
+  v->length = len;
+
   return MAKE_PTR(v);
 }
 
-Value MAKE_MUTABLE(Value x) {
-  HeapValue* v = GC_malloc(sizeof(HeapValue));
-  v->length = 1;
-  v->type = TYPE_MUTABLE;
-  v->as_ptr = GC_malloc(sizeof(Value));
+Value MAKE_MUTABLE(struct Module* mod, Value x) {
+  HeapValue* v = allocate(mod, TYPE_MUTABLE);
+
+  v->as_ptr = malloc(sizeof(Value));
   *v->as_ptr = x;
+  v->length = 1;
+
   return MAKE_PTR(v);
 }
 
-Value MAKE_EVENT(uint32_t ons_count, uint32_t ipc) {
-  HeapValue* v = GC_malloc(sizeof(HeapValue));
-  v->length = 0;
-  v->type = TYPE_EVENT;
+Value MAKE_EVENT(struct Module* mod, uint32_t ons_count, uint32_t ipc) {
+  HeapValue* v = allocate(mod, TYPE_EVENT);
   v->as_event.ons_count = ons_count;
   v->as_event.ipc = ipc;
+
   return MAKE_PTR(v);
 }
 
-Value MAKE_FRAME(int32_t ip, int32_t sp, int32_t bp) {
-  HeapValue* v = GC_malloc(sizeof(HeapValue));
-
-  v->type = TYPE_FRAME;
+Value MAKE_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp) {
+  HeapValue* v = allocate(mod, TYPE_FRAME);
   v->as_frame.instruction_pointer = ip;
   v->as_frame.stack_pointer = sp;
   v->as_frame.base_ptr = bp;
+  v->as_frame.ons_count = 0;
+
   return MAKE_PTR(v);
 }
 
-Value MAKE_EVENT_FRAME(int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int function_ipc) {
-  HeapValue* v = GC_malloc(sizeof(HeapValue));
+Value MAKE_EVENT_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp,
+                       int32_t ons_count, int function_ipc) {
+  HeapValue* v = allocate(mod, TYPE_FRAME);
 
-  v->type = TYPE_FRAME;
   v->as_frame.instruction_pointer = ip;
   v->as_frame.stack_pointer = sp;
   v->as_frame.base_ptr = bp;
   v->as_frame.ons_count = ons_count;
   v->as_frame.function_ipc = function_ipc;
+
   return MAKE_PTR(v);
 }
 
-Value MAKE_EVENT_ON(int id, Value func) {
-  HeapValue* v = GC_malloc(sizeof(HeapValue));
+Value MAKE_EVENT_ON(struct Module* mod, int id, Value func) {
+  HeapValue* v = allocate(mod, TYPE_EVENT_ON);
 
-  v->type = TYPE_EVENT_ON;
   v->as_event_on.id = id;
   v->as_event_on.func = func;
+
   return MAKE_PTR(v);
 }
 
@@ -185,9 +302,9 @@ char* type_of(Value value) {
       return "unknown";
     case TYPE_API:
       return "api";
-    case TYPE_EVENT: 
+    case TYPE_EVENT:
       return "event";
-    case TYPE_FRAME: 
+    case TYPE_FRAME:
       return "frame";
     case TYPE_EVENT_ON:
       return "event_on";
@@ -202,55 +319,56 @@ Stack* stack_new() {
 }
 
 void stack_push(Stack* stack, Value value) {
+  if (stack->stack_pointer > MAX_STACK_SIZE) {
+    THROW("NO MORE MEMORY");
+  }
   stack->values[stack->stack_pointer++] = value;
 }
 
-Value stack_pop(Stack* stack) {
-  return stack->values[--stack->stack_pointer];
+Value stack_pop(Stack* stack) { return stack->values[--stack->stack_pointer]; }
+
+void enqueue(MessageQueue* queue, Message* msg) {
+  pthread_mutex_lock(&queue->mutex);
+  if (queue->tail) {
+    queue->tail->next = msg;
+  } else {
+    queue->head = msg;
+  }
+  queue->tail = msg;
+  pthread_cond_signal(&queue->cond);
+  pthread_mutex_unlock(&queue->mutex);
 }
 
-void enqueue(MessageQueue *queue, Message *msg) {
-    pthread_mutex_lock(&queue->mutex);
-    if (queue->tail) {
-        queue->tail->next = msg;
-    } else {
-        queue->head = msg;
-    }
-    queue->tail = msg;
-    pthread_cond_signal(&queue->cond);
-    pthread_mutex_unlock(&queue->mutex);
-}
-
-Message* dequeue(MessageQueue *queue) {
-    pthread_mutex_lock(&queue->mutex);
-    while (!queue->head) {
-        pthread_cond_wait(&queue->cond, &queue->mutex);
-    }
-    Message *msg = queue->head;
-    queue->head = msg->next;
-    if (!queue->head) {
-        queue->tail = NULL;
-    }
-    pthread_mutex_unlock(&queue->mutex);
-    return msg;
+Message* dequeue(MessageQueue* queue) {
+  pthread_mutex_lock(&queue->mutex);
+  while (!queue->head) {
+    pthread_cond_wait(&queue->cond, &queue->mutex);
+  }
+  Message* msg = queue->head;
+  queue->head = msg->next;
+  if (!queue->head) {
+    queue->tail = NULL;
+  }
+  pthread_mutex_unlock(&queue->mutex);
+  return msg;
 }
 
 MessageQueue* create_message_queue() {
-    MessageQueue *queue = malloc(sizeof(MessageQueue));
-    queue->head = NULL;
-    queue->tail = NULL;
-    pthread_mutex_init(&queue->mutex, NULL);
-    pthread_cond_init(&queue->cond, NULL);
-    return queue;
+  MessageQueue* queue = malloc(sizeof(MessageQueue));
+  queue->head = NULL;
+  queue->tail = NULL;
+  pthread_mutex_init(&queue->mutex, NULL);
+  pthread_cond_init(&queue->cond, NULL);
+  return queue;
 }
 
-void print_message_queue(MessageQueue *queue) {
-    Message *msg = queue->head;
-    while (msg) {
-        printf("%d ", msg->name);
-        msg = msg->next;
-    }
-    printf("\n");
+void print_message_queue(MessageQueue* queue) {
+  Message* msg = queue->head;
+  while (msg) {
+    printf("%d ", msg->name);
+    msg = msg->next;
+  }
+  printf("\n");
 }
 
 int value_eq(Value a, Value b) {
@@ -285,7 +403,8 @@ int value_eq(Value a, Value b) {
       return 1;
     case TYPE_FUNCENV:
       return 1;
-    case TYPE_UNKNOWN: default:
+    case TYPE_UNKNOWN:
+    default:
       return 0;
   }
 }

@@ -35,6 +35,9 @@ typedef struct Module {
   bool is_terminated;
 
   pthread_mutex_t module_mutex;
+
+  HeapValue* first_object;
+  int num_objects, max_objects;
 } Module;
 
 typedef Value (*Native)(int argc, struct Module *m, Value *args);

@@ -5,5 +5,6 @@
 #include <stdio.h>
 
 void deserialize(Module *mod, FILE *file);
+void free_constant(Value v);
 
 #endif  // DESERIALIZER_H

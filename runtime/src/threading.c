@@ -18,10 +18,8 @@ Value list_get(Value list, uint32_t idx) {
 Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv) {
   Module *new_module = malloc(sizeof(Module));
   new_module->stack = stack_new();
-  
   pthread_mutex_lock(&module->module_mutex);
-  int sp = module->stack->stack_pointer;
-  for (int i = 0; i < sp; i++) stack_push(new_module->stack, module->stack->values[i]);
+  memcpy(new_module->stack->values, module->stack->values, GLOBALS_SIZE * sizeof(Value));
   pthread_mutex_unlock(&module->module_mutex);
   
   int16_t ipc = (int16_t)(callee & MASK_PAYLOAD_INT);
@@ -36,7 +34,7 @@ Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv) {
 
   pthread_mutex_lock(&module->module_mutex);
   stack_push(new_module->stack,
-             MAKE_FRAME(new_pc, old_sp, new_module->base_pointer));
+             MAKE_FRAME(module, new_pc, old_sp, new_module->base_pointer));
   pthread_mutex_unlock(&module->module_mutex);
 
   new_module->base_pointer = new_module->stack->stack_pointer - 1;
@@ -49,6 +47,9 @@ Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv) {
   new_module->constants = module->constants;
   new_module->argc = module->argc;
   new_module->argv = module->argv;
+  new_module->max_objects = module->max_objects;
+  new_module->num_objects = module->num_objects;
+  new_module->first_object = module->first_object;
   pthread_mutex_unlock(&module->module_mutex);
   Value ret = run_interpreter(new_module, ipc, true, new_module->callstack - 1);
 
@@ -61,6 +62,7 @@ Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv) {
 
 void *actor_run(void *arg) {
   Actor *actor = (Actor *)arg;
+  
   while (1) {
     Message *msg = dequeue(actor->queue);
     
@@ -75,16 +77,22 @@ void *actor_run(void *arg) {
     call_threaded(actor->mod, event_func, argc, args);
 
     free(msg);
+    free(args);
 
     if (actor->mod->is_terminated && actor->queue->head == NULL) {
+      free(actor->queue);
+      free(actor);
       pthread_exit(0);
     }
   }
+
+  free(actor->queue);
+  free(actor);
   return NULL;
 }
 
 Actor *create_actor(struct Event event, struct Module* mod) {
-  Actor *actor = GC_malloc(sizeof(Actor));
+  Actor *actor = malloc(sizeof(Actor));
   actor->queue = create_message_queue();
   actor->event = event;
   actor->mod = mod;
