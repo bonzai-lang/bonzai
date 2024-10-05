@@ -12,6 +12,8 @@ import qualified Data.Maybe as Mb
 import System.Directory (doesFileExist)
 import System.FilePath (normalise)
 import Control.Color
+import Text.Megaparsec.State (PosState(pstateSourcePos))
+import Text.Megaparsec.Error (ParseErrorBundle(bundlePosState))
 
 instance (D.HasHints Void String) where
   hints _ = mempty
@@ -76,6 +78,12 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
         (Just "May you have forgotten to define an interface for your actor?")
         ("Expected an actor, but got " <> show (toText ty), Nothing, pos)
         "Typechecking"
+    
+    InvalidArgumentQuantity n k ->
+      printErrorFromString
+        Nothing
+        ("Invalid number of arguments, expected " <> show n <> ", received " <> show k, Nothing, pos)
+        "Resolution"
 
 
 type ImportStack = [FilePath]
@@ -93,6 +101,7 @@ data BonzaiError
   | NotAnActor Text HLIR.Type
   | EventNotFound Text
   | ExpectedAnActor HLIR.Type
+  | InvalidArgumentQuantity Int Int
 
 showError :: P.ParseError -> String
 showError = P.errorBundlePretty
@@ -118,16 +127,18 @@ throw e = do
   throwError (e, pos)
 
 parseError :: P.ParsingError -> FilePath -> Maybe P.FileContent -> IO a
-parseError err' fp fc = do
+parseError err' _ fc = do
   let diag :: D.Diagnostic String = D.errorDiagnosticFromBundle Nothing "Parse error on input" Nothing err'
 
-  b <- doesFileExist fp
+  let fp' = err'.bundlePosState.pstateSourcePos.sourceName
 
-  content' <- readFileBS fp
+  b <- doesFileExist fp'
+
+  content' <- readFileBS fp'
   let contentAsText = decodeUtf8 content'
 
   let x' = toString $ if b then contentAsText else Mb.fromJust fc
-      diag' = D.addFile diag fp x'
+      diag' = D.addFile diag fp' x'
     in do
       D.printDiagnostic stdout True True 4 D.defaultStyle diag'
       exitFailure
@@ -139,7 +150,7 @@ printErrorFromString content (error', msg, (p1, p2)) step = do
   let file' = p1.sourceName
   b <- doesFileExist file'
 
-  content' <- readFileBS file'
+  content' <- if b then readFileBS file' else pure ""
   let contentAsText = decodeUtf8 content'
 
   let x' = toString $ if b then contentAsText else Mb.fromJust content

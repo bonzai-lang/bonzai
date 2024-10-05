@@ -183,7 +183,10 @@ typecheck (HLIR.MkExprSend e ev a) = do
 
           case Map.lookup ev methodsTys of
             Just (argsTy HLIR.:->: _) -> do
-              zipWithM_ U.unifiesWith elTys argsTy
+              if length argsTy /= length elTys
+                then throw (M.InvalidArgumentQuantity (length argsTy) (length elTys))
+                else do
+                  zipWithM_ U.unifiesWith elTys argsTy
             _ -> throw (M.EventNotFound ev)
         Nothing -> throw (M.EventNotFound actorName)
     _ -> throw (M.ExpectedAnActor ty)
