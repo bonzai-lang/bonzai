@@ -14,7 +14,7 @@ Value list_get(Value list, uint32_t idx) {
   return l->as_ptr[idx];
 }
 
-Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv, int ls) {
+Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv) {
   Module *new_module = malloc(sizeof(Module));
   new_module->stack = stack_new();
   
@@ -23,21 +23,23 @@ Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv, int
   for (int i = 0; i < sp; i++) stack_push(new_module->stack, module->stack->values[i]);
   pthread_mutex_unlock(&module->module_mutex);
   
-  for (int i = 0; i < argc; i++) stack_push(new_module->stack, argv[i]);
-
   int16_t ipc = (int16_t)(callee & MASK_PAYLOAD_INT);
-  // int16_t local_space = (int16_t)((callee >> 16) & MASK_PAYLOAD_INT);
+  int16_t local_space = (int16_t)((callee >> 16) & MASK_PAYLOAD_INT);
   int16_t old_sp = new_module->stack->stack_pointer - argc;
 
-  int32_t new_pc = module->pc + 4;
+  // Push arguments in reverse order
+  for (int i = argc - 1; i >= 0; i--) stack_push(new_module->stack, argv[i]);
+  for (int i = 0; i < local_space - argc; i++) stack_push(new_module->stack, MAKE_INTEGER(0));
 
-  // DEBUG_STACK(new_module->stack);
+  int32_t new_pc = module->pc + 5;
+
   pthread_mutex_lock(&module->module_mutex);
   stack_push(new_module->stack,
-             MAKE_FRAME(module->gc, new_pc, old_sp, module->base_pointer));
+             MAKE_FRAME(module->gc, new_pc, old_sp, new_module->base_pointer));
   pthread_mutex_unlock(&module->module_mutex);
 
-  new_module->base_pointer = new_module->stack->stack_pointer - (1 + ls);
+  new_module->base_pointer = new_module->stack->stack_pointer - 1;
+  new_module->stack->stack_pointer++;
   new_module->callstack = 1;
 
   pthread_mutex_lock(&module->module_mutex);
@@ -48,7 +50,6 @@ Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv, int
   new_module->argc = module->argc;
   new_module->argv = module->argv;
   pthread_mutex_unlock(&module->module_mutex);
-  // module->pc = new_pc;
   Value ret = run_interpreter(new_module, ipc, true, new_module->callstack - 1);
 
   return ret;
@@ -67,10 +68,14 @@ void *actor_run(void *arg) {
     Value *ons = event.ons;
     Value event_func = ons[id];
 
-    call_threaded(actor->mod, event_func, argc, args, event.lets_count);
+    call_threaded(actor->mod, event_func, argc, args);
     
     free(msg->args);
     free(msg);
+
+    if (actor->mod->is_terminated && actor->queue->head == NULL) {
+      pthread_exit(0);
+    }
   }
   return NULL;
 }

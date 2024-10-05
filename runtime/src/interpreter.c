@@ -8,10 +8,10 @@
 #include <stdbool.h>
 #include <threading.h>
 
-#define INCREASE_IP_BY(mod, x) (mod->pc += ((x) * 4))
+#define INCREASE_IP_BY(mod, x) (mod->pc += ((x) * 5))
 #define INCREASE_IP(mod) INCREASE_IP_BY(mod, 1)
 
-Value run_interpreter(Module *module, int ipc, bool does_return, int callstack) {
+Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callstack) {
   Constants constants = module->constants;
   int32_t* bytecode = module->instrs;
   module->pc = ipc;
@@ -20,6 +20,7 @@ Value run_interpreter(Module *module, int ipc, bool does_return, int callstack) 
   #define i1 bytecode[module->pc + 1]
   #define i2 bytecode[module->pc + 2]
   #define i3 bytecode[module->pc + 3]
+  #define i4 bytecode[module->pc + 4]
 
   #define UNKNOWN &&case_unknown
 
@@ -28,8 +29,8 @@ Value run_interpreter(Module *module, int ipc, bool does_return, int callstack) 
     &&case_store_global, &&case_return, &&case_compare, &&case_update,
     &&case_make_list, &&case_list_get, &&case_call, &&case_call_global,
     &&case_call_local, &&case_jump_if_false, &&case_jump_rel, &&case_get_index,
-    &&case_special, &&case_halt, &&case_spawn, &&case_event_on, &&case_send,
-    &&case_make_function_and_store, &&case_load_native, &&case_make_event,
+    &&case_special, &&case_halt, &&case_spawn, &&case_event_on, 
+    &&case_send, &&case_make_function_and_store, &&case_load_native, &&case_make_event,
     &&case_return_event, &&case_make_mutable, UNKNOWN
   };
 
@@ -66,7 +67,8 @@ Value run_interpreter(Module *module, int ipc, bool does_return, int callstack) 
   }
 
   case_store_global: {
-    module->stack->values[i1] = stack_pop(module->stack);
+    Value value = stack_pop(module->stack);
+    module->stack->values[i1] = value;
 
     INCREASE_IP(module);
     goto *jmp_table[op];
@@ -112,24 +114,26 @@ Value run_interpreter(Module *module, int ipc, bool does_return, int callstack) 
 
   case_make_list: {
     Value* list = malloc(i1 * sizeof(Value));
-    for (int i = 0; i < i1; i++) {
+
+    // Loop in reverse order to pop values in the correct order
+    for (int i = i1 - 1; i >= 0; i--) {
       list[i] = stack_pop(module->stack);
     }
 
-    stack_push(module->stack, MAKE_LIST(module->gc, list, i1));
+    Value value = MAKE_LIST(module->gc, list, i1);
+    stack_push(module->stack, value);
     INCREASE_IP(module);
     goto *jmp_table[op];
   }
 
   case_list_get: {
     Value list = stack_pop(module->stack);
-    Value index = stack_pop(module->stack);
+    int index = i1;
 
     ASSERT_TYPE("list_get", list, TYPE_LIST);
-    ASSERT_TYPE("list_get", index, TYPE_INTEGER);
 
     Value* list_ptr = GET_LIST(list);
-    stack_push(module->stack, list_ptr[GET_INT(index)]);
+    stack_push(module->stack, list_ptr[index]);
 
     INCREASE_IP(module);
     goto *jmp_table[op];
@@ -164,8 +168,8 @@ Value run_interpreter(Module *module, int ipc, bool does_return, int callstack) 
   }
 
   case_get_index: {
-    Value list = stack_pop(module->stack);
     Value index = stack_pop(module->stack);
+    Value list = stack_pop(module->stack);
 
     ASSERT_TYPE("get_index", list, TYPE_LIST);
     ASSERT_TYPE("get_index", index, TYPE_INTEGER);
@@ -196,20 +200,18 @@ Value run_interpreter(Module *module, int ipc, bool does_return, int callstack) 
 
     HeapValue* ev = GET_PTR(event);
   
-    stack_push(module->stack, MAKE_EVENT_FRAME(module->gc, module->pc + 4, module->stack->stack_pointer, module->base_pointer, ev->as_event.ons_count, ev->as_event.lets_count, ev->as_event.ipc));
-
-    // module->stack->stack_pointer += ev->as_event.lets_count;
+    stack_push(module->stack, MAKE_EVENT_FRAME(module->gc, module->pc + 5, module->stack->stack_pointer, module->base_pointer, ev->as_event.ons_count, ev->as_event.ipc));
 
     module->base_pointer = module->stack->stack_pointer - 1;
     module->callstack++;
-    module->pc = ev->as_event.ipc + 4;
+    module->pc = ev->as_event.ipc + 5;
     
     goto *jmp_table[op];
   }
 
   case_event_on: {
-    int32_t new_pc = module->pc + 4;
-    Value lambda = MAKE_FUNCTION(new_pc, i1);
+    int32_t new_pc = module->pc + 5;
+    Value lambda = MAKE_FUNCTION(new_pc, i4);
 
     Value event_on = MAKE_EVENT_ON(module->gc, i1, lambda);
 
@@ -222,8 +224,6 @@ Value run_interpreter(Module *module, int ipc, bool does_return, int callstack) 
   case_send: {
     int event_id = i2;
     int argsc = i1;
-
-    // printf("Sending event %d with %d args\n", event_id, argsc);
 
     Value* args = malloc(argsc * sizeof(Value));
     for (int i = 0; i < argsc; i++) {
@@ -243,7 +243,7 @@ Value run_interpreter(Module *module, int ipc, bool does_return, int callstack) 
   }
 
   case_make_function_and_store: {
-    int32_t new_pc = module->pc + 4;
+    int32_t new_pc = module->pc + 5;
     Value lambda = MAKE_FUNCTION(new_pc, i3);
 
     module->stack->values[i1] = lambda;
@@ -260,9 +260,9 @@ Value run_interpreter(Module *module, int ipc, bool does_return, int callstack) 
   }
 
   case_make_event: {
-    Value ev = MAKE_EVENT(module->gc, i1, i2, module->pc);
+    Value ev = MAKE_EVENT(module->gc, i1, module->pc);
     stack_push(module->stack, ev);
-    INCREASE_IP_BY(module, i3 + 1);
+    INCREASE_IP_BY(module, i2 + 1);
     goto *jmp_table[op];
   }
 
@@ -274,7 +274,6 @@ Value run_interpreter(Module *module, int ipc, bool does_return, int callstack) 
   
     hp->type = TYPE_EVENT;
     hp->as_event.ons_count = fr.ons_count;
-    hp->as_event.lets_count = fr.lets_count;
     hp->as_event.ipc = fr.function_ipc;
 
     // Pop ons in reverse order
