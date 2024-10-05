@@ -106,9 +106,6 @@ struct Event {
 
   int ipc;
 
-  int lets_count;
-  Value *lets;
-
   struct Module *mod;
   struct Actor* actor;
 };
@@ -125,7 +122,6 @@ typedef struct {
   int32_t stack_pointer;
   int32_t base_ptr;
 
-  int lets_count;
   int ons_count;
   int function_ipc;
 } Frame;
@@ -164,9 +160,9 @@ typedef struct {
 Value MAKE_MUTABLE(ugc_t *gc, Value x);
 Value MAKE_STRING(ugc_t *gc, char* x);
 Value MAKE_LIST(ugc_t *gc, Value* x, uint32_t len);
-Value MAKE_EVENT(ugc_t *gc, uint32_t ons_count, uint32_t lets_count, uint32_t ipc);
+Value MAKE_EVENT(ugc_t *gc, uint32_t ons_count, uint32_t ipc);
 Value MAKE_FRAME(ugc_t *gc, int32_t ip, int32_t sp, int32_t bp);
-Value MAKE_EVENT_FRAME(ugc_t *gc, int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int32_t lets_count, int function_ipc);
+Value MAKE_EVENT_FRAME(ugc_t *gc, int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int function_ipc);
 Value MAKE_EVENT_ON(ugc_t *gc, int id, Value func);
 
 #define MAKE_SPECIAL() kNull
@@ -179,5 +175,7 @@ char* type_of(Value value);
 Stack* stack_new();
 void stack_push(Stack* stack, Value value);
 Value stack_pop(Stack* stack);
+
+int value_eq(Value a, Value b);
 
 #endif  // VALUE_H
