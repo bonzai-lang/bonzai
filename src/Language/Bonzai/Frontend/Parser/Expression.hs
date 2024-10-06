@@ -87,7 +87,7 @@ parseVariable = localize $ do
 parseLet :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseLet = localize $ do
   void $ Lex.reserved "let"
-  name <- Lex.identifier
+  name <- Lex.identifier <|> Lex.parens Lex.operator
   void $ Lex.reserved "="
 
   HLIR.MkExprLet (HLIR.MkAnnotation name Nothing) <$> parseExpression
@@ -95,7 +95,7 @@ parseLet = localize $ do
 parseMut :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseMut = localize $ do
   void $ Lex.reserved "mut"
-  name <- Lex.identifier
+  name <- Lex.identifier <|> Lex.parens Lex.operator
   void $ Lex.reserved "="
 
   HLIR.MkExprMut (HLIR.MkAnnotation name Nothing) <$> parseExpression
@@ -119,7 +119,7 @@ parseInterface = localize $ do
     parseDef :: MonadIO m => P.Parser m (HLIR.Annotation HLIR.Type)
     parseDef = do
       void $ Lex.reserved "fn"
-      name <- Lex.identifier
+      name <- Lex.identifier <|> Lex.parens Lex.operator
 
       args <- P.option [] $ Lex.parens (P.sepBy (parseAnnotation' Typ.parseType) Lex.comma)
 
@@ -138,7 +138,7 @@ parseBlock = localize $ do
 parseFunction :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseFunction = localize $ do
   void $ Lex.reserved "fn"
-  name <- Lex.identifier
+  name <- Lex.identifier <|> Lex.parens Lex.operator
   args <- Lex.parens (P.sepBy (parseAnnotation Typ.parseType) Lex.comma)
 
   void $ Lex.symbol "=>"
@@ -156,14 +156,14 @@ parseLambda = localize $ do
 
 parseUpdate :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseUpdate = localize $ do
-  name <- P.try $ Lex.identifier <* Lex.symbol "="
+  name <- P.try $ (Lex.identifier <|> Lex.parens Lex.operator) <* Lex.symbol "="
 
   HLIR.MkExprUpdate (HLIR.MkUpdtVariable (HLIR.MkAnnotation name Nothing)) <$> parseExpression
 
 parseActor :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseActor = localize $ do
   void $ Lex.reserved "actor"
-  name <- Lex.identifier
+  name <- Lex.identifier <|> Lex.parens Lex.operator
   implemented <- Lex.symbol "<" *> Lex.identifier
   HLIR.MkExprLet (HLIR.MkAnnotation name Nothing) 
     . HLIR.MkExprActor implemented 
@@ -178,7 +178,7 @@ parseAnonActor = localize $ do
 parseEvent :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseEvent = localize $ do
   void $ Lex.reserved "on"
-  name <- Lex.identifier
+  name <- Lex.identifier <|> Lex.parens Lex.operator
   args <- Lex.parens (P.sepBy (parseAnnotation Typ.parseType) Lex.comma)
 
   void $ Lex.symbol "=>"
