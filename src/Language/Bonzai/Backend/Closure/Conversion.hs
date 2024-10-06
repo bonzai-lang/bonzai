@@ -196,10 +196,13 @@ convert (MLIR.MkExprSend e ev es) = do
       pure $ MLIR.MkExprUnpack name e' (MLIR.MkExprSend function ev (env : args'))
 convert (MLIR.MkExprSpawn e) = do
   e' <- convert e
+  name <- freshLambda "spawn"
+  let callVar = MLIR.MkExprVariable name
 
-  let ev = MLIR.MkExprIndex e' (MLIR.MkExprLiteral (MLIR.MkLitInt 0))
+  let ev = MLIR.MkExprIndex callVar (MLIR.MkExprLiteral (MLIR.MkLitInt 0))
+  let env = MLIR.MkExprIndex callVar (MLIR.MkExprLiteral (MLIR.MkLitInt 1))
 
-  pure $ MLIR.MkExprList [MLIR.MkExprSpawn ev, MLIR.MkExprIndex e' (MLIR.MkExprLiteral (MLIR.MkLitInt 1))]
+  pure $ MLIR.MkExprUnpack name e' (MLIR.MkExprList [MLIR.MkExprSpawn ev, env])
 convert (MLIR.MkExprNative n ty) = do
   let arity = case ty of
         args MLIR.:->: _ -> length args
