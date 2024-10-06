@@ -6,7 +6,6 @@
 #include <threading.h>
 #include <unistd.h>
 #include <value.h>
-#include <gc.h>
 
 Value list_get(Value list, uint32_t idx) {
   HeapValue *l = GET_PTR(list);
@@ -32,10 +31,8 @@ Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv) {
 
   int32_t new_pc = module->pc + 5;
 
-  pthread_mutex_lock(&module->module_mutex);
-  stack_push(new_module->stack,
-             MAKE_FRAME(module, new_pc, old_sp, new_module->base_pointer));
-  pthread_mutex_unlock(&module->module_mutex);
+  Value frame = MAKE_FRAME(new_module, new_pc, old_sp, new_module->base_pointer);
+  stack_push(new_module->stack, frame);
 
   new_module->base_pointer = new_module->stack->stack_pointer - 1;
   new_module->stack->stack_pointer++;
@@ -47,12 +44,22 @@ Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv) {
   new_module->constants = module->constants;
   new_module->argc = module->argc;
   new_module->argv = module->argv;
-  new_module->max_objects = module->max_objects;
-  new_module->num_objects = module->num_objects;
-  new_module->first_object = module->first_object;
+  new_module->max_objects = INIT_OBJECTS;
+  new_module->num_objects = 0;
+  new_module->first_object = NULL;
+  new_module->handles = module->handles;
+  new_module->num_handles = module->num_handles;
   pthread_mutex_unlock(&module->module_mutex);
   Value ret = run_interpreter(new_module, ipc, true, new_module->callstack - 1);
+  
+  // Free the frame
+  HeapValue* hp = GET_PTR(frame);
+  free(hp);
 
+  // Force sweeping remaining allocated objects
+  force_sweep(new_module);
+
+  // Free the stack and the module
   free(new_module->stack->values);
   free(new_module->stack);
   free(new_module);

@@ -21,6 +21,8 @@ typedef struct Module {
 
   Constants constants;
   Stack *stack;
+
+  size_t num_handles;
   DLL* handles;
 
   int32_t argc;
@@ -40,7 +42,7 @@ typedef struct Module {
   int num_objects, max_objects;
 } Module;
 
-typedef Value (*Native)(int argc, struct Module *m, Value *args);
+typedef Value (*Native)(struct Module *m, Value *args, int argc);
 
 Frame pop_frame(Module *mod);
 
