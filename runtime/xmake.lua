@@ -6,11 +6,8 @@ end
 
 set_warnings("allextra")
 
-add_requires("bdwgc", {system = false})
-
 target("bonzai-runtime")
   add_rules("mode.release")
-  add_packages("bdwgc")
   add_files("src/**.c")
   add_includedirs("include")
   set_kind("binary") 
@@ -19,7 +16,6 @@ target("bonzai-runtime")
 
 target("bonzai-runtime-test")
   add_rules("mode.debug", "mode.profile")
-  add_packages("bdwgc")
   add_files("src/**.c")
   add_includedirs("include")
   set_targetdir("bin")
@@ -30,7 +26,6 @@ target("bonzai-runtime-test")
 
 target("bonzai-library")
   add_rules("mode.release")
-  add_packages("bdwgc")
   add_files("src/**.c")
   add_includedirs("include")
   set_kind("static")

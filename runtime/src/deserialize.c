@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <value.h>
-#include <gc.h>
 
 Value deserialize_value(Module* mod, FILE* file) {
   Value value;

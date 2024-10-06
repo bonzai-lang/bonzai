@@ -1,5 +1,4 @@
 #include <error.h>
-#include <gc.h>
 #include <module.h>
 #include <stdio.h>
 #include <string.h>
@@ -172,7 +171,6 @@ void force_sweep(struct Module* vm) {
 }
 
 HeapValue* allocate(struct Module* mod, ValueType type) {
-  // printf("%d == %d\n", mod->num_objects, mod->max_objects);
   if (mod->num_objects == mod->max_objects) gc(mod);
 
   HeapValue* v = malloc(sizeof(HeapValue));
@@ -223,6 +221,7 @@ Value MAKE_EVENT(struct Module* mod, uint32_t ons_count, uint32_t ipc) {
 
 Value MAKE_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp) {
   HeapValue* v = allocate(mod, TYPE_FRAME);
+
   v->as_frame.instruction_pointer = ip;
   v->as_frame.stack_pointer = sp;
   v->as_frame.base_ptr = bp;

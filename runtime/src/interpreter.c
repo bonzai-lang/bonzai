@@ -1,4 +1,3 @@
-#include <gc.h>
 #include <value.h>
 #include <module.h>
 #include <error.h>
