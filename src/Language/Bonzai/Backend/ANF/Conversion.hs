@@ -86,7 +86,7 @@ convert (MLIR.MkExprUnpack n e e') = do
 
   name <- freshSymbol "anf"
   
-  pure (MLIR.MkExprVariable n, stmts1 <> stmts2 <> [(n, e'')] <> [(name, e''')])
+  pure (MLIR.MkExprVariable name, stmts1 <> stmts2 <> [(n, e'')] <> [(name, e''')])
 
 convertUpdate :: MonadIO m => MLIR.MLIR "update" -> m (MLIR.MLIR "update", [(Text, MLIR.MLIR "expression")])
 convertUpdate (MLIR.MkUpdtVariable a) = pure (MLIR.MkUpdtVariable a, [])
