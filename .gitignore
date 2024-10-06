@@ -7,3 +7,6 @@ build
 
 runtime/lib
 runtime/bin
+
+bindings/lib
+bindings/bin
