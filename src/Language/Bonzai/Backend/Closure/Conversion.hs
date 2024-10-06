@@ -74,12 +74,12 @@ convert (MLIR.MkExprVariable x) = do
   natives' <- readIORef natives
   let reserved = globals' <> natives'
   case Map.lookup x reserved of
-    Just arity -> do
+    Just arity | arity >= 0 -> do
       let args = take arity $ map (\n -> "arg" <> show n) [(0 :: Integer)..]
 
       pure $ MLIR.MkExprLambda args (MLIR.MkExprApplication (MLIR.MkExprVariable x) (map MLIR.MkExprVariable args))
 
-    Nothing -> pure $ MLIR.MkExprVariable x
+    _ -> pure $ MLIR.MkExprVariable x
 convert (MLIR.MkExprLiteral x) = pure $ MLIR.MkExprLiteral x
 convert (MLIR.MkExprFunction f args b) = do
   modifyIORef' globals (Map.insert f (length args))
@@ -87,7 +87,8 @@ convert (MLIR.MkExprFunction f args b) = do
 convert (MLIR.MkExprLambda args body) = do
   let freeVars = M.free body
   nativesFuns <- readIORef natives
-  let finalNativesFuns = Map.keysSet nativesFuns Set.\\ Set.fromList args
+  globals' <- readIORef globals
+  let finalNativesFuns = Map.keysSet (nativesFuns <> globals') Set.\\ Set.fromList args
 
   let env = freeVars Set.\\ (finalNativesFuns <> Set.fromList args)
       envAsList = Set.toList env
@@ -116,7 +117,7 @@ convert (MLIR.MkExprApplication f args) = do
   args' <- mapM convert args
 
   case f of
-    MLIR.MkExprVariable x | Map.member x reserved -> 
+    MLIR.MkExprVariable x | Map.member x reserved -> do
       pure $ MLIR.MkExprApplication (MLIR.MkExprVariable x) args'
     _ -> do
       name <- freshLambda "call"
@@ -138,7 +139,8 @@ convert (MLIR.MkExprBlock es) = MLIR.MkExprBlock <$> mapM convert es
 convert (MLIR.MkExprEvent es) = do
   let freeVars = M.free es
   nativesFuns <- readIORef natives
-  let finalNativesFuns = Map.keysSet nativesFuns
+  globals' <- readIORef globals
+  let finalNativesFuns = Map.keysSet (nativesFuns <> globals')
 
   let env = freeVars Set.\\ finalNativesFuns
 
@@ -154,7 +156,8 @@ convert (MLIR.MkExprEvent es) = do
 convert (MLIR.MkExprOn ev args body) = do
   let freeVars = M.free body
   nativesFuns <- readIORef natives
-  let finalNativesFuns = Map.keysSet nativesFuns Set.\\ Set.fromList args
+  globals' <- readIORef globals
+  let finalNativesFuns = Map.keysSet (nativesFuns <> globals') Set.\\ Set.fromList args
 
   let env = freeVars Set.\\ (finalNativesFuns <> Set.fromList args)
       envAsList = Set.toList env
@@ -185,9 +188,6 @@ convert (MLIR.MkExprSend e ev es) = do
     _ -> do
       name <- freshLambda "call"
       e' <- convert e
-
-      -- print name
-      -- printText e'
 
       let callVar = MLIR.MkExprVariable name
       let function = MLIR.MkExprIndex callVar (MLIR.MkExprLiteral (MLIR.MkLitInt 0))
@@ -221,6 +221,9 @@ convertToplevel :: MonadIO m => MLIR.Expression -> m MLIR.Expression
 convertToplevel (MLIR.MkExprFunction f args b) = do
   modifyIORef' globals (Map.insert f (length args))
   MLIR.MkExprFunction f args <$> convert b
+convertToplevel (MLIR.MkExprLet x e) = do
+  modifyIORef' globals (Map.insert x (-1))
+  MLIR.MkExprLet x <$> convert e
 convertToplevel e = convert e
 
 runClosureConversion :: MonadIO m => [MLIR.Expression] -> m [MLIR.Expression]
