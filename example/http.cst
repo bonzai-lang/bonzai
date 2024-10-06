@@ -1,5 +1,5 @@
 extern fn print<A>(x: A)
-extern fn listen_http(port: int): HTTP
+extern fn start_http_server(port: int): HTTP
 extern fn accept_request(server: HTTP): Request
 extern fn close_client(req: Request)
 extern fn get_buffer(req: Request): string
@@ -25,7 +25,7 @@ actor HTTPServer < HTTPWrapper {
     close_server(server)
 }
 
-let http = listen_http(8080)
+let http = start_http_server(8080)
 let server = spawn HTTPServer
 
 server->listen(server, http, fn(req) => {

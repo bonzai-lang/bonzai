@@ -1,17 +1,33 @@
 extern fn print<A>(x: A)
 extern fn map<A, B>(f: fn(A): B, xs: list<A, B>): list<B>
-extern fn (*)<A>(x: A, y: A): A
-extern fn (+)<A>(x: A, y: A): A
-extern fn (-)<A>(x: A, y: A): A
-extern fn (/)<A>(x: A, y: A): A
-extern fn exit<A>(): A
-extern fn value<A>(x: mutable<A>): A
+extern fn mul_value<A>(x: A, y: A): A
+extern fn add_value<A>(x: A, y: A): A
+extern fn sub_value<A>(x: A, y: A): A
+extern fn div_value<A>(x: A, y: A): A
+extern fn exit_with<A>(code: int): A
+extern fn mutable_value<A>(x: mutable<A>): A
 
-extern fn (==)<A>(x: A, y: A): bool
-extern fn (!=)<A>(x: A, y: A): bool
-extern fn (<)<A>(x: A, y: A): bool
-extern fn (>)<A>(x: A, y: A): bool
-extern fn (<=)<A>(x: A, y: A): bool
-extern fn (>=)<A>(x: A, y: A): bool
+extern fn eq_value<A>(x: A, y: A): bool
+extern fn neq_value<A>(x: A, y: A): bool
+extern fn lt_value<A>(x: A, y: A): bool
+extern fn gt_value<A>(x: A, y: A): bool
+extern fn lte_value<A>(x: A, y: A): bool
+extern fn gte_value<A>(x: A, y: A): bool
 extern unit: unit
 
+// Defining basic functions
+
+let value = mutable_value
+fn exit() => exit_with(0)
+
+let (==) = eq_value
+let (!=) = neq_value
+let (<) = lt_value
+let (>) = gt_value
+let (<=) = lte_value
+let (>=) = gte_value
+
+let (+) = add_value
+let (-) = sub_value
+let (*) = mul_value
+let (/) = div_value
