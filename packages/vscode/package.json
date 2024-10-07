@@ -1,0 +1,36 @@
+{
+  "name": "bonzai",
+  "displayName": "Bonzai Syntax Highlighting",
+  "description": "Bonzai language Visual Studio Code extension",
+  "publisher": "Bonzai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thomasvergne/bonzai"
+  },
+  "version": "0.0.9",
+  "engines": {
+    "vscode": "^1.89.0"
+  },
+  "icon": "assets/logo.png",
+  "files": [],
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "bonzai",
+      "aliases": ["Bonzai", "bonzai"],
+      "extensions": [".bzi"],
+      "configuration": "./language-configuration.json",
+      "icon": {
+        "dark": "./assets/dark.png",
+        "light": "./assets/light.png"
+      }
+    }],
+    "grammars": [{
+      "language": "bonzai",
+      "scopeName": "source.bonzai",
+      "path": "./syntaxes/bonzai.tmLanguage.json"
+    }]
+  }
+}
