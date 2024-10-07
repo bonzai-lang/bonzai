@@ -1,7 +1,7 @@
 module Main where
 import Language.Bonzai.Frontend.Parser (parseBonzaiFile)
 import Language.Bonzai.Frontend.Parser.Expression (parseProgram)
-import Language.Bonzai.Frontend.Module.Conversion (runModuleConversion)
+import Language.Bonzai.Frontend.Module.Conversion
 import Control.Monad.Result
 import Language.Bonzai.Frontend.Typechecking.Checker (runTypechecking)
 import Language.Bonzai.Backend.TypeErasure.Conversion (eraseTypes)
@@ -29,39 +29,42 @@ main = do
   unless b $ do
     void $ ppError $ "File " <> file <> " does not exist"
     exitFailure
-  
-  content <- readFileBS file
-  let contentAsText = decodeUtf8 content
 
   void . ppBuild $ "Parsing " <> file
 
-  result <- parseBonzaiFile file contentAsText parseProgram
+  let folder = takeDirectory file
+      fileNameWithoutDir = dropExtension $ takeFileName file
+
+  writeIORef moduleState $ 
+    MkModuleState 
+      fileNameWithoutDir 
+      folder
+      mempty
+      mempty
+  moduleResult <- runExceptT $ resolve fileNameWithoutDir True
   
-  case result of
-    Left err -> parseError err file (Just contentAsText)
-    Right ast -> do
-      moduleConversion <- runModuleConversion ast
+  handle moduleResult . const $ do
+    preHLIR <- removeRequires <$> readIORef resultState
 
-      handle moduleConversion $ \preHLIR -> do
-        ppBuild "Typechecking the program"
-        typedAST <- runTypechecking preHLIR
+    ppBuild "Typechecking the program"
+    typedAST <- runTypechecking preHLIR
 
-        handle typedAST $ \tlir -> do
-          ppBuild "Compiling the program"
-          let mlir = eraseTypes tlir
+    handle typedAST $ \tlir -> do
+      ppBuild "Compiling the program"
+      let mlir = eraseTypes tlir
 
-          closureConverted <- runClosureConversion mlir
-          hoistedAST <- runClosureHoisting closureConverted
+      closureConverted <- runClosureConversion mlir
+      hoistedAST <- runClosureHoisting closureConverted
 
-          anfAST <- runANFConversion hoistedAST
+      anfAST <- runANFConversion hoistedAST
 
-          (llir, cs, gs) <- runLLIRConversion anfAST
-          bytecode <- runBytecodeConversion gs llir
+      (llir, cs, gs) <- runLLIRConversion anfAST
+      bytecode <- runBytecodeConversion gs llir
 
-          let serialized = runSerializer bytecode cs
+      let serialized = runSerializer bytecode cs
 
-          let outputFile = file <.> "bin"
+      let outputFile = file <.> "bin"
 
-          writeFileLBS outputFile serialized
+      writeFileLBS outputFile serialized
 
-          void . ppSuccess $ "Compiled successfully to " <> outputFile
+      void . ppSuccess $ "Compiled successfully to " <> outputFile
