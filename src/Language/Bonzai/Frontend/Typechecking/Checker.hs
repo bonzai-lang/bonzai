@@ -216,7 +216,6 @@ typecheck (HLIR.MkExprInterface ann defs) = do
 
   pure (HLIR.MkExprInterface ann defs, HLIR.MkTyId name)
 typecheck (HLIR.MkExprRequire _) = compilerError "typecheck: require should not appear in typechecking"
-typecheck (HLIR.MkExprModule _ _) = compilerError "typecheck: module should not appear in typechecking"
 
 typecheckUpdate :: M.MonadChecker m => HLIR.HLIR "update" -> m (HLIR.TLIR "update", HLIR.Type)
 typecheckUpdate (HLIR.MkUpdtVariable ann) = do

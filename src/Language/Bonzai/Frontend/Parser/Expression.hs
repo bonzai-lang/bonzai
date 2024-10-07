@@ -88,13 +88,6 @@ parseMut = localize $ do
 
   HLIR.MkExprMut (HLIR.MkAnnotation name Nothing) <$> parseExpression
 
-parseModule :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseModule = localize $ do
-  void $ Lex.reserved "module"
-  name <- Lex.identifier
-
-  HLIR.MkExprModule name <$> Lex.braces (P.many parseToplevel)
-
 parseInterface :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseInterface = localize $ do
   void $ Lex.reserved "interface"
@@ -275,7 +268,6 @@ parseExpression = P.makeExprParser parseTerm table
 parseToplevel :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseToplevel =
   localize $ P.choice [
-    parseModule,
     parseInterface,
     parseRequire,
     parseExtern,

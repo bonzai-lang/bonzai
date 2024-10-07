@@ -10,7 +10,6 @@ convert (HLIR.MkExprVariable a) = MLIR.MkExprVariable a.name
 convert (HLIR.MkExprApplication f args) = MLIR.MkExprApplication (convert f) (map convert args)
 convert (HLIR.MkExprLet ann e) = MLIR.MkExprLet ann.name (convert e)
 convert (HLIR.MkExprBlock es) = MLIR.MkExprBlock (map convert es)
-convert (HLIR.MkExprModule _ _) = compilerError "module is not supported in MLIR"
 convert (HLIR.MkExprActor _ es) = MLIR.MkExprEvent (map convert es)
 convert (HLIR.MkExprOn ev as e) = MLIR.MkExprOn ev (map (.name) as) (convert e)
 convert (HLIR.MkExprSend e ev es) = MLIR.MkExprSend (convert e) ev (map convert es)
