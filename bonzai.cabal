@@ -74,7 +74,6 @@ library
         Language.Bonzai.Frontend.Parser.Expression
 
         Language.Bonzai.Frontend.Module.Conversion
-        Language.Bonzai.Frontend.Module.Resolution
 
         Language.Bonzai.Frontend.Typechecking.Checker
 
