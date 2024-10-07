@@ -2,21 +2,32 @@ require "natives"
 
 extern fn execute_command(command: string)
 
-mut file = ""
-mut compiler_options = ""
-mut runtime_options = ""
+interface Config {
+  fn addRuntimeDependency(name: string)
+  fn setFile(name: string)
 
-fn Config::addRuntimeDependency(name: string) => {
-  runtime_options = runtime_options.value + " -l " + name
+  fn execute()
 }
 
-fn Config::setFile(name: string) => {
-  file = name
-  compiler_options = name + " " + compiler_options.value
-  runtime_options = name + ".bin " + runtime_options.value
-}
+fn Config() => {
+  mut file = ""
+  mut compiler_options = ""
+  mut runtime_options = ""
 
-fn Config::execute() => {
-  execute_command("bonzaic " + compiler_options.value)
-  execute_command("bonzai " + runtime_options.value)
+  actor < Config {
+    on addRuntimeDependency(name: string) => {
+      runtime_options = runtime_options.value + " -l " + name
+    }
+
+    on setFile(name: string) => {
+      file = name
+      compiler_options = name + " " + compiler_options.value
+      runtime_options = name + ".bin " + runtime_options.value
+    }
+
+    on execute() => {
+      execute_command("bonzaic " + compiler_options.value)
+      execute_command("bonzai " + runtime_options.value)
+    }
+  }
 }
