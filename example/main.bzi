@@ -1,4 +1,4 @@
-require "natives"
+require "std:natives"
 interface Loopable {
   fn loop(self: Loopable, i: int)
 }
@@ -14,4 +14,6 @@ fn Loop(msg: string) => actor < Loopable {
 }
 
 let l = spawn Loop("loop")
-l->loop(l, 10_000_000)
+l->loop(l, 10)
+
+require "std:test"
