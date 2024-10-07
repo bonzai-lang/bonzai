@@ -28,7 +28,6 @@ data Update f t
   = MkUpdtVariable (Annotation (f t))
   | MkUpdtField (Update f t) Text
   | MkUpdtIndex (Update f t) (Expression f t)
-  deriving (Eq)
 
 data Expression f t
   = MkExprLiteral Literal
@@ -50,7 +49,6 @@ data Expression f t
   | MkExprList [Expression f t]
   | MkExprNative (Annotation [Text]) Ty.Type
   | MkExprInterface (Annotation [QuVar]) [Annotation t]
-  deriving (Eq)
 
 pattern MkExprBinary :: Text -> f t -> Expression f t -> Expression f t -> Expression f t
 pattern MkExprBinary op t a b = MkExprApplication (MkExprVariable (MkAnnotation op t)) [a, b]
@@ -94,3 +92,33 @@ instance (ToText t, ToText (f t)) => ToText [Expression f t] where
 
 instance Locate (Expression f t) where
   locate = MkExprLoc
+
+instance (Eq (f t), Eq t) => Eq (Update f t) where
+  MkUpdtVariable a == MkUpdtVariable b = a == b
+  MkUpdtField u f == MkUpdtField u' f' = u == u' && f == f'
+  MkUpdtIndex u e == MkUpdtIndex u' e' = u == u' && e == e'
+  _ == _ = False
+
+instance (Eq (f t), Eq t) => Eq (Expression f t) where
+  MkExprLiteral l == MkExprLiteral l' = l == l'
+  MkExprVariable a == MkExprVariable b = a == b
+  MkExprApplication e es == MkExprApplication e' es' = e == e' && es == es'
+  MkExprLambda as ret e == MkExprLambda as' ret' e' = as == as' && ret == ret' && e == e'
+  MkExprTernary c t e == MkExprTernary c' t' e' = c == c' && t == t' && e == e'
+  MkExprUpdate u e == MkExprUpdate u' e' = u == u' && e == e'
+  MkExprLet a e == MkExprLet a' e' = a == a' && e == e'
+  MkExprMut a e == MkExprMut a' e' = a == a' && e == e'
+  MkExprBlock es == MkExprBlock es' = es == es'
+  MkExprModule n e == MkExprModule n' e' = n == n' && e == e'
+  MkExprActor i e == MkExprActor i' e' = i == i' && e == e'
+  MkExprOn n as e == MkExprOn n' as' e' = n == n' && as == as' && e == e'
+  MkExprSend e n es == MkExprSend e' n' es' = e == e' && n == n' && es == es'
+  MkExprRequire n == MkExprRequire n' = n == n'
+  MkExprLoc e _ == MkExprLoc e' _ = e == e'
+  MkExprLoc e _ == e' = e == e'
+  e == MkExprLoc e' _ = e == e'
+  MkExprSpawn e == MkExprSpawn e' = e == e'
+  MkExprList es == MkExprList es' = es == es'
+  MkExprNative ann ty == MkExprNative ann' ty' = ann == ann' && ty == ty'
+  MkExprInterface ann as == MkExprInterface ann' as' = ann == ann' && as == as'
+  _ == _ = False
