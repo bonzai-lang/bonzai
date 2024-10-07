@@ -8,11 +8,10 @@ fn Loop(msg: string) => actor < Loopable {
     if i == 0 then {
       print("FINISHED")
     } else {
-      // print(i)
       self->loop(self, i - 1)
     }
   }
 }
 
 let l = spawn Loop("loop")
-l->loop(l, 10000000)
+l->loop(l, 10_000_000)
