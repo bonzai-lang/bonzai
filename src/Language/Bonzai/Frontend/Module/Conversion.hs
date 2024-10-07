@@ -36,11 +36,11 @@ peekModule = readIORef moduleStackD >>= \case
 buildModule :: MonadIO m => Text -> m Text
 buildModule m = do
   ms <- readIORef moduleStackD
-  pure $ Text.intercalate "." (reverse (m : ms))
+  pure $ Text.intercalate "::" (reverse ms <> [m])
 
 buildVariable :: MonadConversion m => Text -> m Text
 buildVariable v = do
-  let v' = Text.splitOn "." v
+  let v' = Text.splitOn "::" v
   let v'' = bisequence (viaNonEmpty init v', viaNonEmpty last v')
 
   mdv <- readIORef moduleDefinedVariables
@@ -48,7 +48,7 @@ buildVariable v = do
 
   case v'' of
     Just (vs, var) | not (null vs) -> case Map.lookup vs mdv of
-      Just s | Set.member v s -> pure var
+      Just s | Set.member var s -> pure v
       _ -> throw $ VariableNotFound v
 
     _ -> case Map.lookup ms mdv of
@@ -188,20 +188,6 @@ resolvePath path = do
           modifyIORef' moduleStack $ drop 1
 
           return (expressions', vars)
-
-getToplevelVariables :: MonadResolution m => HLIR.HLIR "expression" -> m [Text]
-getToplevelVariables (HLIR.MkExprMut a e) = do
-  addVariable a.name
-  getToplevelVariables e
-getToplevelVariables (HLIR.MkExprLoc e _) = getToplevelVariables e
-getToplevelVariables (HLIR.MkExprNative n _) = do
-  addVariable n.name
-  pure [n.name]
-getToplevelVariables (HLIR.MkExprVariable v) = pure [v.name]
-getToplevelVariables (HLIR.MkExprLet a e) = do
-  addVariable a.name
-  getToplevelVariables e
-getToplevelVariables _ = pure []
 
 convertToplevel :: MonadConversion m => HLIR.HLIR "expression" -> m [HLIR.HLIR "expression"]
 convertToplevel (HLIR.MkExprRequire path) = do
