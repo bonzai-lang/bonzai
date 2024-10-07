@@ -90,6 +90,8 @@ void mark_value(Value value) {
     for (int i = 0; i < ptr->as_event.ons_count; i++) {
       mark_value(ptr->as_event.ons[i]);
     }
+  } else if (ptr->type == TYPE_EVENT_ON) {
+    mark_value(ptr->as_event_on.func);
   }
 }
 
@@ -97,6 +99,46 @@ void mark_all(struct Module* vm) {
   for (int i = 0; i < MAX_STACK_SIZE; i++) {
     mark_value(vm->stack->values[i]);
   }
+}
+
+void gc_free(struct Module* vm, HeapValue* object) {
+  // Remove the object from the list
+  HeapValue** obj = &vm->first_object;
+  while (obj != NULL) {
+    if (*obj == NULL) break;
+    if (*obj == object) break;
+    obj = &(*obj)->next;
+  }
+  *obj = object->next;
+
+  // Free the object
+  switch (object->type) {
+    case TYPE_LIST: {
+      for (uint32_t i = 0; i < object->length; i++) {
+        if (!IS_PTR(object->as_ptr[i])) continue;
+        gc_free(vm, GET_PTR(object->as_ptr[i]));
+      }
+
+      free(object->as_ptr);
+      break;
+    }
+
+    case TYPE_MUTABLE: {
+      if (IS_PTR(*(object->as_ptr))) {
+        gc_free(vm, GET_PTR(*(object->as_ptr)));
+      }
+
+      free(object->as_ptr);
+      break;
+    }
+
+    default: break;
+  }
+
+  free(object);
+
+  vm->num_objects--;
+  
 }
 
 void sweep(struct Module* vm) {
@@ -107,7 +149,6 @@ void sweep(struct Module* vm) {
          and free it. */
       HeapValue* unreached = *object;
 
-      *object = unreached->next;
       switch (unreached->type) {
         case TYPE_LIST: {
           free(unreached->as_ptr);
@@ -124,6 +165,7 @@ void sweep(struct Module* vm) {
 
       free(unreached);
 
+      *object = unreached->next;
       vm->num_objects--;
     } else {
       /* This object was reached, so unmark it (for the next GC)
@@ -183,6 +225,18 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
   mod->num_objects++;
 
   return v;
+}
+
+Value MAKE_FRAME_NON_GC(struct Module* mod, int32_t ip, int32_t sp, int32_t bp) {
+  HeapValue* v = malloc(sizeof(HeapValue));
+
+  v->type = TYPE_FRAME;
+  v->as_frame.instruction_pointer = ip;
+  v->as_frame.stack_pointer = sp;
+  v->as_frame.base_ptr = bp;
+  v->as_frame.ons_count = 0;
+
+  return MAKE_PTR(v);
 }
 
 Value MAKE_STRING(struct Module* mod, char* x) {
@@ -317,9 +371,10 @@ Stack* stack_new() {
   return stack;
 }
 
-void stack_push(Stack* stack, Value value) {
+void stack_push(Module* mod, Value value) {
+  Stack* stack = mod->stack;
   if (stack->stack_pointer > MAX_STACK_SIZE) {
-    THROW("NO MORE MEMORY");
+    THROW(mod, "NO MORE MEMORY");
   }
   stack->values[stack->stack_pointer++] = value;
 }
@@ -370,9 +425,9 @@ void print_message_queue(MessageQueue* queue) {
   printf("\n");
 }
 
-int value_eq(Value a, Value b) {
+int value_eq(Module* mod, Value a, Value b) {
   ValueType ty = get_type(a);
-  ASSERT_TYPE("==", b, ty);
+  ASSERT_TYPE(mod, "==", b, ty);
 
   switch (ty) {
     case TYPE_INTEGER:
@@ -388,14 +443,14 @@ int value_eq(Value a, Value b) {
         return 0;
       }
       for (uint32_t i = 0; i < list_a->length; i++) {
-        if (!value_eq(list_a->as_ptr[i], list_b->as_ptr[i])) {
+        if (!value_eq(mod, list_a->as_ptr[i], list_b->as_ptr[i])) {
           return 0;
         }
       }
       return 1;
     }
     case TYPE_MUTABLE:
-      return value_eq(GET_MUTABLE(a), GET_MUTABLE(b));
+      return value_eq(mod, GET_MUTABLE(a), GET_MUTABLE(b));
     case TYPE_SPECIAL:
       return 1;
     case TYPE_FUNCTION:

@@ -56,8 +56,12 @@ void free_libraries(LibraryOption* head) {
 }
 
 int main(int argc, char* argv[]) {
-  // GC_
-  if (argc < 2) THROW_FMT("Usage: %s <file>\n", argv[0]);
+  Module module;
+  module.file = NULL;
+  module.latest_position[0] = 0;
+  module.latest_position[1] = 0;
+
+  if (argc < 2) THROW_FMT((&module), "Usage: %s <file>", argv[0]);
   FILE* file = fopen(argv[1], "rb");
   
   // Loading libraries
@@ -73,7 +77,6 @@ int main(int argc, char* argv[]) {
     current = current->next;
   }
 
-  Module module;
   module.stack = stack_new();
   module.handles = libs;
   module.num_handles = num_libs;
@@ -87,7 +90,7 @@ int main(int argc, char* argv[]) {
   pthread_mutex_init(&module.module_mutex, NULL);
 
   if (file == NULL) {
-    fprintf(stderr, "Failed to open file\n");
+    fprintf(stderr, "Failed to open file");
     return 1;
   }
 

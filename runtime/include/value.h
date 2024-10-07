@@ -10,6 +10,7 @@
 
 typedef uint64_t Value;
 
+#define INIT_POS 512
 #define INIT_OBJECTS 32
 #define GLOBALS_SIZE 1024
 #define MAX_STACK_SIZE GLOBALS_SIZE * 32
@@ -165,9 +166,11 @@ Value MAKE_EVENT(struct Module* mod, uint32_t ons_count, uint32_t ipc);
 Value MAKE_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp);
 Value MAKE_EVENT_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int function_ipc);
 Value MAKE_EVENT_ON(struct Module* mod, int id, Value func);
+Value MAKE_FRAME_NON_GC(struct Module* mod, int32_t ip, int32_t sp, int32_t bp);
 void gc(struct Module* vm);
 void force_sweep(struct Module* vm);
 HeapValue* allocate(struct Module* mod, ValueType type);
+void gc_free(struct Module* vm, HeapValue* object);
 
 #define MAKE_SPECIAL() kNull
 #define MAKE_ADDRESS(x) MAKE_INTEGER(x)
@@ -177,9 +180,9 @@ ValueType get_type(Value value);
 char* type_of(Value value);
 
 Stack* stack_new();
-void stack_push(Stack* stack, Value value);
+void stack_push(struct Module *mod, Value value);
 Value stack_pop(Stack* stack);
 
-int value_eq(Value a, Value b);
+int value_eq(struct Module* mod, Value a, Value b);
 
 #endif  // VALUE_H

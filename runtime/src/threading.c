@@ -7,9 +7,9 @@
 #include <unistd.h>
 #include <value.h>
 
-Value list_get(Value list, uint32_t idx) {
+Value list_get(Module* mod, Value list, uint32_t idx) {
   HeapValue *l = GET_PTR(list);
-  if (idx < 0 || idx >= l->length) THROW_FMT("Invalid index, received %d", idx);
+  if (idx < 0 || idx >= l->length) THROW_FMT(mod, "Invalid index, received %d", idx);
 
   return l->as_ptr[idx];
 }
@@ -23,16 +23,16 @@ Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv) {
   
   int16_t ipc = (int16_t)(callee & MASK_PAYLOAD_INT);
   int16_t local_space = (int16_t)((callee >> 16) & MASK_PAYLOAD_INT);
-  int16_t old_sp = new_module->stack->stack_pointer - argc;
+  int16_t old_sp = new_module->stack->stack_pointer;
 
   // Push arguments in reverse order
-  for (int i = argc - 1; i >= 0; i--) stack_push(new_module->stack, argv[i]);
-  for (int i = 0; i < local_space - argc; i++) stack_push(new_module->stack, MAKE_INTEGER(0));
+  for (int i = argc - 1; i >= 0; i--) stack_push(new_module, argv[i]);
+  for (int i = 0; i < local_space - argc; i++) stack_push(new_module, MAKE_INTEGER(0));
 
   int32_t new_pc = module->pc + 5;
 
-  Value frame = MAKE_FRAME(new_module, new_pc, old_sp, new_module->base_pointer);
-  stack_push(new_module->stack, frame);
+  Value frame = MAKE_FRAME_NON_GC(new_module, new_pc, old_sp, new_module->base_pointer);
+  stack_push(new_module, frame);
 
   new_module->base_pointer = new_module->stack->stack_pointer - 1;
   new_module->stack->stack_pointer++;
@@ -58,6 +58,13 @@ Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv) {
 
   // Force sweeping remaining allocated objects
   force_sweep(new_module);
+
+  // for (int i = old_sp; i < new_module->stack->stack_pointer; i++) {
+  //   if (IS_PTR(new_module->stack->values[i])) {
+  //     HeapValue *hp = GET_PTR(new_module->stack->values[i]);
+  //     free(hp);
+  //   }
+  // }
 
   // Free the stack and the module
   free(new_module->stack->values);

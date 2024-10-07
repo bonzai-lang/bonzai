@@ -6,7 +6,7 @@
 #include <threading.h>
 
 void op_call(Module *module, Value callee, int32_t argc) {
-  ASSERT_FMT(module->callstack < MAX_FRAMES, "Call stack overflow, reached %d", module->callstack);
+  ASSERT_FMT(module, module->callstack < MAX_FRAMES, "Call stack overflow, reached %d", module->callstack);
 
   int16_t ipc = (int16_t) (callee & MASK_PAYLOAD_INT);
   int16_t local_space = (int16_t) ((callee >> 16) & MASK_PAYLOAD_INT);
@@ -16,7 +16,7 @@ void op_call(Module *module, Value callee, int32_t argc) {
 
   int32_t new_pc = module->pc + 5;
 
-  stack_push(module->stack, MAKE_FRAME(module, new_pc, old_sp, module->base_pointer));
+  stack_push(module, MAKE_FRAME(module, new_pc, old_sp, module->base_pointer));
 
   module->base_pointer = module->stack->stack_pointer - 1;
   module->callstack++;
@@ -38,7 +38,7 @@ void* find_function(Module* module, char* callee) {
 }
 
 void op_native_call(Module *module, Value callee, int32_t argc) {
-  ASSERT_TYPE("op_native_call", callee, TYPE_STRING);
+  ASSERT_TYPE(module, "op_native_call", callee, TYPE_STRING);
   char* fun = GET_NATIVE(callee);
 
   Value* args = malloc(sizeof(Value) * argc);
@@ -51,12 +51,12 @@ void op_native_call(Module *module, Value callee, int32_t argc) {
   Native handler = find_function(module, fun);
 
   if (handler == NULL) {
-    THROW_FMT("Function %s not found", fun);
+    THROW_FMT(module, "Function %s not found", fun);
   }
 
   Value ret = handler(module, args, argc);
 
-  stack_push(module->stack, ret);
+  stack_push(module, ret);
 
   free(args);
   module->pc += 5;

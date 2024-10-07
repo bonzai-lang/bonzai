@@ -7,6 +7,8 @@
 #include <stdbool.h>
 #include <pthread.h>
 
+typedef int Position[2];
+
 typedef struct {
   Value* values;
   int32_t size;
@@ -40,6 +42,9 @@ typedef struct Module {
 
   HeapValue* first_object;
   int num_objects, max_objects;
+  
+  Position latest_position;
+  const char* file;
 } Module;
 
 typedef Value (*Native)(struct Module *m, Value *args, int argc);
