@@ -13,6 +13,7 @@ import Language.Bonzai.Backend.Bytecode.Conversion (runBytecodeConversion)
 import Language.Bonzai.Backend.Bytecode.Serialize (runSerializer)
 
 import System.FilePath
+import System.Directory
 
 main :: IO ()
 main = do
@@ -21,8 +22,13 @@ main = do
   file <- case args of
     [x] -> pure x
     _ -> do
-      putStrLn "Usage: bonzai <file>"
+      void $ ppError "Usage: bonzai <file>"
       exitFailure
+
+  b <- doesFileExist file
+  unless b $ do
+    void $ ppError $ "File " <> file <> " does not exist"
+    exitFailure
   
   content <- readFileBS file
   let contentAsText = decodeUtf8 content

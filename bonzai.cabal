@@ -159,6 +159,7 @@ executable Bonzai
         bonzai,
         relude,
         filepath,
+        directory,
 
     mixins:
         base hiding (Prelude),
