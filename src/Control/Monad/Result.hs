@@ -85,6 +85,12 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
         ("Invalid number of arguments, expected " <> show n <> ", received " <> show k, Nothing, pos)
         "Resolution"
 
+    EnvironmentVariableNotFound name ->
+      printErrorFromString
+        Nothing
+        ("Environment variable " <> show name <> " not found", Just "check for typo issue with the variable name", pos)
+        "Resolution"
+
 
 type ImportStack = [FilePath]
 
@@ -102,6 +108,7 @@ data BonzaiError
   | EventNotFound Text
   | ExpectedAnActor HLIR.Type
   | InvalidArgumentQuantity Int Int
+  | EnvironmentVariableNotFound Text
 
 showError :: P.ParseError -> String
 showError = P.errorBundlePretty
