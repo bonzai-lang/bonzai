@@ -28,6 +28,7 @@ instance Free MLIR.Expression where
       freeBlock _ [] = mempty
       freeBlock r (MLIR.MkExprLet a e:es') = free r e <> freeBlock r es' <> Set.singleton a
       freeBlock r (MLIR.MkExprMut a e:es') = free r e <> freeBlock r es' <> Set.singleton a
+      freeBlock r (MLIR.MkExprLoc _ e:es') = free r e <> freeBlock r es'
       freeBlock r (e:es') = free r e <> freeBlock r es'
   free res (MLIR.MkExprEvent es) = free res es
   free res (MLIR.MkExprOn _ as e) = free res e <> Set.fromList as
@@ -38,6 +39,7 @@ instance Free MLIR.Expression where
   free res (MLIR.MkExprIndex e i) = free res e <> free res i
   free _ (MLIR.MkExprLiteral _) = Set.empty
   free res (MLIR.MkExprUnpack n e e') = free res e <> free res e' <> Set.singleton n
+  free res (MLIR.MkExprLoc _ e) = free res e
  
 instance Free MLIR.Update where
   free res (MLIR.MkUpdtVariable a) = Set.singleton a Set.\\ res
@@ -51,5 +53,7 @@ instance Name MLIR.Expression where
   getNames (MLIR.MkExprNative n _) = Set.singleton n.name
   getNames (MLIR.MkExprFunction {}) = mempty
   getNames (MLIR.MkExprLet n _) = Set.singleton n
+  getNames (MLIR.MkExprMut n _) = Set.singleton n
+  getNames (MLIR.MkExprLoc _ e) = getNames e
   getNames _ = mempty
   

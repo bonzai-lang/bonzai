@@ -2,6 +2,7 @@ module Language.Bonzai.Backend.Closure.Hoisting where
 
 import qualified Language.Bonzai.Backend.Closure.Conversion as CC
 import qualified Language.Bonzai.Syntax.MLIR as MLIR
+import Control.Monad.Result (compilerError)
 
 hoist 
   :: MonadIO m 
@@ -86,12 +87,23 @@ hoist (MLIR.MkExprUpdate u e) = do
 
       pure (MLIR.MkUpdtIndex u'' e'', hoisted <> hoisted')
 hoist (MLIR.MkExprLiteral l) = pure (MLIR.MkExprLiteral l, [])
+hoist (MLIR.MkExprLoc p e) = do
+  (e', hoisted) <- hoist e
+
+  pure (MLIR.MkExprLoc p e', hoisted)
 
 hoistToplevel :: MonadIO m => MLIR.MLIR "expression" -> m [MLIR.MLIR "expression"]
-hoistToplevel (MLIR.MkExprFunction f args b) = do
-  (b', hoisted) <- hoist b
+hoistToplevel (MLIR.MkExprLoc p e) = do
+  e' <- hoistToplevel e
 
-  pure $ hoisted <> [MLIR.MkExprLet f (MLIR.MkExprLambda args b')]
+  pure $ MLIR.MkExprLoc p <$> e'
+hoistToplevel (MLIR.MkExprLet n e) | CC.isLambda e = 
+  case CC.getLambda e of
+    MLIR.MkExprLambda args b -> do
+      (b', hoisted) <- hoist b
+
+      pure $ hoisted <> [MLIR.MkExprLet n (MLIR.MkExprLambda args b')]
+    _ -> compilerError "impossible"
 hoistToplevel e = do
   (e', hoisted) <- hoist e
 

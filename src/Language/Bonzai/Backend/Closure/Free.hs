@@ -28,6 +28,7 @@ instance Free MLIR.Expression where
       freeBlock :: [MLIR.Expression] -> Set Text
       freeBlock [] = mempty
       freeBlock (MLIR.MkExprLet a e:es') = (free e <> freeBlock es') Set.\\ Set.singleton a
+      freeBlock (MLIR.MkExprLoc _ e:es') = free e <> freeBlock es'
       freeBlock (e:es') = free e <> freeBlock es'
   free (MLIR.MkExprEvent es) = free es
   free (MLIR.MkExprOn _ as e) = free e Set.\\ Set.fromList as
@@ -38,6 +39,7 @@ instance Free MLIR.Expression where
   free (MLIR.MkExprIndex e i) = free e <> free i
   free (MLIR.MkExprLiteral _) = Set.empty
   free (MLIR.MkExprUnpack n e e') = free e <> (free e' Set.\\ Set.singleton n)
+  free (MLIR.MkExprLoc _ e) = free e
 
 instance Free MLIR.Update where
   free (MLIR.MkUpdtVariable a) = Set.singleton a
@@ -65,6 +67,7 @@ instance Substitutable MLIR.Expression MLIR.Expression where
   substitute _ (MLIR.MkExprLiteral l) = MLIR.MkExprLiteral l
   substitute r (MLIR.MkExprIndex e i) = MLIR.MkExprIndex (substitute r e) (substitute r i)
   substitute r (MLIR.MkExprUnpack n e e') = MLIR.MkExprUnpack n (substitute r e) (substitute r e')
+  substitute r (MLIR.MkExprLoc p e) = MLIR.MkExprLoc p (substitute r e)
 
 instance Substitutable MLIR.Update MLIR.Update where
   substitute (a, e) (MLIR.MkUpdtVariable a') = if a == a' then e else MLIR.MkUpdtVariable a'

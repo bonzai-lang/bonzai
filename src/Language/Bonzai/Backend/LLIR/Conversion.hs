@@ -34,6 +34,7 @@ import Control.Monad.Result (compilerError)
 import qualified Language.Bonzai.Backend.LLIR.Free as M
 import qualified Data.List as List
 import qualified Data.IntMap as IntMap
+import qualified Language.Bonzai.Frontend.Parser as MP
 
 {-# NOINLINE constantPool #-}
 constantPool :: IORef (Map MLIR.Literal Int)
@@ -99,7 +100,7 @@ instance Assemble MLIR.Expression where
     glbs <- readIORef globals
     ntvs <- readIORef natives
     let reserved = glbs <> ntvs
-    
+
     let args' = Set.fromList args
         freed = M.free reserved body
         env   = freed <> args'
@@ -117,16 +118,16 @@ instance Assemble MLIR.Expression where
     writeIORef isFunctionCurrently False
 
     pure [LLIR.Function name args localSpaceSize localSpace finalBody]
-  
+
   assemble (MLIR.MkExprEventDef name body) = do
     writeIORef isFunctionCurrently True
     glbs <- readIORef globals
     ntvs <- readIORef natives
     let reserved = glbs <> ntvs
-    
+
     let env = M.free reserved body
 
-    let ons = filter (\case MLIR.MkExprOn {} -> True; _ -> False) body
+    let ons = getOns body
 
     ons' <- local (<> env) $ assemble ons
 
@@ -141,6 +142,32 @@ instance Assemble MLIR.Expression where
 
     pure [LLIR.Event name localSpaceSize localSpace body'' (length ons)]
 
+  assemble (MLIR.MkExprLet n e) = do
+    if isFunction e || isEvent e then do
+      assemble (MLIR.MkExprLet n (removeLoc e))
+    else do
+      e' <- assemble e
+      gs <- readIORef globals
+      locals <- ask
+
+      if Set.member n locals then
+        pure $ e' <> LLIR.storeLocal n
+      else if Set.member n gs then
+        pure $ e' <> LLIR.storeGlobal n
+      else compilerError $ "Variable " <> n <> " not found in globals, locals or natives"
+
+    where
+      isFunction (MLIR.MkExprLoc _ e') = isFunction e'
+      isFunction (MLIR.MkExprLambda {}) = True
+      isFunction _ = False
+
+      isEvent (MLIR.MkExprEvent _) = True
+      isEvent (MLIR.MkExprLoc _ e') = isEvent e'
+      isEvent _ = False
+
+      removeLoc (MLIR.MkExprLoc _ e') = removeLoc e'
+      removeLoc e' = e'
+
   assemble (MLIR.MkExprVariable n) = do
     gs <- readIORef globals
     nats <- readIORef natives
@@ -148,7 +175,7 @@ instance Assemble MLIR.Expression where
 
     if Set.member n locals then
       pure $ LLIR.loadLocal n
-    else if Set.member n gs then 
+    else if Set.member n gs then
       pure $ LLIR.loadGlobal n
     else if Set.member n nats then do
       i <- fetchConstant (MLIR.MkLitString n)
@@ -159,7 +186,7 @@ instance Assemble MLIR.Expression where
     f' <- assemble f
     args' <- assemble args
     pure $ args' <> f' <> LLIR.instr (LLIR.Call (length args))
-  
+
   assemble (MLIR.MkExprLambda _ _) = compilerError "Lambda in LLIR"
 
   assemble (MLIR.MkExprTernary c t e) = do
@@ -168,7 +195,7 @@ instance Assemble MLIR.Expression where
     e' <- assemble e
 
     pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (length t' + 2)) <> t' <> LLIR.instr (LLIR.JumpRel (length e' + 1)) <> e'
-  
+
   -- assemble (MLIR.MkExprUpdate (MLIR.MkUpdtVariable v) e) = do
   --   e' <- assemble e
   --   gs <- readIORef globals
@@ -186,19 +213,19 @@ instance Assemble MLIR.Expression where
     u' <- assemble u
     e' <- assemble e
     pure $ e' <> u' <> LLIR.instr LLIR.Update
-  
-  assemble (MLIR.MkExprLet n e) = do
-    e' <- assemble e
 
-    gs <- readIORef globals
-    locals <- ask
+  -- assemble (MLIR.MkExprLet n e) = do
+  --   e' <- assemble e
 
-    if Set.member n locals then
-      pure $ e' <> LLIR.storeLocal n
-    else if Set.member n gs then 
-      pure $ e' <> LLIR.storeGlobal n
-    else compilerError $ "Variable " <> n <> " not found in globals, locals or natives"
-  
+  --   gs <- readIORef globals
+  --   locals <- ask
+
+  --   if Set.member n locals then
+  --     pure $ e' <> LLIR.storeLocal n
+  --   else if Set.member n gs then
+  --     pure $ e' <> LLIR.storeGlobal n
+  --   else compilerError $ "Variable " <> n <> " not found in globals, locals or natives"
+
   assemble (MLIR.MkExprMut n e) = do
     e' <- assemble e
 
@@ -207,7 +234,7 @@ instance Assemble MLIR.Expression where
 
     if Set.member n locals then
       pure $ e' <> LLIR.instr LLIR.MakeMutable <> LLIR.storeLocal n
-    else if Set.member n gs then 
+    else if Set.member n gs then
       pure $ e' <> LLIR.instr LLIR.MakeMutable <> LLIR.storeGlobal n
     else compilerError $ "Variable " <> n <> " not found in globals, locals or natives"
 
@@ -231,7 +258,7 @@ instance Assemble MLIR.Expression where
     let len = length ons' + length lets'
 
     pure $ LLIR.instr (LLIR.MakeEvent len (length ons) localSpace) <> ons' <> lets'
-  
+
   assemble (MLIR.MkExprOn event args body) = do
     glbs <- readIORef globals
     ntvs <- readIORef natives
@@ -247,7 +274,7 @@ instance Assemble MLIR.Expression where
     let instrs = filter shouldNotBeLabel body'
         instrs' = concatMap extractFrom instrs
 
-    pure [LLIR.EventOn event' (length args) (length body' + 1) localSpace (instrs' <> [LLIR.Return])]
+    pure [LLIR.EventOn event' (length args) (length instrs' + 1) localSpace (instrs' <> [LLIR.Return])]
 
   assemble (MLIR.MkExprSend e event es) = do
     e' <- assemble e
@@ -255,32 +282,33 @@ instance Assemble MLIR.Expression where
     event' <- fetchEvent event
 
     pure $ e' <> es' <> LLIR.instr (LLIR.Send (length es) event')
-  
+
   assemble (MLIR.MkExprSpawn e) = do
     e' <- assemble e
     pure $ e' <> LLIR.instr LLIR.Spawn
-  
+
   assemble (MLIR.MkExprList es) = do
     es' <- assemble es
     pure $ es' <> LLIR.instr (LLIR.MakeList (length es))
-  
+
   assemble (MLIR.MkExprNative ann ty) = do
     let arity = case ty of
           args MLIR.:->: _ -> length args
           _ -> 0
 
     modifyIORef' natives (Set.insert ann.name)
-    modifyIORef' nativeFunctionsHandler $ 
-      \(LLIR.MkLibrary i fs) -> 
-        LLIR.MkLibrary  
-          (i + 1) 
+    modifyIORef' nativeFunctionsHandler $
+      \(LLIR.MkLibrary i fs) ->
+        LLIR.MkLibrary
+          (i + 1)
           (Set.insert (LLIR.MkFunctionLibrary ann.name arity (i + 1)) fs)
 
     pure []
 
-  assemble (MLIR.MkExprIndex e (MLIR.MkExprLiteral (MLIR.MkLitInt i))) = do
+  assemble (MLIR.MkExprIndex e i) | isIntLiteral i = do
     e' <- assemble e
-    pure $ e' <> LLIR.instr (LLIR.ListGet (fromIntegral i))
+    let i' = getInteger i
+    pure $ e' <> LLIR.instr (LLIR.ListGet (fromInteger i'))
 
   assemble (MLIR.MkExprIndex e i) = do
     e' <- assemble e
@@ -291,10 +319,17 @@ instance Assemble MLIR.Expression where
     e'' <- assemble e
     e''' <- assemble e'
     pure $ e'' <> LLIR.instr (LLIR.StoreLocal n) <> e'''
-  
+
   assemble (MLIR.MkExprLiteral l) = do
     i <- fetchConstant l
     pure $ LLIR.instr (LLIR.LoadConstant i)
+
+  -- assemble (MLIR.MkExprLoc _ (MLIR.MkExprLoc p e)) = assemble (MLIR.MkExprLoc p e)
+
+  assemble (MLIR.MkExprLoc (p1, _) e) = do
+    e' <- assemble e
+    file <- fetchConstant (MLIR.MkLitString . toText $ p1.sourceName)
+    pure $ LLIR.instr (LLIR.Loc (MP.unPos p1.sourceLine) (MP.unPos p1.sourceColumn) file) <> e'
 
 instance Assemble MLIR.Update where
   assemble (MLIR.MkUpdtVariable n) = do
@@ -304,15 +339,15 @@ instance Assemble MLIR.Update where
 
     if Set.member n locals then
       pure $ LLIR.loadLocal n
-    else if Set.member n gs then 
+    else if Set.member n gs then
       pure $ LLIR.loadGlobal n
     else if Set.member n nats then do
       i <- fetchConstant (MLIR.MkLitString n)
       pure $ LLIR.instr (LLIR.LoadNative i)
     else compilerError $ "Variable " <> n <> " not found in globals, locals or natives"
-  
+
   assemble (MLIR.MkUpdtField {}) = compilerError "Field in LLIR"
-  
+
   assemble (MLIR.MkUpdtIndex u e) = do
     u' <- assemble u
     e' <- assemble e
@@ -329,21 +364,39 @@ runLLIRConversion exprs = do
   res <- runReaderT (assemble exprs) Set.empty
 
   consts <- readIORef constantPool
-  let cs = IntMap.fromList $ invertAList (Map.toList consts)
+  let cs = IntMap.fromList $ invertList (Map.toList consts)
 
   pure (res, IntMap.elems cs, gs)
 
-invertAList :: [(b, a)] -> [(a, b)]
-invertAList = map (\(a, b) -> (b, a))
+invertList :: [(b, a)] -> [(a, b)]
+invertList = map (\(a, b) -> (b, a))
+
+isIntLiteral :: MLIR.Expression -> Bool
+isIntLiteral (MLIR.MkExprLiteral (MLIR.MkLitInt _)) = True
+isIntLiteral (MLIR.MkExprLoc _ e) = isIntLiteral e
+isIntLiteral _ = False
+
+getInteger :: MLIR.Expression -> Integer
+getInteger (MLIR.MkExprLiteral (MLIR.MkLitInt i)) = i
+getInteger (MLIR.MkExprLoc _ e) = getInteger e
+getInteger _ = error "Not an integer"
+
+getOns :: [MLIR.Expression] -> [MLIR.Expression]
+getOns (MLIR.MkExprOn n args e : xs) = MLIR.MkExprOn n args e : getOns xs
+getOns (MLIR.MkExprLoc _ e : xs) = getOns (e : xs)
+getOns (_ : xs) = getOns xs
+getOns [] = []
 
 getGlobals :: [MLIR.Expression] -> Set Text
 getGlobals (MLIR.MkExprFunction name _ _ : es) = Set.insert name (getGlobals es)
 getGlobals (MLIR.MkExprLet name _ : xs) = Set.insert name (getGlobals xs)
 getGlobals (MLIR.MkExprMut name _ : xs) = Set.insert name (getGlobals xs)
+getGlobals (MLIR.MkExprLoc _ e : xs) = getGlobals (e : xs)
 getGlobals (_ : xs) = getGlobals xs
 getGlobals [] = mempty
 
 getNatives :: [MLIR.Expression] -> Set Text
 getNatives (MLIR.MkExprNative ann _ : xs) = Set.insert ann.name (getNatives xs)
+getNatives (MLIR.MkExprLoc _ e : xs) = getNatives (e : xs)
 getNatives (_ : xs) = getNatives xs
 getNatives [] = mempty

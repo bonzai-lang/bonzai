@@ -82,6 +82,8 @@ encodeInstruction ReturnEvent =
   encodeInstr 24 >> replicateNull 4
 encodeInstruction MakeMutable =
   encodeInstr 25 >> replicateNull 4
+encodeInstruction (Loc i j k) =
+  encodeInstr 26 >> encodeInteger i >> encodeInteger j >> encodeInteger k >> replicateNull 1
 
 encodeText :: Text -> Put
 encodeText w = do

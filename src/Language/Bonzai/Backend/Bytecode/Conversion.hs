@@ -83,6 +83,7 @@ instance Assemble LLIR.Instruction where
   assemble (LLIR.Send args body) = pure [BC.Send args body]
   assemble LLIR.Spawn = pure [BC.Spawn]
   assemble LLIR.MakeMutable = pure [BC.MakeMutable]
+  assemble (LLIR.Loc a b c) = pure [BC.Loc a b c]
 
 instance Assemble LLIR.Segment where
   assemble (LLIR.EventOn id' arity bodyLength ls instructions) = do
