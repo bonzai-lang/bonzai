@@ -45,4 +45,14 @@ system(f"cp runtime/bin/{runtime_executable} bin/{runtime_executable_out}")
 system(f'xmake config {xmake_root} -P bindings --ccache=n -y')
 system(f'xmake b {xmake_root} -P bindings')
 
+# Write simple shell script
+shell_script = f"""#!/bin/sh
+bonzai "$@" -l $BONZAI_PATH/bindings/bin/bindings.dylib
+"""
+
+with open('bin/bpm', 'w') as f:
+  f.write(shell_script)
+
+system('chmod +x bin/bpm')
+
 print('Build ran successfully')
