@@ -13,7 +13,6 @@ extern fn lt_value<A>(x: A, y: A): bool
 extern fn gt_value<A>(x: A, y: A): bool
 extern fn lte_value<A>(x: A, y: A): bool
 extern fn gte_value<A>(x: A, y: A): bool
-extern unit: unit
 
 // Defining basic functions
 
