@@ -39,7 +39,6 @@ data Expression f t
   | MkExprLet (Annotation (f t)) (Expression f t)
   | MkExprMut (Annotation (f t)) (Expression f t)
   | MkExprBlock [Expression f t]
-  | MkExprModule Text [Expression f t]
   | MkExprActor Text [Expression f t]
   | MkExprOn Text [Annotation (f t)] (Expression f t)
   | MkExprSend (Expression f t) Text [Expression f t]
@@ -75,7 +74,6 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprUpdate u e) = T.concat [toText u, " = ", toText e]
   toText (MkExprLet a e) = T.concat ["let ", toText a, " = ", toText e]
   toText (MkExprBlock es) = T.concat [T.intercalate "; " (map toText es)]
-  toText (MkExprModule n e) = T.concat ["module ", n, " { ", toText e, " }"]
   toText (MkExprActor i e) = T.concat ["event ",i , " ", toText e]
   toText (MkExprOn n as e) = T.concat ["on ", n, "(", T.intercalate ", " (map toText as), ") { ", toText e, " }"]
   toText (MkExprSend e n e') = T.concat ["(", toText e, ") -> ", n, "(", toText e', ")"]
@@ -109,7 +107,6 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprLet a e == MkExprLet a' e' = a == a' && e == e'
   MkExprMut a e == MkExprMut a' e' = a == a' && e == e'
   MkExprBlock es == MkExprBlock es' = es == es'
-  MkExprModule n e == MkExprModule n' e' = n == n' && e == e'
   MkExprActor i e == MkExprActor i' e' = i == i' && e == e'
   MkExprOn n as e == MkExprOn n' as' e' = n == n' && as == as' && e == e'
   MkExprSend e n es == MkExprSend e' n' es' = e == e' && n == n' && es == es'
