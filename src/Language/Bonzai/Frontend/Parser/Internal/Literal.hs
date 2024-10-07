@@ -3,12 +3,27 @@ import qualified Language.Bonzai.Frontend.Parser as P
 import qualified Text.Megaparsec.Char as MC
 import qualified Data.Text as T
 import qualified Language.Bonzai.Syntax.HLIR as HLIR
+import Text.Megaparsec.Char (digitChar)
+
+decimal :: (MonadIO m) => P.Parser m Integer
+decimal = do
+  parts :: [String] <- P.sepBy1 (some digitChar) (MC.char '_')
+
+  case readEither (concat parts) of
+    Left _ -> fail "Invalid integer"
+    Right x -> pure x
 
 parseInteger :: (MonadIO m) => P.Parser m Integer
-parseInteger = P.signed (pure ()) P.decimal
+parseInteger = P.signed (pure ()) decimal
 
 parseFloat :: (MonadIO m) => P.Parser m Double
-parseFloat = P.signed (pure ()) P.float
+parseFloat = P.signed (pure ()) $ do
+  int <- decimal
+  void $ MC.char '.'
+  frac <- decimal
+  case readEither (show int <> "." <> show frac) of
+    Left _ -> fail "Invalid float"
+    Right y -> pure y
 
 parseChar :: (MonadIO m) => P.Parser m Char
 parseChar = MC.char '\'' *> P.charLiteral <* MC.char '\''
