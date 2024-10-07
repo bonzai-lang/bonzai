@@ -1,0 +1,424 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Bonzai",
+	"patterns": [
+    {
+      "include": "#functions"
+    },
+    {
+      "include": "#natives"
+    },
+    {
+      "include": "#booleans"
+    },
+    {
+      "include": "#regex"
+    },
+		{
+			"include": "#keywords"
+		},
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#identifiers"
+    },
+    {
+      "include": "#interpolated"
+    },
+		{
+			"include": "#strings"
+		},
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#hexNumbers"
+    },
+    {
+      "include": "#characters"
+    },
+    {
+      "include": "#comments"
+    }
+	],
+	"repository": {
+		"keywords": {
+			"patterns": [
+        {
+          "name": "keyword.control.bonzai",
+          "match": "\\b(module|actor|interface|let|mut|extern|require|fn|spawn|if|then|else|on)\\b"
+        },
+        {
+          "name": "keyword.operator.bonzai",
+          "match": "\\b(&&|\\|\\||!|:)\\b"
+        }
+      ]
+		},
+
+    "natives": {
+      "patterns": [
+        {
+          "match": "\\b(extern)\\s+(fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "comment": "Native function definition",
+          "captures": {
+            "1": {
+              "name": "keyword.control.bonzai"
+            },
+            "2": {
+              "name": "keyword.control.bonzai"
+            },
+            "3": {
+              "name": "entity.name.function.bonzai"
+            }
+          }
+        }
+      ] 
+    },
+
+    "functions": {
+      "patterns": [
+        {
+          "match": "\\b(fn)\\s+(case)\\s*\\(",
+          "comment": "Anonymous function with type parameters",
+          "captures": {
+            "1": {
+              "name": "keyword.control.bonzai"
+            },
+            "2": {
+              "name": "keyword.control.bonzai"
+            }
+          }
+        },
+        {
+          "match": "\\b(fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*<",
+          "comment": "Function definition with type parameters",
+          "captures": {
+            "1": {
+              "name": "keyword.control.bonzai"
+            },
+            "2": {
+              "name": "entity.name.function.bonzai"
+            }
+          }
+        },
+        {
+          "match": "\\b(fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+          "comment": "Function definition with type parameters",
+          "captures": {
+            "1": {
+              "name": "keyword.control.bonzai"
+            },
+            "2": {
+              "name": "entity.name.function.bonzai"
+            }
+          }
+        }
+      ]
+    },
+
+    "types": {
+      "patterns": [
+        {
+          "name": "support.type.bonzai",
+          "match": "\\b(int|string|bool|char|float|unit)\\b"
+        },
+        {
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*<(?!\\()",
+          "comment": "Type definition with type parameters",
+          "captures": {
+            "1": {
+              "name": "markup.bold.bonzai"
+            }
+          }
+        }
+      ]
+    },
+
+    "identifiers": {
+      "patterns": [
+        {
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(\\()",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.bonzai"
+            }
+          }
+        },
+        {
+          "name": "variable.name",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    },
+
+		"strings": {
+			"name": "string.quoted.double.bonzai",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.bonzai",
+					"match": "\\\\."
+				}
+			]
+		},
+
+    "interpolated": {
+      "name": "string.quoted.double.bonzai",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.bonzai",
+          "match": "\\\\."
+        },
+        {
+          "name": "variable.other.readwrite.bonzai",
+          "match": "\\$[a-zA-Z_][a-zA-Z0-9_]*"
+        }
+      ]
+    },
+
+    "numbers": {
+      "name": "constant.numeric.bonzai",
+      "match": "\\b(\\d+(\\.\\d+)?|\\.\\d+)\\b"
+    },
+    "hexNumbers": {
+      "name": "constant.numeric.hex.bonzai",
+      "match": "\\b0x[0-9a-fA-F]+\\b"
+    },
+    "booleans": {
+      "name": "constant.language.bonzai",
+      "match": "\\b(true|false)\\b"
+    },
+    "characters": {
+      "name": "constant.character.bonzai",
+      "match": "'.'"
+    },
+
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.bonzai",
+          "match": "//.*"
+        },
+        {
+          "name": "comment.block.bonzai",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+
+    "regex": {
+			"patterns": [
+				{
+					"name": "string.regexp.bonzai",
+					"begin": "(?<!\\+\\+|--|})(?<=[=(:,\\[?+!]|^return|[^\\._$[:alnum:]]return|^case|[^\\._$[:alnum:]]case|=>|&&|\\|\\||\\*\\/)\\s*(\\/)(?![\\/*])(?=(?:[^\\/\\\\\\[\\()]|\\\\.|\\[([^\\]\\\\]|\\\\.)+\\]|\\(([^\\)\\\\]|\\\\.)+\\))+\\/([dgimsuy]+|(?![\\/\\*])|(?=\\/\\*))(?!\\s*[a-zA-Z0-9_$]))",
+					"beginCaptures": {
+						"1": {
+							"name": "punctuation.definition.string.begin.bonzai"
+						}
+					},
+					"end": "(/)([dgimsuy]*)",
+					"endCaptures": {
+						"1": {
+							"name": "punctuation.definition.string.end.bonzai"
+						},
+						"2": {
+							"name": "keyword.other.bonzai"
+						}
+					},
+					"patterns": [
+						{
+							"include": "#regexp"
+						}
+					]
+				},
+				{
+					"name": "string.regexp.bonzai",
+					"begin": "((?<![_$[:alnum:])\\]]|\\+\\+|--|}|\\*\\/)|((?<=^return|[^\\._$[:alnum:]]return|^case|[^\\._$[:alnum:]]case))\\s*)\\/(?![\\/*])(?=(?:[^\\/\\\\\\[]|\\\\.|\\[([^\\]\\\\]|\\\\.)*\\])+\\/([dgimsuy]+|(?![\\/\\*])|(?=\\/\\*))(?!\\s*[a-zA-Z0-9_$]))",
+					"beginCaptures": {
+						"0": {
+							"name": "punctuation.definition.string.begin.bonzai"
+						}
+					},
+					"end": "(/)",
+					"endCaptures": {
+						"1": {
+							"name": "punctuation.definition.string.end.bonzai"
+						},
+						"2": {
+							"name": "keyword.other.bonzai"
+						}
+					},
+					"patterns": [
+						{
+							"include": "#regexp"
+						}
+					]
+				}
+			]
+		},
+    "regexp": {
+			"patterns": [
+				{
+					"name": "keyword.control.anchor.regexp",
+					"match": "\\\\[bB]|\\^|\\$"
+				},
+				{
+					"match": "\\\\[1-9]\\d*|\\\\k<([a-zA-Z_$][\\w$]*)>",
+					"captures": {
+						"0": {
+							"name": "keyword.other.back-reference.regexp"
+						},
+						"1": {
+							"name": "variable.other.regexp"
+						}
+					}
+				},
+				{
+					"name": "keyword.operator.quantifier.regexp",
+					"match": "[?+*]|\\{(\\d+,\\d+|\\d+,|,\\d+|\\d+)\\}\\??"
+				},
+				{
+					"name": "keyword.operator.or.regexp",
+					"match": "\\|"
+				},
+				{
+					"name": "meta.group.assertion.regexp",
+					"begin": "(\\()((\\?=)|(\\?!)|(\\?<=)|(\\?<!))",
+					"beginCaptures": {
+						"1": {
+							"name": "punctuation.definition.group.regexp"
+						},
+						"2": {
+							"name": "punctuation.definition.group.assertion.regexp"
+						},
+						"3": {
+							"name": "meta.assertion.look-ahead.regexp"
+						},
+						"4": {
+							"name": "meta.assertion.negative-look-ahead.regexp"
+						},
+						"5": {
+							"name": "meta.assertion.look-behind.regexp"
+						},
+						"6": {
+							"name": "meta.assertion.negative-look-behind.regexp"
+						}
+					},
+					"end": "(\\))",
+					"endCaptures": {
+						"1": {
+							"name": "punctuation.definition.group.regexp"
+						}
+					},
+					"patterns": [
+						{
+							"include": "#regexp"
+						}
+					]
+				},
+				{
+					"name": "meta.group.regexp",
+					"begin": "\\((?:(\\?:)|(?:\\?<([a-zA-Z_$][\\w$]*)>))?",
+					"beginCaptures": {
+						"0": {
+							"name": "punctuation.definition.group.regexp"
+						},
+						"1": {
+							"name": "punctuation.definition.group.no-capture.regexp"
+						},
+						"2": {
+							"name": "variable.other.regexp"
+						}
+					},
+					"end": "\\)",
+					"endCaptures": {
+						"0": {
+							"name": "punctuation.definition.group.regexp"
+						}
+					},
+					"patterns": [
+						{
+							"include": "#regexp"
+						}
+					]
+				},
+				{
+					"name": "constant.other.character-class.set.regexp",
+					"begin": "(\\[)(\\^)?",
+					"beginCaptures": {
+						"1": {
+							"name": "punctuation.definition.character-class.regexp"
+						},
+						"2": {
+							"name": "keyword.operator.negation.regexp"
+						}
+					},
+					"end": "(\\])",
+					"endCaptures": {
+						"1": {
+							"name": "punctuation.definition.character-class.regexp"
+						}
+					},
+					"patterns": [
+						{
+							"name": "constant.other.character-class.range.regexp",
+							"match": "(?:.|(\\\\(?:[0-7]{3}|x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}))|(\\\\c[A-Z])|(\\\\.))\\-(?:[^\\]\\\\]|(\\\\(?:[0-7]{3}|x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}))|(\\\\c[A-Z])|(\\\\.))",
+							"captures": {
+								"1": {
+									"name": "constant.character.numeric.regexp"
+								},
+								"2": {
+									"name": "constant.character.control.regexp"
+								},
+								"3": {
+									"name": "constant.character.escape.backslash.regexp"
+								},
+								"4": {
+									"name": "constant.character.numeric.regexp"
+								},
+								"5": {
+									"name": "constant.character.control.regexp"
+								},
+								"6": {
+									"name": "constant.character.escape.backslash.regexp"
+								}
+							}
+						},
+						{
+							"include": "#regex-character-class"
+						}
+					]
+				},
+				{
+					"include": "#regex-character-class"
+				}
+			]
+		},
+		"regex-character-class": {
+			"patterns": [
+				{
+					"name": "constant.other.character-class.regexp",
+					"match": "\\\\[wWsSdDtrnvf]|\\."
+				},
+				{
+					"name": "constant.character.numeric.regexp",
+					"match": "\\\\([0-7]{3}|x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4})"
+				},
+				{
+					"name": "constant.character.control.regexp",
+					"match": "\\\\c[A-Z]"
+				},
+				{
+					"name": "constant.character.escape.backslash.regexp",
+					"match": "\\\\."
+				}
+			]
+		}
+	},
+	"scopeName": "source.bonzai"
+}
