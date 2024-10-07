@@ -72,6 +72,8 @@ Value close_client(Module *module, Value* args, int argc) {
 
   int client_socket = GET_INT(args[0]);
   close(client_socket);
+
+  return MAKE_INTEGER(0);
 }
 
 Value get_buffer(Module *module, Value* args, int argc) {
@@ -126,4 +128,6 @@ Value close_server(Module *module, Value* args, int argc) {
 
   int server_socket = GET_INT(args[0]);
   close(server_socket);
+
+  return MAKE_INTEGER(0);
 }
