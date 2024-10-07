@@ -69,7 +69,7 @@ instance ToText Type where
 
 instance ToText TyVar where
   toText (Link a) = toText a
-  toText (Unbound a _) = a
+  toText (Unbound a l) = a <> "@" <> T.pack (show l)
 
 instance ToText (Maybe Type) where
   toText (Just a) = toText a

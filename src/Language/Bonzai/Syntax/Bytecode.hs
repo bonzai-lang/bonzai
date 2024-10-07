@@ -29,6 +29,7 @@ data Instruction
   | MakeFunctionAndStore LLIR.NameAddress LLIR.InstructionLength LLIR.NeededLocalSpace
   | ReturnEvent
   | MakeMutable
+  | Loc Int Int Int
   deriving (Eq)
 
 instance ToText Int where
@@ -61,6 +62,7 @@ instance ToText Instruction where
   toText (MakeFunctionAndStore a b c) = "MakeFunctionAndStore " <> toText a <> " " <> toText b <> " " <> toText c
   toText ReturnEvent = "ReturnEvent"
   toText MakeMutable = "MakeMutable"
+  toText (Loc a b c) = "Loc " <> toText a <> " " <> toText b <> " " <> toText c
 
 instance ToText [Instruction] where
   toText xs = T.intercalate "\n" . map format $ couple

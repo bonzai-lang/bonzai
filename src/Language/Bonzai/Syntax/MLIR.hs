@@ -48,6 +48,7 @@ data Expression
   | MkExprIndex Expression Expression
   | MkExprUnpack Text Expression Expression
   | MkExprMut Text Expression
+  | MkExprLoc Position Expression
   deriving (Eq)
 
 pattern MkExprFunction :: Text -> [Text] -> Expression -> Expression
@@ -83,6 +84,7 @@ instance ToText Expression where
   toText (MkExprIndex e e') = T.concat [toText e, "[", toText e', "]"]
   toText (MkExprUnpack a e e') = T.concat ["let ", a, " = ", toText e, " in ", toText e']
   toText (MkExprMut a e) = T.concat ["mut ", a, " = ", toText e]
+  toText (MkExprLoc _ e) = toText e
 
 instance ToText [Expression] where
   toText = T.intercalate "\n" . map toText

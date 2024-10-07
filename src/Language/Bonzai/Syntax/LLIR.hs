@@ -50,6 +50,7 @@ data Instruction
   | Spawn
   | Send Int Int
   | MakeMutable
+  | Loc Int Int Int
   deriving (Eq)
 
 data Library = MkLibrary Int (Set FunctionLibrary)
@@ -98,6 +99,7 @@ instance ToText Instruction where
   toText Spawn = "spawn"
   toText (Send n t) = T.concat ["send ", T.pack (show n), " ", T.pack (show t)]
   toText MakeMutable = "make_mutable"
+  toText (Loc n t f) = T.concat ["loc ", T.pack (show n), " ", T.pack (show t), " ", T.pack (show f)]
 
 instance ToText Segment where
   toText (Function n as _ _ is) = T.concat ["function ", n, "(", T.intercalate ", " as, ") { ", T.intercalate "; " (map toText is), " }"]
