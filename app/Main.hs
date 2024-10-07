@@ -1,6 +1,4 @@
 module Main where
-import Language.Bonzai.Frontend.Parser (parseBonzaiFile)
-import Language.Bonzai.Frontend.Parser.Expression (parseProgram)
 import Language.Bonzai.Frontend.Module.Conversion
 import Control.Monad.Result
 import Language.Bonzai.Frontend.Typechecking.Checker (runTypechecking)
