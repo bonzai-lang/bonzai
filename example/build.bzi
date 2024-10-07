@@ -6,7 +6,7 @@ let config = spawn Config()
 config->addRuntimeDependency("bindings/bin/bindings.dylib")
 
 // Set the file to compile and run
-config->setFile("example/build.bzi")
+config->setFile("example/factorial.bzi")
 
 // Execute the commands
 config->execute()
