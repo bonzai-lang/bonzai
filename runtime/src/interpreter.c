@@ -30,7 +30,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     &&case_call_local, &&case_jump_if_false, &&case_jump_rel, &&case_get_index,
     &&case_special, &&case_halt, &&case_spawn, &&case_event_on, 
     &&case_send, &&case_make_function_and_store, &&case_load_native, &&case_make_event,
-    &&case_return_event, &&case_make_mutable, UNKNOWN
+    &&case_return_event, &&case_make_mutable, &&case_loc, UNKNOWN
   };
 
   goto *jmp_table[op];
@@ -38,7 +38,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   case_load_local: {
     int bp = module->base_pointer;
     Value value = module->stack->values[bp + i1];
-    stack_push(module->stack, value);
+    stack_push(module, value);
     INCREASE_IP(module);
     goto *jmp_table[op];
   }
@@ -53,14 +53,14 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
   case_load_constant: {
     Value value = constants.values[i1];
-    stack_push(module->stack, value);
+    stack_push(module, value);
     INCREASE_IP(module);
     goto *jmp_table[op];
   }
 
   case_load_global: {
     Value value = module->stack->values[i1];
-    stack_push(module->stack, value);
+    stack_push(module, value);
     INCREASE_IP(module);
     goto *jmp_table[op];
   }
@@ -79,7 +79,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
     module->stack->stack_pointer = fr.stack_pointer;
     module->base_pointer = fr.base_ptr;
-    stack_push(module->stack, ret);
+    stack_push(module, ret);
 
     module->pc = fr.instruction_pointer;
 
@@ -94,7 +94,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     Value a = stack_pop(module->stack);
     Value b = stack_pop(module->stack);
 
-    stack_push(module->stack, comparison_table[i1](b, a));
+    stack_push(module, comparison_table[i1](module, b, a));
     INCREASE_IP(module);
     goto *jmp_table[op];
   }
@@ -103,7 +103,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     Value variable = stack_pop(module->stack);
     Value value = stack_pop(module->stack);
 
-    ASSERT_TYPE("update", variable, TYPE_MUTABLE);
+    ASSERT_TYPE(module, "update", variable, TYPE_MUTABLE);
 
     GET_MUTABLE(variable) = value;
 
@@ -120,7 +120,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     }
 
     Value value = MAKE_LIST(module, list, i1);
-    stack_push(module->stack, value);
+    stack_push(module, value);
     INCREASE_IP(module);
     goto *jmp_table[op];
   }
@@ -129,10 +129,10 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     Value list = stack_pop(module->stack);
     int index = i1;
 
-    ASSERT_TYPE("list_get", list, TYPE_LIST);
+    ASSERT_TYPE(module, "list_get", list, TYPE_LIST);
 
     Value* list_ptr = GET_LIST(list);
-    stack_push(module->stack, list_ptr[index]);
+    stack_push(module, list_ptr[index]);
 
     INCREASE_IP(module);
     goto *jmp_table[op];
@@ -141,7 +141,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   case_call: {
     Value callee = stack_pop(module->stack);
 
-    ASSERT(IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
+    ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
     
     interpreter_table[(callee & MASK_SIGNATURE) == SIGNATURE_FUNCTION](module, callee, i1);
 
@@ -170,11 +170,11 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     Value index = stack_pop(module->stack);
     Value list = stack_pop(module->stack);
 
-    ASSERT_TYPE("get_index", list, TYPE_LIST);
-    ASSERT_TYPE("get_index", index, TYPE_INTEGER);
+    ASSERT_TYPE(module, "get_index", list, TYPE_LIST);
+    ASSERT_TYPE(module, "get_index", index, TYPE_INTEGER);
 
     Value* list_ptr = GET_LIST(list);
-    stack_push(module->stack, list_ptr[GET_INT(index)]);
+    stack_push(module, list_ptr[GET_INT(index)]);
 
     INCREASE_IP(module);
     goto *jmp_table[op];
@@ -195,11 +195,11 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   case_spawn: {
     Value event = stack_pop(module->stack);
 
-    ASSERT_TYPE("spawn", event, TYPE_EVENT);
+    ASSERT_TYPE(module, "spawn", event, TYPE_EVENT);
 
     HeapValue* ev = GET_PTR(event);
   
-    stack_push(module->stack, MAKE_EVENT_FRAME(
+    stack_push(module, MAKE_EVENT_FRAME(
       module, 
       module->pc + 5, 
       module->stack->stack_pointer, 
@@ -221,7 +221,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
     Value event_on = MAKE_EVENT_ON(module, i1, lambda);
 
-    stack_push(module->stack, event_on);
+    stack_push(module, event_on);
 
     INCREASE_IP_BY(module, i3 + 1);
     goto *jmp_table[op];
@@ -238,7 +238,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
     Value event = stack_pop(module->stack);
 
-    ASSERT_TYPE("send", event, TYPE_EVENT);
+    ASSERT_TYPE(module, "send", event, TYPE_EVENT);
 
     HeapValue* hp = GET_PTR(event);
 
@@ -260,14 +260,14 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
   case_load_native: {
     Value native = module->constants.values[i1];
-    stack_push(module->stack, native);
+    stack_push(module, native);
     INCREASE_IP(module);
     goto *jmp_table[op];
   }
 
   case_make_event: {
     Value ev = MAKE_EVENT(module, i1, module->pc);
-    stack_push(module->stack, ev);
+    stack_push(module, ev);
     INCREASE_IP_BY(module, i2 + 1);
     goto *jmp_table[op];
   }
@@ -290,7 +290,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     }
 
     hp->as_event.actor = create_actor(hp->as_event, module);
-    stack_push(module->stack, MAKE_PTR(hp));
+    stack_push(module, MAKE_PTR(hp));
     
     module->pc = fr.instruction_pointer;
 
@@ -299,7 +299,16 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
   case_make_mutable: {
     Value x = stack_pop(module->stack);
-    stack_push(module->stack, MAKE_MUTABLE(module, x));
+    stack_push(module, MAKE_MUTABLE(module, x));
+    INCREASE_IP(module);
+    goto *jmp_table[op];
+  }
+
+  case_loc: {
+    module->latest_position[0] = i1;
+    module->latest_position[1] = i2;
+    module->file = GET_STRING(constants.values[i3]);
+
     INCREASE_IP(module);
     goto *jmp_table[op];
   }
