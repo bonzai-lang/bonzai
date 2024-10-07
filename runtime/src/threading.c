@@ -31,7 +31,7 @@ Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv) {
 
   int32_t new_pc = module->pc + 5;
 
-  Value frame = MAKE_FRAME_NON_GC(new_module, new_pc, old_sp, new_module->base_pointer);
+  Value frame = MAKE_FRAME_NON_GC(new_pc, old_sp, new_module->base_pointer);
   stack_push(new_module, frame);
 
   new_module->base_pointer = new_module->stack->stack_pointer - 1;

@@ -178,7 +178,7 @@ void sweep(struct Module* vm) {
 }
 
 void gc(struct Module* vm) {
-  int numObjects = vm->num_objects;
+  // int numObjects = vm->num_objects;
 
   mark_all(vm);
   sweep(vm);
@@ -228,7 +228,7 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
   return v;
 }
 
-Value MAKE_FRAME_NON_GC(struct Module* mod, int32_t ip, int32_t sp, int32_t bp) {
+Value MAKE_FRAME_NON_GC(int32_t ip, int32_t sp, int32_t bp) {
   HeapValue* v = malloc(sizeof(HeapValue));
 
   v->type = TYPE_FRAME;
