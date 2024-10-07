@@ -35,7 +35,13 @@ Value deserialize_value(Module* mod, FILE* file) {
       fread(string_value, sizeof(char), length, file);
       string_value[length] = '\0';
 
-      value = MAKE_STRING(mod, string_value);
+      HeapValue* hp = /*test*/malloc(sizeof(HeapValue));
+      hp->type = TYPE_STRING;
+      hp->as_string = string_value;
+      hp->length = length;
+
+
+      value = MAKE_PTR(hp);
       break;
     }
 
@@ -78,6 +84,13 @@ Constants deserialize_constants(Module *mod, FILE* file) {
 }
 
 void deserialize(Module *mod, FILE* file) {
+  mod->first_object = NULL;
+  mod->max_objects = INIT_OBJECTS;
+  mod->num_objects = 0;
+  mod->callstack = 0;
+  mod->is_terminated = false;
+  mod->base_pointer = BASE_POINTER;
+
   Constants constants_ = deserialize_constants(mod, file);
 
   int32_t instr_count;
@@ -86,14 +99,7 @@ void deserialize(Module *mod, FILE* file) {
   int32_t* instrs = malloc(instr_count * 5 * sizeof(int32_t));
   fread(instrs, sizeof(int32_t), instr_count * 5, file);
 
-  mod->base_pointer = BASE_POINTER;
   mod->instr_count = instr_count;
   mod->instrs = instrs;
   mod->constants = constants_;
-  mod->callstack = 0;
-  mod->is_terminated = false;
-
-  mod->first_object = NULL;
-  mod->max_objects = INIT_OBJECTS;
-  mod->num_objects = 0;
 }

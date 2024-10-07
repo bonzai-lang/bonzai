@@ -63,6 +63,11 @@ int main(int argc, char* argv[]) {
 
   if (argc < 2) THROW_FMT((&module), "Usage: %s <file>", argv[0]);
   FILE* file = fopen(argv[1], "rb");
+
+  if (file == NULL) {
+    THROW_FMT((&module), "Could not open file %s", argv[1]);
+    return 1;
+  }
   
   // Loading libraries
   LibraryOption* libraries = get_libraries(argc, argv);
@@ -81,45 +86,33 @@ int main(int argc, char* argv[]) {
   module.handles = libs;
   module.num_handles = num_libs;
 
+  pthread_mutex_init(&module.module_mutex, NULL);
+
+  deserialize(&module, file);
+
   // Collecting and passing arguments to the module
   module.argc = argc;
   Value* args = /*test*/malloc(argc * sizeof(Value));
   for (int i = 0; i < argc; i++) 
     args[i] = MAKE_STRING(&module, argv[i]);
 
-  pthread_mutex_init(&module.module_mutex, NULL);
-
-  if (file == NULL) {
-    fprintf(stderr, "Failed to open file");
-    return 1;
-  }
-
-  deserialize(&module, file);
-
   run_interpreter(&module, 0, false, 0);
 
   // Closing and freeing resources
   fclose(file);
-  force_sweep(&module);
-  free(module.stack->values);
-  free(module.stack);
-  free(module.instrs);
 
   for (int i = 0; i < module.constants.size; i++) {
     free_constant(module.constants.values[i]);
   }
 
+  force_sweep(&module);
+  free(module.stack->values);
+  free(module.stack);
+  free(module.instrs);
   free(module.constants.values);
-
-  for (int i = 0; i < argc; i++) {
-    if (IS_PTR(args[i])) {
-      HeapValue* hp = GET_PTR(args[i]);
-      free(hp);
-    }
-  }
   free(args);
-
   free_libraries(libraries);
   free(libs);
+
   return 0;
 }
