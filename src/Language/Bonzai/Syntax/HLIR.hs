@@ -48,6 +48,7 @@ data Expression f t
   | MkExprList [Expression f t]
   | MkExprNative (Annotation [Text]) Ty.Type
   | MkExprInterface (Annotation [QuVar]) [Annotation t]
+  | MkExprWhile (Expression f t) (Expression f t)
 
 pattern MkExprBinary :: Text -> f t -> Expression f t -> Expression f t -> Expression f t
 pattern MkExprBinary op t a b = MkExprApplication (MkExprVariable (MkAnnotation op t)) [a, b]
@@ -84,6 +85,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprNative ann ty) = T.concat ["native ", toText ann.name, "<", T.intercalate ", " ann.value, "> ", toText ty]
   toText (MkExprMut a e) = T.concat ["mut ", toText a, " = ", toText e]
   toText (MkExprInterface ann as) = T.concat ["interface ", toText ann.name, "<", T.intercalate ", " (map toText as), ">"]
+  toText (MkExprWhile c e) = T.concat ["while ", toText c, " { ", toText e, " }"]
 
 instance (ToText t, ToText (f t)) => ToText [Expression f t] where
   toText = T.intercalate "\n" . map toText
