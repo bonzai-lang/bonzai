@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/thomasvergne/bonzai"
   },
-  "version": "0.0.9",
+  "version": "0.0.1",
   "engines": {
     "vscode": "^1.89.0"
   },
