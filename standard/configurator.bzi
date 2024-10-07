@@ -6,19 +6,17 @@ mut file = ""
 mut compiler_options = ""
 mut runtime_options = ""
 
-module Config {
-  fn addRuntimeDependency(name: string) => {
-    runtime_options = runtime_options.value + " -l " + name
-  }
+fn Config::addRuntimeDependency(name: string) => {
+  runtime_options = runtime_options.value + " -l " + name
+}
 
-  fn setFile(name: string) => {
-    file = name
-    compiler_options = name + " " + compiler_options.value
-    runtime_options = name + ".bin " + runtime_options.value
-  }
+fn Config::setFile(name: string) => {
+  file = name
+  compiler_options = name + " " + compiler_options.value
+  runtime_options = name + ".bin " + runtime_options.value
+}
 
-  fn execute() => {
-    execute_command("bonzaic " + compiler_options.value)
-    execute_command("bonzai " + runtime_options.value)
-  }
+fn Config::execute() => {
+  execute_command("bonzaic " + compiler_options.value)
+  execute_command("bonzai " + runtime_options.value)
 }
