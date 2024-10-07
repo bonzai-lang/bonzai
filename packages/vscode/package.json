@@ -1,6 +1,6 @@
 {
   "name": "bonzai",
-  "displayName": "Bonzai Syntax Highlighting",
+  "displayName": "Bonzai",
   "description": "Bonzai language Visual Studio Code extension",
   "publisher": "Bonzai",
   "repository": {
@@ -23,8 +23,8 @@
       "extensions": [".bzi"],
       "configuration": "./language-configuration.json",
       "icon": {
-        "dark": "./assets/dark.png",
-        "light": "./assets/light.png"
+        "dark": "assets/dark.png",
+        "light": "assets/light.png"
       }
     }],
     "grammars": [{
