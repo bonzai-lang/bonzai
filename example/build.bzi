@@ -1,0 +1,10 @@
+require "std:configurator"
+
+// Load the C Bindings
+Config::addRuntimeDependency("bindings/bin/bindings.dylib")
+
+// Set the file to compile and run
+Config::setFile("example/main.bzi")
+
+// Execute the commands
+Config::execute()
