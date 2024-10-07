@@ -64,22 +64,21 @@ Here, let's decompose the code into steps:
 ### Prerequisites
 - **Haskell compiler**: GHC 2021 is required to compile the code
 - **XMake**: to compile the VM
+- **Python**: to run the build script
 
 1. **Clone the Repository**: 
   ```sh
   git clone https://github.com/thomasvergne/bonzai.git
   cd bonzai
   ```
-2. **Build and install Bonzai**:
+2. **Build the project**:
   ```sh
-  cabal build
-  cabal install 
+  python3 build.py
   ```
-3. **Build the VM**:
+3. **Set the environment variable**:
   ```sh
-  xmake -P runtime
-  # or
-  cd runtime && xmake 
+  export BONZAI_PATH="/path/to/bonzai"
+  export PATH="/path/to/bonzai/bin:$PATH"
   ```
 
 ### Reporting Issues
