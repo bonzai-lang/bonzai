@@ -1,5 +1,5 @@
-#ifndef PLUME_DEBUG_H
-#define PLUME_DEBUG_H
+#ifndef DEBUG_H
+#define DEBUG_H
 
 #define DEBUG 1
 
@@ -44,4 +44,4 @@
 #define DEBUG_STACK_FROM(...)
 #endif
 
-#endif  // PLUME_DEBUG_H
+#endif  // DEBUG_H

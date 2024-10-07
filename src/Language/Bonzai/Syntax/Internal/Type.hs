@@ -19,7 +19,7 @@ data Type
   | MkTyVar (IORef TyVar)
   | MkTyQuantified Text
 
--- Type variable represents a type variable in Plume. It can either be a link to
+-- Type variable represents a type variable in Bonzai. It can either be a link to
 -- another type or an unbound type variable.
 data TyVar
   = Link Type
