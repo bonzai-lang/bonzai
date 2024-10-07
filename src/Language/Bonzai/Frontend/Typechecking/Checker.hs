@@ -80,6 +80,7 @@ typecheck (HLIR.MkExprTernary c t e) = do
 
   pure (HLIR.MkExprTernary c' t' e', thenTy)
 typecheck (HLIR.MkExprLet ann expr) = do
+  M.enterLevel
   ty <- M.fresh
   let scheme = HLIR.Forall [] ty
 
@@ -89,8 +90,11 @@ typecheck (HLIR.MkExprLet ann expr) = do
     $ typecheck expr
 
   ty `U.unifiesWith` exprTy
+  M.exitLevel
 
-  modifyIORef' M.checkerState $ \st -> st { M.variables = Map.insert ann.name scheme st.variables }
+  newScheme <- M.generalize ty
+
+  modifyIORef' M.checkerState $ \st -> st { M.variables = Map.insert ann.name newScheme st.variables }
 
   pure (HLIR.MkExprLet ann { HLIR.value = Identity ty } expr', exprTy)
 typecheck (HLIR.MkExprMut ann expr) = do

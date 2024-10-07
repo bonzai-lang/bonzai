@@ -14,6 +14,7 @@ module Language.Bonzai.Frontend.Typechecking.Monad (
 
   instantiate,
   fresh,
+  generalize,
 ) where
 
 import Control.Monad.Except
@@ -22,6 +23,7 @@ import qualified GHC.IO as IO
 import qualified Language.Bonzai.Syntax.Internal.Type as HLIR
 import qualified Data.Map as Map
 import qualified Data.Text as Text
+import qualified Data.Set as Set
 
 type MonadChecker m = (MonadIO m, MonadError Error m, MonadFail m)
 type Substitution = Map Text HLIR.Type
@@ -100,7 +102,9 @@ instantiateWithSub s (HLIR.Forall qvars ty) = do
       v <- readIORef ref
       case v of
         HLIR.Link t -> go subst t
-        HLIR.Unbound _ _ -> pure (HLIR.MkTyVar ref, subst)
+        HLIR.Unbound name _ -> case Map.lookup name subst of
+          Just t -> pure (t, subst)
+          Nothing -> pure (HLIR.MkTyVar ref, subst)
     go subst t = pure (t, subst)
 
     goMany :: (MonadChecker m) => Substitution -> [HLIR.Type] -> m ([HLIR.Type], Substitution)
@@ -109,6 +113,27 @@ instantiateWithSub s (HLIR.Forall qvars ty) = do
       (xs', subst'') <- goMany subst' xs
       pure (x' : xs', subst'')
     goMany subst [] = pure ([], subst)
+
+generalize :: (MonadChecker m) => HLIR.Type -> m HLIR.Scheme
+generalize ty = do
+  free <- getFreeVars ty
+
+  pure $ HLIR.Forall (Set.toList free) ty
+  where
+    getFreeVars :: MonadChecker m => HLIR.Type -> m (Set Text)
+    getFreeVars (HLIR.MkTyQuantified name) = pure $ Set.singleton name
+    getFreeVars (HLIR.MkTyApp t ts) = do
+      t' <- getFreeVars t
+      ts' <- Set.unions <$> mapM getFreeVars ts
+      pure $ t' <> ts'
+    getFreeVars (HLIR.MkTyVar ref) = do
+      v <- readIORef ref
+      lvl <- readIORef currentLevel
+      case v of
+        HLIR.Link t -> getFreeVars t
+        HLIR.Unbound name lvl' | lvl' > lvl -> pure $ Set.singleton name
+        _ -> pure Set.empty
+    getFreeVars _ = pure Set.empty
 
 instance ToText a => ToText (Map Text a) where
   toText m = Text.intercalate ", " (map (\(k, v) -> Text.concat [k, ":", toText v]) (Map.toList m))
