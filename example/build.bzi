@@ -1,10 +1,12 @@
 require "std:configurator"
 
+let config = spawn Config()
+
 // Load the C Bindings
-Config::addRuntimeDependency("bindings/bin/bindings.dylib")
+config->addRuntimeDependency("bindings/bin/bindings.dylib")
 
 // Set the file to compile and run
-Config::setFile("example/main.bzi")
+config->setFile("example/build.bzi")
 
 // Execute the commands
-Config::execute()
+config->execute()

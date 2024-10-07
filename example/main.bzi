@@ -5,15 +5,13 @@ interface Loopable {
 
 fn Loop(msg: string) => actor < Loopable {
   on loop(self, i) => {
-    if i == 0 then {
-      print("FINISHED")
-    } else {
-      self->loop(self, i - 1)
+    mut j = 0
+    while j.value < i {
+      j = j.value + 1
     }
+    print(msg)
   }
 }
 
 let l = spawn Loop("loop")
-l->loop(l, 10)
-
-require "std:test"
+l->loop(l, 100_000_000)
