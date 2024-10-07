@@ -10,7 +10,7 @@ void op_call(Module *module, Value callee, int32_t argc) {
 
   int16_t ipc = (int16_t) (callee & MASK_PAYLOAD_INT);
   int16_t local_space = (int16_t) ((callee >> 16) & MASK_PAYLOAD_INT);
-  int16_t old_sp = module->stack->stack_pointer - argc;
+  int32_t old_sp = module->stack->stack_pointer - argc;
 
   module->stack->stack_pointer += local_space - argc;
 
@@ -45,7 +45,7 @@ void op_native_call(Module *module, Value callee, int32_t argc) {
 
   // Pop args in reverse order
   for (int i = argc - 1; i >= 0; i--) {
-    args[i] = stack_pop(module->stack);
+    args[i] = stack_pop(module);
   }
 
   Native handler = find_function(module, fun);

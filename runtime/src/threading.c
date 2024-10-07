@@ -23,7 +23,7 @@ Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv) {
   
   int16_t ipc = (int16_t)(callee & MASK_PAYLOAD_INT);
   int16_t local_space = (int16_t)((callee >> 16) & MASK_PAYLOAD_INT);
-  int16_t old_sp = new_module->stack->stack_pointer;
+  int32_t old_sp = new_module->stack->stack_pointer;
 
   // Push arguments in reverse order
   for (int i = argc - 1; i >= 0; i--) stack_push(new_module, argv[i]);
@@ -56,15 +56,8 @@ Value call_threaded(Module *module, Value callee, int32_t argc, Value *argv) {
   HeapValue* hp = GET_PTR(frame);
   free(hp);
 
-  // Force sweeping remaining allocated objects
-  force_sweep(new_module);
-
-  // for (int i = old_sp; i < new_module->stack->stack_pointer; i++) {
-  //   if (IS_PTR(new_module->stack->values[i])) {
-  //     HeapValue *hp = GET_PTR(new_module->stack->values[i]);
-  //     free(hp);
-  //   }
-  // }
+  // // Force sweeping remaining allocated objects
+  // gc(new_module);
 
   // Free the stack and the module
   free(new_module->stack->values);
