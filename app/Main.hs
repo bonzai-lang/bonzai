@@ -2,7 +2,6 @@ module Main where
 import Language.Bonzai.Frontend.Parser (parseBonzaiFile)
 import Language.Bonzai.Frontend.Parser.Expression (parseProgram)
 import Language.Bonzai.Frontend.Module.Conversion (runModuleConversion)
-import Language.Bonzai.Frontend.Module.Resolution (runModuleResolution)
 import Control.Monad.Result
 import Language.Bonzai.Frontend.Typechecking.Checker (runTypechecking)
 import Language.Bonzai.Backend.TypeErasure.Conversion (eraseTypes)
@@ -36,9 +35,8 @@ main = do
     Left err -> parseError err file (Just contentAsText)
     Right ast -> do
       moduleConversion <- runModuleConversion ast
-      moduleResolution <- runModuleResolution moduleConversion file
 
-      handle moduleResolution $ \preHLIR -> do
+      handle moduleConversion $ \preHLIR -> do
         ppBuild "Typechecking the program"
         typedAST <- runTypechecking preHLIR
 
