@@ -7,5 +7,6 @@
 Value print(Module* mod, Value* args, int argc);
 Value exit_with(Module* mod, Value* args, int argc);
 Value mutable_value(Module* mod, Value* args, int argc);
+Value execute_command(Module* mod, Value* args, int argc);
 
 #endif  // OPERATIONS_H

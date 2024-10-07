@@ -27,3 +27,13 @@ Value mutable_value(Module* mod, Value* args, int argc) {
 
   return GET_MUTABLE(args[0]);
 }
+
+Value execute_command(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "execute_command", argc, 1);
+  ASSERT_TYPE(mod, "execute_command", args[0], TYPE_STRING);
+
+  char* command = GET_STRING(args[0]);
+  int ret = system(command);
+
+  return MAKE_INTEGER(ret);
+}
