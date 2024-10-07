@@ -3,44 +3,60 @@ module Language.Bonzai.Frontend.Module.Conversion where
 
 import qualified Language.Bonzai.Syntax.HLIR as HLIR
 import qualified GHC.IO as IO
-import Control.Monad.Result (compilerError)
+import Control.Monad.Result
 import qualified Data.Text as Text
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Control.Monad.Except
+import System.FilePath
+import System.Directory (makeAbsolute, doesFileExist)
+import qualified Language.Bonzai.Frontend.Parser as P
+import qualified Language.Bonzai.Frontend.Parser.Expression as P
+import qualified Data.List as List
 
-{-# NOINLINE moduleStack #-}
-moduleStack :: IORef [Text]
-moduleStack = IO.unsafePerformIO $ newIORef []
+type MonadConversion m = (MonadIO m, MonadError Error m)
+
+{-# NOINLINE moduleStackD #-}
+moduleStackD :: IORef [Text]
+moduleStackD = IO.unsafePerformIO $ newIORef []
 
 pushModule :: MonadIO m => Text -> m ()
-pushModule m = modifyIORef moduleStack (m :)
+pushModule m = modifyIORef moduleStackD (m :)
 
 popModule :: MonadIO m => m Text
-popModule = atomicModifyIORef moduleStack $ \case
+popModule = atomicModifyIORef moduleStackD $ \case
   [] -> compilerError "popModule: empty stack"
   x : xs -> (xs, x)
 
 peekModule :: MonadIO m => m Text
-peekModule = readIORef moduleStack >>= \case
+peekModule = readIORef moduleStackD >>= \case
   [] -> compilerError "peekModule: empty stack"
   x : _ -> pure x
 
 buildModule :: MonadIO m => Text -> m Text
 buildModule m = do
-  ms <- readIORef moduleStack
+  ms <- readIORef moduleStackD
   pure $ Text.intercalate "." (reverse (m : ms))
 
-buildVariable :: MonadIO m => Text -> m Text
+buildVariable :: MonadConversion m => Text -> m Text
 buildVariable v = do
-  mdv <- readIORef moduleDefinedVariables
-  ms <- readIORef moduleStack
+  let v' = Text.splitOn "." v
+  let v'' = bisequence (viaNonEmpty init v', viaNonEmpty last v')
 
-  case Map.lookup ms mdv of
-    Just s -> do
-      if Set.member v s
-        then buildModule v
-        else pure v
-    Nothing -> pure v
+  mdv <- readIORef moduleDefinedVariables
+  ms <- readIORef moduleStackD
+
+  case v'' of
+    Just (vs, var) | not (null vs) -> case Map.lookup vs mdv of
+      Just s | Set.member v s -> pure var
+      _ -> throw $ VariableNotFound v
+
+    _ -> case Map.lookup ms mdv of
+      Just s -> do
+        if Set.member v s
+          then buildModule v
+          else pure v
+      Nothing -> throw $ VariableNotFound v
 
 {-# NOINLINE moduleDefinedVariables #-}
 moduleDefinedVariables :: IORef (Map [Text] (Set Text))
@@ -48,13 +64,150 @@ moduleDefinedVariables = IO.unsafePerformIO $ newIORef Map.empty
 
 addVariable :: MonadIO m => Text -> m ()
 addVariable v = do
-  ms <- readIORef moduleStack
+  ms <- readIORef moduleStackD
   modifyIORef moduleDefinedVariables $ \mdv -> case Map.lookup ms mdv of
     Just s -> Map.insert ms (Set.insert v s) mdv
     Nothing -> Map.insert ms (Set.singleton v) mdv
 
-convertToplevel :: MonadIO m => HLIR.HLIR "expression" -> m [HLIR.HLIR "expression"]
-convertToplevel (HLIR.MkExprRequire path) = pure [HLIR.MkExprRequire path]
+mergeVariables :: MonadIO m => Map [Text] (Set Text) -> m ()
+mergeVariables mdv = modifyIORef moduleDefinedVariables $ \mdv' -> Map.unionWith (<>) mdv mdv'
+
+data ModuleUnit = MkModuleUnit {
+  path :: Text,
+  variables :: Map [Text] (Set Text),
+  modules :: [ModuleUnit],
+  expressions :: [HLIR.HLIR "expression"]
+} deriving (Eq)
+
+data ModuleState = MkModuleState
+  { initialPath :: FilePath
+  , currentDirectory :: FilePath
+  , resolved :: Map FilePath ModuleUnit
+  }
+  deriving (Eq)
+
+{-# NOINLINE moduleStack #-}
+moduleStack :: IORef [FilePath]
+moduleStack = IO.unsafePerformIO $ newIORef []
+
+local' :: MonadConversion m => m a -> m a
+local' m = do
+  oldModuleStackD <- readIORef moduleStackD
+  oldModuleDefinedVariables <- readIORef moduleDefinedVariables
+
+  writeIORef moduleStackD []
+  writeIORef moduleDefinedVariables Map.empty
+
+  a <- m
+
+  writeIORef moduleStackD oldModuleStackD
+  writeIORef moduleDefinedVariables oldModuleDefinedVariables
+
+  return a
+  
+
+{-# NOINLINE moduleState #-}
+moduleState :: IORef ModuleState
+moduleState = IO.unsafePerformIO $ newIORef $ MkModuleState "" "" Map.empty
+
+type MonadResolution m = (MonadIO m, MonadError Error m)
+
+getCorrectPath :: MonadResolution m => FilePath -> m FilePath
+getCorrectPath ('s':'t':'d':':':path) = do
+  standardPath <- lookupEnv "BONZAI_PATH"
+
+  case standardPath of
+    Just p -> return $ p </> "standard" </> path <.> "bzi"
+    Nothing -> throw $ EnvironmentVariableNotFound "BONZAI_PATH"
+getCorrectPath path = do
+  st <- readIORef moduleState
+  let cwd = st.currentDirectory </> takeDirectory path
+  let path' = cwd </> takeFileName path <.> "bzi"
+  liftIO $ makeAbsolute path'
+
+resolvePath :: MonadResolution m => FilePath -> m ([HLIR.HLIR "expression"], Map [Text] (Set Text))
+resolvePath path = do
+  st <- readIORef moduleState
+
+  path' <- getCorrectPath path
+  let cwd = takeDirectory path'
+
+  let st' = st { currentDirectory = cwd }
+
+  writeIORef moduleState st'
+
+  let correctPath = normalise path'
+
+  path'' <- liftIO $ makeAbsolute path'
+
+  stack <- readIORef moduleStack
+
+  when (path'' `elem` stack) $ do
+    throw $ CyclicModuleDependency path' stack
+
+  modifyIORef' moduleStack (path'' :)
+
+  case Map.lookup path' st.resolved of
+    Just m -> return (m.expressions, m.variables)
+    Nothing -> do
+      let m = MkModuleUnit (fromString path') Map.empty [] []
+      modifyIORef moduleState $ \st'' -> st' { resolved = Map.insert correctPath m st''.resolved }
+
+      liftIO (doesFileExist path') >>= \case
+        False -> throw (ModuleNotFound correctPath stack)
+        True -> pure ()
+
+      content <- readFileBS path'
+      let contentAsText = decodeUtf8 content
+
+      ast <- P.parseBonzaiFile correctPath contentAsText P.parseProgram
+
+      case ast of
+        Left err -> throw $ ParseError err
+        Right ast' -> do
+          oldModuleStackD <- readIORef moduleStackD
+          oldModuleDefinedVariables <- readIORef moduleDefinedVariables
+          
+          writeIORef moduleStackD []
+          writeIORef moduleDefinedVariables Map.empty
+
+          expressions' <- List.nub . concat <$> mapM convertToplevel ast'
+
+          vars <- readIORef moduleDefinedVariables
+
+          modifyIORef moduleState $ \st'' -> st' {
+            resolved = Map.insert path' m { 
+              expressions = expressions', 
+              variables = vars 
+            } st''.resolved
+          }
+
+          writeIORef moduleStackD oldModuleStackD
+          writeIORef moduleDefinedVariables oldModuleDefinedVariables
+
+          modifyIORef' moduleStack $ drop 1
+
+          return (expressions', vars)
+
+getToplevelVariables :: MonadResolution m => HLIR.HLIR "expression" -> m [Text]
+getToplevelVariables (HLIR.MkExprMut a e) = do
+  addVariable a.name
+  getToplevelVariables e
+getToplevelVariables (HLIR.MkExprLoc e _) = getToplevelVariables e
+getToplevelVariables (HLIR.MkExprNative n _) = do
+  addVariable n.name
+  pure [n.name]
+getToplevelVariables (HLIR.MkExprVariable v) = pure [v.name]
+getToplevelVariables (HLIR.MkExprLet a e) = do
+  addVariable a.name
+  getToplevelVariables e
+getToplevelVariables _ = pure []
+
+convertToplevel :: MonadConversion m => HLIR.HLIR "expression" -> m [HLIR.HLIR "expression"]
+convertToplevel (HLIR.MkExprRequire path) = do
+  (es, vars) <- resolvePath $ toString path
+  mergeVariables vars
+  concat <$> mapM convertToplevel es
 convertToplevel (HLIR.MkExprLoc e p) = do
   HLIR.pushPosition p
   e' <- convertToplevel e
@@ -68,7 +221,7 @@ convertToplevel (HLIR.MkExprModule m e) = do
 convertToplevel e = pure <$> convertModule e
 
 -- | Main conversion function
-convertModule :: MonadIO m => HLIR.HLIR "expression" -> m (HLIR.HLIR "expression")
+convertModule :: MonadConversion m => HLIR.HLIR "expression" -> m (HLIR.HLIR "expression")
 convertModule (HLIR.MkExprMut a e) = do
   a' <- buildModule a.name
   addVariable a.name
@@ -136,7 +289,7 @@ convertModule (HLIR.MkExprInterface ann defs) = do
 convertModule (HLIR.MkExprRequire _) = compilerError "convertModule: require should not appear in module conversion"
 convertModule (HLIR.MkExprModule _ _) = compilerError "convertModule: module should not appear in module conversion"
 
-convertUpdate :: MonadIO m => HLIR.HLIR "update" -> m (HLIR.HLIR "update")
+convertUpdate :: MonadConversion m => HLIR.HLIR "update" -> m (HLIR.HLIR "update")
 convertUpdate (HLIR.MkUpdtVariable a) = pure $ HLIR.MkUpdtVariable a
 convertUpdate (HLIR.MkUpdtField u f) = do
   u' <- convertUpdate u
@@ -147,5 +300,9 @@ convertUpdate (HLIR.MkUpdtIndex u e) = do
 
   pure $ HLIR.MkUpdtIndex u' e'
 
-runModuleConversion :: MonadIO m => [HLIR.HLIR "expression"] -> m [HLIR.HLIR "expression"]
-runModuleConversion = (concat <$>) . mapM convertToplevel
+runModuleConversion :: MonadIO m => [HLIR.HLIR "expression"] -> m (Either Error [HLIR.HLIR "expression"])
+runModuleConversion xs = do
+  writeIORef moduleStack []
+  writeIORef moduleDefinedVariables Map.empty
+
+  runExceptT $ List.nub . concat <$> mapM convertToplevel xs
