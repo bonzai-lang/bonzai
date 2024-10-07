@@ -2,23 +2,40 @@
 #define ERROR_H
 
 #include <stdlib.h>
+#include <color.h>
 
 #define ENABLE_ASSERTIONS 1
 
-#define THROW(module, message)                       \
-  do {                                       \
-    printf(message);                         \
-    printf(" at %s:%d:%d", module->file, module->latest_position[0], module->latest_position[1]); \
-    printf(" in %s:%d", __FILE__, __LINE__);              \
+#define THROW(module, message)                  \
+  do {                                          \
+    printf("%s[error]: %s", BRED, COLOR_RESET); \
+    printf(message);                            \
+    printf("\n"); \
+    if (module->file && module->latest_position[0] != 0 && module->latest_position[1] != 0) { \
+      printf("   %sat %s:%d:%d\n",         \
+        BLK, \
+        module->file,                \
+        module->latest_position[0],  \
+        module->latest_position[1]); \
+    } \
+    printf("   %sin %s:%d", BLK, __func__, __LINE__); \
     printf("\n");                            \
     exit(EXIT_FAILURE);                      \
   } while (0);
 
 #define THROW_FMT(module, ...)   \
   do {                   \
+    printf("%s[error]: %s", BRED, COLOR_RESET); \
     printf(__VA_ARGS__); \
-    printf(" at %s:%d:%d", module->file, module->latest_position[0], module->latest_position[1]); \
-    printf(" in %s:%d", __func__, __LINE__);              \
+    printf("\n"); \
+    if (module->file && module->latest_position[0] != 0 && module->latest_position[1] != 0) { \
+      printf("  %s- at %s:%d:%d\n",         \
+        BLK, \
+        module->file,                \
+        module->latest_position[0],  \
+        module->latest_position[1]); \
+    } \
+    printf("  %s- in %s:%d", BLK, __func__, __LINE__); \
     printf("\n");        \
     exit(EXIT_FAILURE);  \
   } while (0);
