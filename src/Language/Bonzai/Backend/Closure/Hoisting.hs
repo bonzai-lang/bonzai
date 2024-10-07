@@ -91,6 +91,11 @@ hoist (MLIR.MkExprLoc p e) = do
   (e', hoisted) <- hoist e
 
   pure (MLIR.MkExprLoc p e', hoisted)
+hoist (MLIR.MkExprWhile c e) = do
+  (c', hoisted) <- hoist c
+  (e', hoisted') <- hoist e
+
+  pure (MLIR.MkExprWhile c' e', hoisted <> hoisted')
 
 hoistToplevel :: MonadIO m => MLIR.MLIR "expression" -> m [MLIR.MLIR "expression"]
 hoistToplevel (MLIR.MkExprLoc p e) = do

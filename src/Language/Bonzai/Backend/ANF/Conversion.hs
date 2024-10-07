@@ -91,6 +91,11 @@ convert (MLIR.MkExprLoc p e) = do
   (e', stmts) <- convert e
   
   pure (MLIR.MkExprLoc p e', stmts)
+convert (MLIR.MkExprWhile c e) = do
+  (c', stmts1) <- convert c
+  (e', stmts2) <- convert e
+  
+  pure (MLIR.MkExprWhile c' e', stmts1 <> stmts2)
 
 convertUpdate :: MonadIO m => MLIR.MLIR "update" -> m (MLIR.MLIR "update", [(Text, MLIR.MLIR "expression")])
 convertUpdate (MLIR.MkUpdtVariable a) = pure (MLIR.MkUpdtVariable a, [])

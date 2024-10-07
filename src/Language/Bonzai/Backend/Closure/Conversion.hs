@@ -145,32 +145,33 @@ convert (MLIR.MkExprEvent es) = do
   let envAsList = Set.toList env
       dict = MLIR.MkExprList $ map MLIR.MkExprVariable envAsList
 
-  es' <- mapM convert es
+  let prefixBody = zipWith (\n i -> do
+            MLIR.MkExprLet n (MLIR.MkExprIndex (MLIR.MkExprVariable "env") (MLIR.MkExprLiteral (MLIR.MkLitInt i)))
+          ) envAsList [0..]
 
+  es' <- mapM convert es
+  
   pure $ MLIR.MkExprList [
-      MLIR.MkExprEvent es',
+      MLIR.MkExprEvent (map (`incorporate` prefixBody) es'),
       dict
     ]
+
+  where
+    incorporate :: MLIR.MLIR "expression" -> [MLIR.MLIR "expression"] -> MLIR.MLIR "expression"
+    incorporate e [] = e
+    incorporate (MLIR.MkExprLoc p e) xs = MLIR.MkExprLoc p (incorporate e xs)
+    incorporate (MLIR.MkExprOn ev args e) xs = MLIR.MkExprOn ev args (addLets e xs)
+    incorporate e _ = e
+
+    addLets :: MLIR.MLIR "expression" -> [MLIR.MLIR "expression"] -> MLIR.MLIR "expression"
+    addLets e [] = e
+    addLets (MLIR.MkExprLoc p e) xs = MLIR.MkExprLoc p (addLets e xs)
+    addLets (MLIR.MkExprBlock es') xs = MLIR.MkExprBlock (xs <> es')
+    addLets e xs = MLIR.MkExprBlock (xs <> [e])
 convert (MLIR.MkExprOn ev args body) = do
-  let freeVars = M.free body
-  nativesFuns <- readIORef natives
-  globals' <- readIORef globals
-  let finalNativesFuns = Map.keysSet (nativesFuns <> globals') Set.\\ Set.fromList args
-
-  let env = freeVars Set.\\ (finalNativesFuns <> Set.fromList args)
-      envAsList = Set.toList env
-  
-  let prefixBody = zipWith (\n i -> do
-          MLIR.MkExprLet n (MLIR.MkExprIndex (MLIR.MkExprVariable "env") (MLIR.MkExprLiteral (MLIR.MkLitInt i)))
-        ) envAsList [0..]
-
   body' <- convert body
 
-  let finalBody = case removeLoc body' of
-          MLIR.MkExprBlock es -> MLIR.MkExprBlock $ prefixBody <> es
-          e -> MLIR.MkExprBlock $ prefixBody <> [e]
-
-  pure (MLIR.MkExprOn ev ("env" : args) finalBody)
+  pure (MLIR.MkExprOn ev ("env" : args) body')
 convert (MLIR.MkExprSend e ev es) = do
   globals' <- readIORef globals
   natives' <- readIORef natives
@@ -209,6 +210,7 @@ convert (MLIR.MkExprNative n ty) = do
 convert (MLIR.MkExprIndex e i) = MLIR.MkExprIndex <$> convert e <*> convert i
 convert (MLIR.MkExprUnpack x e e') = MLIR.MkExprUnpack x <$> convert e <*> convert e'
 convert (MLIR.MkExprLoc p e) = MLIR.MkExprLoc p <$> convert e
+convert (MLIR.MkExprWhile c e) = MLIR.MkExprWhile <$> convert c <*> convert e
 
 convertUpdate :: MonadIO m => MLIR.Update -> m MLIR.Update
 convertUpdate (MLIR.MkUpdtVariable x) = pure $ MLIR.MkUpdtVariable x

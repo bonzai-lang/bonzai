@@ -108,6 +108,17 @@ parseInterface = localize $ do
 
       pure $ HLIR.MkAnnotation name funTy
 
+parseWhile :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseWhile = localize $ do
+  void $ Lex.reserved "while"
+  cond <- parseExpression
+
+  void $ Lex.symbol "{"
+  body <- P.many parseExpression
+  void $ Lex.symbol "}"
+
+  pure $ HLIR.MkExprWhile cond (HLIR.MkExprBlock body)
+
 parseBlock :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseBlock = localize $ do
   void $ Lex.symbol "{"
@@ -180,6 +191,7 @@ parseRequire = localize $ do
 parseTerm :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseTerm =
   localize $ P.choice [
+    parseWhile,
     P.try parseActor,
     parseAnonActor,
     parseSpawn,

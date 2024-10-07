@@ -324,12 +324,17 @@ instance Assemble MLIR.Expression where
     i <- fetchConstant l
     pure $ LLIR.instr (LLIR.LoadConstant i)
 
-  -- assemble (MLIR.MkExprLoc _ (MLIR.MkExprLoc p e)) = assemble (MLIR.MkExprLoc p e)
+  assemble (MLIR.MkExprLoc _ (MLIR.MkExprLoc p e)) = assemble (MLIR.MkExprLoc p e)
 
   assemble (MLIR.MkExprLoc (p1, _) e) = do
     e' <- assemble e
     file <- fetchConstant (MLIR.MkLitString . toText $ p1.sourceName)
     pure $ LLIR.instr (LLIR.Loc (MP.unPos p1.sourceLine) (MP.unPos p1.sourceColumn) file) <> e'
+
+  assemble (MLIR.MkExprWhile c e) = do
+    c' <- assemble c
+    e' <- assemble e
+    pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (length e' + 2)) <> e' <> LLIR.instr (LLIR.JumpRel (-(length c' + length e' + 1)))
 
 instance Assemble MLIR.Update where
   assemble (MLIR.MkUpdtVariable n) = do

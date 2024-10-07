@@ -185,6 +185,9 @@ resolveImports m (HLIR.MkExprNative ann _) = pure m {variables = Set.singleton a
 resolveImports m (HLIR.MkExprMut name e) = do
   let m' = m {variables = Set.singleton name.name <> variables m}
   resolveImports m' e
+resolveImports m (HLIR.MkExprWhile c e) = do
+  m1 <- resolveImports m c
+  resolveImports m1 e
 
 type Depth = Int
 

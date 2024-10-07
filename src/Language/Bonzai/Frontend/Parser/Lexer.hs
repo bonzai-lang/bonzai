@@ -57,7 +57,11 @@ reservedWords =
       "interface",
       "on",
       "require",
-      "extern"
+      "extern",
+      "if",
+      "then",
+      "else",
+      "while"
     ]
 
 -- | Lexeme parser that consumes whitespace after the lexeme

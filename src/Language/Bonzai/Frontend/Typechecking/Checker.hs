@@ -96,7 +96,7 @@ typecheck (HLIR.MkExprLet ann expr) = do
 
   modifyIORef' M.checkerState $ \st -> st { M.variables = Map.insert ann.name newScheme st.variables }
 
-  pure (HLIR.MkExprLet ann { HLIR.value = Identity ty } expr', exprTy)
+  pure (HLIR.MkExprLet ann { HLIR.value = Identity ty } expr', HLIR.MkTyUnit)
 typecheck (HLIR.MkExprMut ann expr) = do
   ty <- M.fresh
   let scheme = HLIR.Forall [] (HLIR.MkTyMutable ty)
@@ -123,7 +123,7 @@ typecheck (HLIR.MkExprUpdate u e) = do
 
   ty `U.unifiesWith` HLIR.MkTyMutable exprTy
 
-  pure (HLIR.MkExprUpdate u' e', ty)
+  pure (HLIR.MkExprUpdate u' e', HLIR.MkTyUnit)
 typecheck (HLIR.MkExprActor i es) = do
   checkSt <- readIORef M.checkerState
 
@@ -215,6 +215,13 @@ typecheck (HLIR.MkExprInterface ann defs) = do
   modifyIORef M.checkerState $ \st -> st { M.interfaces = Map.insert name (Map.fromList schemes) st.interfaces }
 
   pure (HLIR.MkExprInterface ann defs, HLIR.MkTyId name)
+typecheck (HLIR.MkExprWhile c e) = do
+  (c', ty) <- typecheck c
+  (e', _) <- typecheck e
+
+  ty `U.unifiesWith` HLIR.MkTyBool
+
+  pure (HLIR.MkExprWhile c' e', HLIR.MkTyUnit)
 typecheck (HLIR.MkExprRequire _) = compilerError "typecheck: require should not appear in typechecking"
 
 typecheckUpdate :: M.MonadChecker m => HLIR.HLIR "update" -> m (HLIR.TLIR "update", HLIR.Type)
