@@ -55,28 +55,16 @@ parseList = localize $ do
 parseExtern :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseExtern = localize $ do
   void $ Lex.reserved "extern"
+  void $ Lex.reserved "fn"
+  name <- Lex.identifier <|> Lex.parens Lex.operator
+  gens <- P.option [] $ Lex.angles (P.sepBy Lex.identifier Lex.comma)
 
-  P.choice [
-      do
-        void $ Lex.reserved "fn"
-        name <- Lex.identifier <|> Lex.parens Lex.operator
-        gens <- P.option [] $ Lex.angles (P.sepBy Lex.identifier Lex.comma)
+  args <- Lex.parens $ P.sepBy (parseAnnotation' Typ.parseType) Lex.comma
+  ret <- P.option HLIR.MkTyUnit $ Lex.symbol ":" *> Typ.parseType
 
-        args <- Lex.parens $ P.sepBy (parseAnnotation' Typ.parseType) Lex.comma
-        ret <- P.option HLIR.MkTyUnit $ Lex.symbol ":" *> Typ.parseType
+  let funTy = map (.value) args HLIR.:->: ret
 
-        let funTy = map (.value) args HLIR.:->: ret
-
-        pure $ HLIR.MkExprNative (HLIR.MkAnnotation name gens) funTy,
-
-      do
-        name <- Lex.identifier <|> Lex.parens Lex.operator
-        gens <- P.option [] $ Lex.angles (P.sepBy Lex.identifier Lex.comma)
-
-        ty <- Lex.symbol ":" *> Typ.parseType
-
-        pure $ HLIR.MkExprNative (HLIR.MkAnnotation name gens) ty
-    ]
+  pure $ HLIR.MkExprNative (HLIR.MkAnnotation name gens) funTy
 
 parseVariable :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseVariable = localize $ do

@@ -165,7 +165,7 @@ isIdentCharStart cs = isAlpha (Text.head cs) || Text.head cs == '_'
 -- | is useful for parsing record selections.
 nonLexedID :: MonadIO m => P.Parser m Text
 nonLexedID = do
-  r <- P.takeWhile1P Nothing isIdentChar
+  r <- Text.intercalate "::" <$> (P.takeWhile1P Nothing isIdentChar `P.sepBy1` string "::")
   -- Guarding parsed result and failing when reserved word is parsed
   -- (such as reserved keyword)
   if r `Set.member` reservedWords
@@ -181,7 +181,7 @@ nonLexedID = do
 -- | An identifier cannot be a reserved keyword
 identifier :: MonadIO m => P.Parser m Text
 identifier = lexeme $ do
-  cs <- P.takeWhile1P Nothing isIdentChar
+  cs <- Text.intercalate "::" <$> (P.takeWhile1P Nothing isIdentChar `P.sepBy1` string "::")
   if cs `Set.member` reservedWords
     then fail $ "The identifier " ++ show cs ++ " is a reserved word"
     else
