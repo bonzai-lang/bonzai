@@ -45,7 +45,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
   case_store_local: {
     int bp = module->base_pointer;
-    module->stack->values[bp + i1] = stack_pop(module->stack);
+    module->stack->values[bp + i1] = stack_pop(module);
 
     INCREASE_IP(module);
     goto *jmp_table[op];
@@ -66,7 +66,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_store_global: {
-    Value value = stack_pop(module->stack);
+    Value value = stack_pop(module);
     module->stack->values[i1] = value;
 
     INCREASE_IP(module);
@@ -75,7 +75,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
   case_return: {
     Frame fr = pop_frame(module);
-    Value ret = stack_pop(module->stack);
+    Value ret = stack_pop(module);
 
     module->stack->stack_pointer = fr.stack_pointer;
     module->base_pointer = fr.base_ptr;
@@ -91,8 +91,8 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
 
   case_compare: {
-    Value a = stack_pop(module->stack);
-    Value b = stack_pop(module->stack);
+    Value a = stack_pop(module);
+    Value b = stack_pop(module);
 
     stack_push(module, comparison_table[i1](module, b, a));
     INCREASE_IP(module);
@@ -100,8 +100,8 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_update: {
-    Value variable = stack_pop(module->stack);
-    Value value = stack_pop(module->stack);
+    Value variable = stack_pop(module);
+    Value value = stack_pop(module);
 
     ASSERT_TYPE(module, "update", variable, TYPE_MUTABLE);
 
@@ -116,7 +116,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
     // Loop in reverse order to pop values in the correct order
     for (int i = i1 - 1; i >= 0; i--) {
-      list[i] = stack_pop(module->stack);
+      list[i] = stack_pop(module);
     }
 
     Value value = MAKE_LIST(module, list, i1);
@@ -126,7 +126,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_list_get: {
-    Value list = stack_pop(module->stack);
+    Value list = stack_pop(module);
     int index = i1;
 
     ASSERT_TYPE(module, "list_get", list, TYPE_LIST);
@@ -139,7 +139,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_call: {
-    Value callee = stack_pop(module->stack);
+    Value callee = stack_pop(module);
 
     ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
     
@@ -152,7 +152,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   case_call_local: {}
 
   case_jump_if_false: {
-    Value value = stack_pop(module->stack);
+    Value value = stack_pop(module);
     if (GET_INT(value) == 0) {
       INCREASE_IP_BY(module, i1);
     } else {
@@ -167,8 +167,8 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_get_index: {
-    Value index = stack_pop(module->stack);
-    Value list = stack_pop(module->stack);
+    Value index = stack_pop(module);
+    Value list = stack_pop(module);
 
     ASSERT_TYPE(module, "get_index", list, TYPE_LIST);
     ASSERT_TYPE(module, "get_index", index, TYPE_INTEGER);
@@ -193,7 +193,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_spawn: {
-    Value event = stack_pop(module->stack);
+    Value event = stack_pop(module);
 
     ASSERT_TYPE(module, "spawn", event, TYPE_EVENT);
 
@@ -233,10 +233,10 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
     Value* args = malloc(argsc * sizeof(Value));
     for (int i = 0; i < argsc; i++) {
-      args[i] = stack_pop(module->stack);
+      args[i] = stack_pop(module);
     }
 
-    Value event = stack_pop(module->stack);
+    Value event = stack_pop(module);
 
     ASSERT_TYPE(module, "send", event, TYPE_EVENT);
 
@@ -282,7 +282,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
     // Pop ons in reverse order
     for (int i = fr.ons_count - 1; i >= 0; i--) {
-      Value v = stack_pop(module->stack);
+      Value v = stack_pop(module);
 
       HeapValue* v_hp = GET_PTR(v);
 
@@ -298,7 +298,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_make_mutable: {
-    Value x = stack_pop(module->stack);
+    Value x = stack_pop(module);
     stack_push(module, MAKE_MUTABLE(module, x));
     INCREASE_IP(module);
     goto *jmp_table[op];

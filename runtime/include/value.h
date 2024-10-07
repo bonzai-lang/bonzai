@@ -114,6 +114,7 @@ struct Event {
 typedef struct Stack {
   Value *values;
   int32_t stack_pointer;
+  int32_t stack_capacity;
 } Stack;
 
 #define MAX_FRAMES 1024
@@ -181,7 +182,7 @@ char* type_of(Value value);
 
 Stack* stack_new();
 void stack_push(struct Module *mod, Value value);
-Value stack_pop(Stack* stack);
+Value stack_pop(struct Module* mod);
 
 int value_eq(struct Module* mod, Value a, Value b);
 

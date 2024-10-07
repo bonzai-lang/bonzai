@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <value.h>
+#include <math.h>
 
 void native_print(Value value) {
   if (value == 0) {
@@ -367,19 +368,32 @@ char* type_of(Value value) {
 Stack* stack_new() {
   Stack* stack = malloc(sizeof(Stack));
   stack->stack_pointer = GLOBALS_SIZE;
-  stack->values = malloc(MAX_STACK_SIZE * sizeof(Value));
+  stack->stack_capacity = MAX_STACK_SIZE;
+  stack->values = malloc(stack->stack_capacity * sizeof(Value));
   return stack;
 }
 
 void stack_push(Module* mod, Value value) {
   Stack* stack = mod->stack;
-  if (stack->stack_pointer > MAX_STACK_SIZE) {
-    THROW(mod, "NO MORE MEMORY");
+  if (stack->stack_pointer >= stack->stack_capacity) {
+    stack->stack_capacity *= 2;
+    stack->values = realloc(stack->values, stack->stack_capacity * sizeof(Value));
+
+    if (!stack->values) {
+      THROW(mod, "Failed to allocate memory for stack");
+    }
   }
+
   stack->values[stack->stack_pointer++] = value;
 }
 
-Value stack_pop(Stack* stack) { return stack->values[--stack->stack_pointer]; }
+Value stack_pop(Module* mod) { 
+  Stack* stack = mod->stack;
+  if (stack->stack_pointer <= 0) {
+    THROW(mod, "Stack underflow");
+  }
+  return stack->values[--stack->stack_pointer];
+}
 
 void enqueue(MessageQueue* queue, Message* msg) {
   pthread_mutex_lock(&queue->mutex);
