@@ -7,7 +7,7 @@ data Literal
   | MkLitFloat Double
   | MkLitChar Char
   | MkLitString Text
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
 
 instance ToText Literal where
   toText (MkLitInt i) = T.pack (show i)

@@ -4,6 +4,7 @@ module Language.Bonzai.Syntax.Internal.Type where
 import Prelude hiding (Type)
 import qualified GHC.IO as IO
 import qualified Data.Text as T
+import GHC.Show qualified as S
 
 -- Level represents the level of a type variable. It is used to determine the
 -- scope of a type variable.
@@ -80,3 +81,6 @@ instance ToText Scheme where
 
 instance ToText (Identity Type) where
   toText (Identity a) = toText a
+
+instance Show Type where
+  show = T.unpack . toText
