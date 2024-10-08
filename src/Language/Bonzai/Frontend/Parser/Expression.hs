@@ -213,15 +213,17 @@ parseExpression = localize $ P.makeExprParser parseTerm table
     table = [
         [
           P.Postfix . Lex.makeUnaryOp $ do
-            field <- P.char '.' *> Lex.nonLexedID <* Lex.scn
-            args <- P.option [] $ Lex.parens (P.sepBy parseExpression Lex.comma)
-            let var = HLIR.MkExprVariable (HLIR.MkAnnotation field Nothing)
-            pure $ \e -> HLIR.MkExprApplication var (e:args),
-
-          P.Postfix . Lex.makeUnaryOp $ do
             args <- Lex.parens (P.sepBy parseExpression Lex.comma)
-            pure $ \e -> HLIR.MkExprApplication e args,
-
+            pure $ \e -> HLIR.MkExprApplication e args
+        ],
+        [
+            P.Postfix . Lex.makeUnaryOp $ do
+              field <- P.char '.' *> Lex.nonLexedID <* Lex.scn
+              args <- P.option [] $ Lex.parens (P.sepBy parseExpression Lex.comma)
+              let var = HLIR.MkExprVariable (HLIR.MkAnnotation field Nothing)
+              pure $ \e -> HLIR.MkExprApplication var (e:args)
+        ],
+        [
           P.Postfix . Lex.makeUnaryOp $ do
             void $ Lex.symbol "->"
             name <- Lex.identifier
