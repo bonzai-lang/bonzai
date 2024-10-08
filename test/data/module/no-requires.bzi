@@ -1,0 +1,5 @@
+require "a"
+require "b"
+require "a-plus-b"
+
+print("test")

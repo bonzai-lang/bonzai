@@ -1,0 +1,7 @@
+extern fn print<A>(x: A)
+
+print("test 1")
+
+print("test")
+
+print("test 2")

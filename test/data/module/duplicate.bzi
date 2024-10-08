@@ -1,0 +1,7 @@
+require "b"
+
+print("test")
+
+require "b"
+
+print("test 2")
