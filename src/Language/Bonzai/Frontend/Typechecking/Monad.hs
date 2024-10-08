@@ -62,7 +62,7 @@ enterLevel = modifyIORef' currentLevel (+ 1)
 exitLevel :: (MonadChecker m) => m ()
 exitLevel = modifyIORef' currentLevel (\x -> x - 1)
 
-genSymbol :: (MonadChecker m) => m Text
+genSymbol :: (MonadIO m) => m Text
 genSymbol = do
   s <- readIORef typeCounter
   writeIORef typeCounter (s + 1)
@@ -71,7 +71,7 @@ genSymbol = do
     else pure $ "t" <> show s
 
 -- | Generate a fresh type variable
-fresh :: (MonadChecker m) => m HLIR.Type
+fresh :: (MonadIO m) => m HLIR.Type
 fresh = do
   s <- genSymbol
   lvl <- readIORef currentLevel
@@ -94,6 +94,9 @@ instantiateWithSub s (HLIR.Forall qvars ty) = do
     go subst (HLIR.MkTyQuantified name) = case Map.lookup name subst of
       Just t -> pure (t, subst)
       Nothing -> pure (HLIR.MkTyQuantified name, subst)
+    go subst (HLIR.MkTyId name) = case Map.lookup name subst of
+      Just t -> pure (t, subst)
+      Nothing -> pure (HLIR.MkTyId name, subst)
     go subst (HLIR.MkTyApp t ts) = do
       (t', subst') <- go subst t
       (ts', subst'') <- goMany subst' ts
@@ -105,7 +108,6 @@ instantiateWithSub s (HLIR.Forall qvars ty) = do
         HLIR.Unbound name _ -> case Map.lookup name subst of
           Just t -> pure (t, subst)
           Nothing -> pure (HLIR.MkTyVar ref, subst)
-    go subst t = pure (t, subst)
 
     goMany :: (MonadChecker m) => Substitution -> [HLIR.Type] -> m ([HLIR.Type], Substitution)
     goMany subst (x : xs) = do

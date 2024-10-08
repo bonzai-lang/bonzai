@@ -50,6 +50,9 @@ unifiesWith t t' = do
       (HLIR.MkTyId n, HLIR.MkTyId n') | n == n' -> pure ()
       _ -> M.throw (M.UnificationFail t1 t2)
 
+compressPaths' :: MonadIO m => [HLIR.Type] -> m [HLIR.Type]
+compressPaths' = traverse compressPaths
+
 compressPaths :: MonadIO m => HLIR.Type -> m HLIR.Type
 compressPaths (HLIR.MkTyVar tv) = do
   tv' <- readIORef tv
