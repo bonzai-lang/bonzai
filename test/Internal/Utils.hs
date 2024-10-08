@@ -1,11 +1,14 @@
 module Internal.Utils where
 import Test.Hspec
 import qualified Language.Bonzai.Syntax.HLIR as HLIR
-import Language.Bonzai.Frontend.Parser (parseBonzaiFile, errorBundlePretty)
+import Language.Bonzai.Frontend.Parser (parseBonzaiFile, errorBundlePretty, parseBonzaiTestFile)
 import Language.Bonzai.Frontend.Parser.Expression (parseProgram)
 import System.FilePath (takeFileName, takeDirectory)
 import Language.Bonzai.Frontend.Module.Conversion (moduleState, ModuleState (MkModuleState), resolve, resultState, removeRequires)
 import Control.Monad.Result (Error)
+import Language.Bonzai.Frontend.Typechecking.Monad (CheckerState(MkCheckerState))
+import Language.Bonzai.Frontend.Typechecking.Checker (typecheck)
+import qualified Language.Bonzai.Frontend.Typechecking.Monad as M
 
 shouldBeRight :: (Show a, Eq a, Show b) => Either b a -> a -> Expectation
 shouldBeRight (Right x) y = x `shouldBe` y
@@ -53,6 +56,14 @@ fromFile path = do
     Left err -> fail $ errorBundlePretty err
     Right ast -> pure ast
 
+fromText :: Text -> IO (HLIR.HLIR "expression")
+fromText content = do
+  res <- parseBonzaiTestFile content parseProgram
+  case res of
+    Left err -> fail $ errorBundlePretty err
+    Right [ast] -> pure ast
+    Right _ -> fail "Expected a single expression, but got multiple"
+
 runModuleConversion :: FilePath -> IO (Either Error [HLIR.HLIR "expression"])
 runModuleConversion path = do
   let fileNameWithoutDir = takeFileName path
@@ -73,3 +84,17 @@ runModuleConversion path = do
       ret <- Right . removeRequires <$> readIORef resultState
       writeIORef resultState []
       pure ret
+
+runTypechecking' 
+  :: HLIR.HLIR "expression" 
+  -> Map Text HLIR.Scheme 
+  -> Map Text (Map Text HLIR.Scheme)
+  -> IO (Either Error HLIR.Type)
+runTypechecking' ast vars interfaces = do
+  let st = MkCheckerState vars interfaces
+  res <- M.with M.checkerState (const st) $ runExceptT $ traverse typecheck [ast]
+  
+  case res of
+    Left err -> pure $ Left err
+    Right [(_, ty)] -> pure $ Right ty
+    Right _ -> fail "Expected a single expression, but got multiple"
