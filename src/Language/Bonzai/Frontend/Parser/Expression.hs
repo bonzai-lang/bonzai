@@ -255,17 +255,17 @@ parseExpression = localize $ P.makeExprParser parseTerm table
         ],
         [
           P.InfixN $ do
-            void $ Lex.symbol ">"
-            pure $ \a b -> HLIR.MkExprBinary ">" Nothing a b,
-          P.InfixN $ do
-            void $ Lex.symbol "<"
-            pure $ \a b -> HLIR.MkExprBinary "<" Nothing a b,
-          P.InfixN $ do
             void $ Lex.symbol ">="
             pure $ \a b -> HLIR.MkExprBinary ">=" Nothing a b,
           P.InfixN $ do
             void $ Lex.symbol "<="
-            pure $ \a b -> HLIR.MkExprBinary "<=" Nothing a b
+            pure $ \a b -> HLIR.MkExprBinary "<=" Nothing a b,
+          P.InfixN $ do
+            void $ Lex.symbol ">"
+            pure $ \a b -> HLIR.MkExprBinary ">" Nothing a b,
+          P.InfixN $ do
+            void $ Lex.symbol "<"
+            pure $ \a b -> HLIR.MkExprBinary "<" Nothing a b
         ],
         [
           P.InfixL $ do
