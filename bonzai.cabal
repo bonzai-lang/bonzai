@@ -187,6 +187,8 @@ test-suite bonzai-test
 
     -- Modules included in this executable, other than Main.
     other-modules:
+      Internal.Utils
+      Internal.Module
       Internal.Parser
 
     -- LANGUAGE extensions used by modules in this package.
@@ -207,7 +209,9 @@ test-suite bonzai-test
         bonzai,
         hspec,
         hspec-megaparsec,
-        relude
+        relude,
+        filepath,
+        directory
 
     mixins:
         base hiding (Prelude),
