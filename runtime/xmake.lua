@@ -8,16 +8,24 @@ set_warnings("allextra")
 
 target("bonzai-runtime")
   add_rules("mode.release")
+
+  -- Adding the runtime source files
   add_files("src/**.c")
   add_includedirs("include")
+
+  -- Setting up the target
   set_kind("binary") 
   set_targetdir("bin")
   set_optimize("fastest")
 
 target("bonzai-runtime-test")
   add_rules("mode.debug", "mode.profile")
+
+  -- Adding the runtime source files
   add_files("src/**.c")
   add_includedirs("include")
+  
+  -- Setting up the target
   set_targetdir("bin")
   set_kind("binary")
   set_symbols("debug")
@@ -26,8 +34,12 @@ target("bonzai-runtime-test")
 
 target("bonzai-library")
   add_rules("mode.release")
+  
+  -- Adding the runtime source files
   add_files("src/**.c")
   add_includedirs("include")
+
+  -- Setting up the target
   set_kind("static")
   set_targetdir("lib")
   set_optimize("fastest")
