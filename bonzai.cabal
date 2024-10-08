@@ -72,20 +72,23 @@ library
 
         Language.Bonzai.Frontend.Parser
         Language.Bonzai.Frontend.Parser.Expression
+        Language.Bonzai.Frontend.Parser.Internal.Literal
+        Language.Bonzai.Frontend.Parser.Internal.Type
+        Language.Bonzai.Frontend.Parser.Lexer
 
         Language.Bonzai.Frontend.Module.Conversion
 
         Language.Bonzai.Frontend.Typechecking.Checker
 
         Language.Bonzai.Backend.TypeErasure.Conversion
-        
+
         Language.Bonzai.Backend.Closure.Conversion
         Language.Bonzai.Backend.Closure.Hoisting
 
         Language.Bonzai.Backend.ANF.Conversion
 
         Language.Bonzai.Backend.LLIR.Conversion
-        
+
         Language.Bonzai.Backend.Bytecode.Conversion
         Language.Bonzai.Backend.Bytecode.Serialize
 
@@ -95,10 +98,6 @@ library
         Language.Bonzai.Syntax.Internal.Type
         Language.Bonzai.Syntax.Internal.Position
         Language.Bonzai.Syntax.Internal.Annotation
-
-        Language.Bonzai.Frontend.Parser.Internal.Literal
-        Language.Bonzai.Frontend.Parser.Internal.Type
-        Language.Bonzai.Frontend.Parser.Lexer
 
         Language.Bonzai.Frontend.Typechecking.Monad
         Language.Bonzai.Frontend.Typechecking.Unification
@@ -179,8 +178,16 @@ test-suite bonzai-test
     -- Base language which the package is written in.
     default-language: GHC2021
 
+    default-extensions:
+        DataKinds
+        OverloadedRecordDot
+        OverloadedStrings
+        TemplateHaskell
+        DuplicateRecordFields
+
     -- Modules included in this executable, other than Main.
-    -- other-modules:
+    other-modules:
+      Internal.Parser
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -198,7 +205,9 @@ test-suite bonzai-test
     build-depends:
         base ^>=4.17.2.1,
         bonzai,
-        relude,
+        hspec,
+        hspec-megaparsec,
+        relude
 
     mixins:
         base hiding (Prelude),
