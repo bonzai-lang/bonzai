@@ -79,32 +79,30 @@ library
         Language.Bonzai.Frontend.Module.Conversion
 
         Language.Bonzai.Frontend.Typechecking.Checker
+        Language.Bonzai.Frontend.Typechecking.Monad
+        Language.Bonzai.Frontend.Typechecking.Unification
 
         Language.Bonzai.Backend.TypeErasure.Conversion
 
         Language.Bonzai.Backend.Closure.Conversion
         Language.Bonzai.Backend.Closure.Hoisting
+        Language.Bonzai.Backend.Closure.Free
 
         Language.Bonzai.Backend.ANF.Conversion
 
         Language.Bonzai.Backend.LLIR.Conversion
+        Language.Bonzai.Backend.LLIR.Free
 
         Language.Bonzai.Backend.Bytecode.Conversion
         Language.Bonzai.Backend.Bytecode.Serialize
 
-    -- Modules included in this library but not exported.
-    other-modules:
         Language.Bonzai.Syntax.Internal.Literal
         Language.Bonzai.Syntax.Internal.Type
         Language.Bonzai.Syntax.Internal.Position
         Language.Bonzai.Syntax.Internal.Annotation
 
-        Language.Bonzai.Frontend.Typechecking.Monad
-        Language.Bonzai.Frontend.Typechecking.Unification
-
-        Language.Bonzai.Backend.Closure.Free
-
-        Language.Bonzai.Backend.LLIR.Free
+    -- Modules included in this library but not exported.
+    -- other-modules:
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -190,6 +188,7 @@ test-suite bonzai-test
       Internal.Utils
       Internal.Module
       Internal.Parser
+      Internal.Typechecking
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -211,7 +210,8 @@ test-suite bonzai-test
         hspec-megaparsec,
         relude,
         filepath,
-        directory
+        directory,
+        containers,
 
     mixins:
         base hiding (Prelude),
