@@ -208,7 +208,7 @@ parseTerm =
   ]
 
 parseExpression :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseExpression = P.makeExprParser parseTerm table
+parseExpression = localize $ P.makeExprParser parseTerm table
   where 
     table = [
         [
