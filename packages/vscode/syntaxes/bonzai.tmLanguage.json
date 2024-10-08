@@ -47,7 +47,7 @@
 			"patterns": [
         {
           "name": "keyword.control.bonzai",
-          "match": "\\b(module|actor|interface|let|mut|extern|require|fn|spawn|if|then|else|on)\\b"
+          "match": "\\b(actor|interface|let|mut|extern|require|fn|spawn|if|then|else|on|while)\\b"
         },
         {
           "name": "keyword.operator.bonzai",
