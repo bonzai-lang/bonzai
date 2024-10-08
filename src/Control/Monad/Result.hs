@@ -109,6 +109,7 @@ data BonzaiError
   | ExpectedAnActor HLIR.Type
   | InvalidArgumentQuantity Int Int
   | EnvironmentVariableNotFound Text
+  deriving Show
 
 showError :: P.ParseError -> String
 showError = P.errorBundlePretty
