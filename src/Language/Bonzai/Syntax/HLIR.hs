@@ -23,11 +23,13 @@ import Language.Bonzai.Syntax.Internal.Type as Ty
 import qualified Data.Text as T
 import GHC.TypeLits (Symbol)
 import Prelude hiding (Type)
+import GHC.Show qualified as S
 
 data Update f t
   = MkUpdtVariable (Annotation (f t))
   | MkUpdtField (Update f t) Text
   | MkUpdtIndex (Update f t) (Expression f t)
+  deriving Show
 
 data Expression f t
   = MkExprLiteral Literal
@@ -49,6 +51,9 @@ data Expression f t
   | MkExprNative (Annotation [Text]) Ty.Type
   | MkExprInterface (Annotation [QuVar]) [Annotation t]
   | MkExprWhile (Expression f t) (Expression f t)
+
+instance (ToText t, ToText (f t)) => Show (Expression f t) where
+  show = T.unpack . toText
 
 pattern MkExprBinary :: Text -> f t -> Expression f t -> Expression f t -> Expression f t
 pattern MkExprBinary op t a b = MkExprApplication (MkExprVariable (MkAnnotation op t)) [a, b]
@@ -120,4 +125,5 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprList es == MkExprList es' = es == es'
   MkExprNative ann ty == MkExprNative ann' ty' = ann == ann' && ty == ty'
   MkExprInterface ann as == MkExprInterface ann' as' = ann == ann' && as == as'
+  MkExprWhile c e == MkExprWhile c' e' = c == c' && e == e'
   _ == _ = False
