@@ -7,9 +7,9 @@ import Text.Megaparsec.Char (digitChar)
 
 decimal :: (MonadIO m) => P.Parser m Integer
 decimal = do
-  parts :: [String] <- P.sepBy1 (some digitChar) (MC.char '_')
+  parts :: String <- concat <$> P.sepBy1 (some digitChar) (MC.char '_')
 
-  case readEither (concat parts) of
+  case readEither parts of
     Left _ -> fail "Invalid integer"
     Right x -> pure x
 
@@ -18,10 +18,11 @@ parseInteger = P.signed (pure ()) decimal
 
 parseFloat :: (MonadIO m) => P.Parser m Double
 parseFloat = P.signed (pure ()) $ do
-  int <- decimal
+  int <- concat <$> P.sepBy1 (some digitChar) (MC.char '_')
   void $ MC.char '.'
-  frac <- decimal
-  case readEither (show int <> "." <> show frac) of
+  frac <- concat <$> P.sepBy1 (some digitChar) (MC.char '_')
+
+  case readEither (int <> "." <> frac) of
     Left _ -> fail "Invalid float"
     Right y -> pure y
 
