@@ -129,7 +129,7 @@ typecheck (HLIR.MkExprActor i es) = do
 
   methodsTys <- case Map.lookup i checkSt.interfaces of
     Just tys -> mapM M.instantiate tys
-    Nothing -> throw (M.EventNotFound i)
+    Nothing -> throw (M.ActorNotFound i)
 
   (es', tys) <- unzip <$> traverse (`typecheckEvent` methodsTys) es
 

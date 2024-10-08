@@ -248,7 +248,7 @@ testTypechecking = do
     it "does not typecheck an actor with unknown interface" $ do
       let actor' = actor "event" "interface" [on "event" ["x"] (var "x")]
       res <- runTypechecking' actor' env mempty
-      shouldBeError' res (EventNotFound "interface")
+      shouldBeError' res (ActorNotFound "interface")
 
     it "typechecks an actor" $ do
       let actor' = actor "event" "interface" [on "event" ["x"] (HLIR.MkExprBlock [
