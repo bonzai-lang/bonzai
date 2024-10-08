@@ -6,47 +6,9 @@ import Language.Bonzai.Frontend.Parser.Internal.Literal qualified as Lit
 import Language.Bonzai.Frontend.Parser.Expression qualified as P
 import Control.Monad.Parser qualified as P
 import Test.Hspec
+import Internal.Utils
+
 import Prelude hiding (bool, on)
-
--- shouldBeRight' :: Either a (HLIR.HLIR "expression") -> HLIR.HLIR "expression" -> Expectation
--- shouldBeRight' (Right x) y = removeLoc x `shouldBe` removeLoc y
--- shouldBeRight' (Left _) _ = expectationFailure "Expected Right, but got Left"
-
-shouldBeRight :: (Show a, Eq a, Show b) => Either b a -> a -> Expectation
-shouldBeRight (Right x) y = x `shouldBe` y
-shouldBeRight (Left x) _ = expectationFailure $ "Expected Right, but got Left: " <> show x
-
-shouldBeError :: (Show a, Eq a) => Either b a -> Expectation
-shouldBeError (Left _) = pure ()
-shouldBeError (Right x) = expectationFailure $ "Expected Left, but got Right " <> show x
-
-if_then_else :: HLIR.HLIR "expression" -> HLIR.HLIR "expression" -> HLIR.HLIR "expression" -> HLIR.HLIR "expression"
-if_then_else = HLIR.MkExprTernary
-
-on :: Text -> [Text] -> HLIR.HLIR "expression" -> HLIR.HLIR "expression"
-on name args = HLIR.MkExprOn name (map (`HLIR.MkAnnotation` Nothing) args)
-
-function :: Text -> [Text] -> HLIR.HLIR "expression" -> HLIR.HLIR "expression"
-function name args body = HLIR.MkExprLet (HLIR.MkAnnotation name Nothing) (HLIR.MkExprLambda (map (`HLIR.MkAnnotation` Nothing) args) Nothing body)
-
-var :: Text -> HLIR.HLIR "expression"
-var = HLIR.MkExprVariable . (`HLIR.MkAnnotation` Nothing)
-
-lambda :: [Text] -> HLIR.HLIR "expression" -> HLIR.HLIR "expression"
-lambda args = HLIR.MkExprLambda (map (`HLIR.MkAnnotation` Nothing) args) Nothing
-
-int :: Integer -> HLIR.HLIR "expression"
-int = HLIR.MkExprLiteral . HLIR.MkLitInt
-
-bool :: Bool -> HLIR.HLIR "expression"
-bool True = HLIR.MkExprVariable $ HLIR.MkAnnotation "true" Nothing
-bool False = HLIR.MkExprVariable $ HLIR.MkAnnotation "false" Nothing
-
-anonActor :: Text -> [HLIR.HLIR "expression"] -> HLIR.HLIR "expression"
-anonActor = HLIR.MkExprActor
-
-actor :: Text -> Text -> [HLIR.HLIR "expression"] -> HLIR.HLIR "expression"
-actor name arg body = HLIR.MkExprLet (HLIR.MkAnnotation name Nothing) (HLIR.MkExprActor arg body)
 
 testLiteral :: Spec
 testLiteral = do
@@ -325,22 +287,22 @@ testExpression = do
 
   it "parses a ternary expression" $ do
     let input = "if true then 1 else 0"
-    let expected = if_then_else (bool True) (int 1) (int 0)
+    let expected = ifThenElse (bool True) (int 1) (int 0)
     res <- P.parseTestContent P.parseTernary input
     res `shouldBeRight` expected
 
     let input = "if false then 1 else 0"
-    let expected = if_then_else (bool False) (int 1) (int 0)
+    let expected = ifThenElse (bool False) (int 1) (int 0)
     res <- P.parseTestContent P.parseTernary input
     res `shouldBeRight` expected
 
     let input = "if true then 1 else if false then 0 else 2"
-    let expected = if_then_else (bool True) (int 1) (if_then_else (bool False) (int 0) (int 2))
+    let expected = ifThenElse (bool True) (int 1) (ifThenElse (bool False) (int 0) (int 2))
     res <- P.parseTestContent P.parseTernary input
     res `shouldBeRight` expected
 
     let input = "if true then if false then 0 else 1 else 2"
-    let expected = if_then_else (bool True) (if_then_else (bool False) (int 0) (int 1)) (int 2)
+    let expected = ifThenElse (bool True) (ifThenElse (bool False) (int 0) (int 1)) (int 2)
     res <- P.parseTestContent P.parseTernary input
     res `shouldBeRight` expected
 
@@ -661,7 +623,7 @@ testExpression = do
     res `shouldBeRight` expected
 
     let input = "if true then 1 else 0"
-    let expected = if_then_else (bool True) (int 1) (int 0)
+    let expected = ifThenElse (bool True) (int 1) (int 0)
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
