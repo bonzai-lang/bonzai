@@ -724,7 +724,7 @@ testExpression = do
     let expected = HLIR.MkExprSend (var "x") "f" []
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
-
+    
     let input = "x->f(x)"
     let expected = HLIR.MkExprSend (var "x") "f" [var "x"]
     res <- P.parseTestContent P.parseExpression input
@@ -742,6 +742,36 @@ testExpression = do
     let input = "x->f(x, )"
     res <- P.parseTestContent P.parseExpression input
     shouldBeError res
+
+    let input = "x.y.z"
+    let expected = HLIR.MkExprApplication (var "z") [HLIR.MkExprApplication (var "y") [var "x"]]
+    res <- P.parseTestContent P.parseExpression input
+    res `shouldBeRight` expected
+
+    let input = "x.y.z()"
+    let expected = HLIR.MkExprApplication (var "z") [HLIR.MkExprApplication (var "y") [var "x"]]
+    res <- P.parseTestContent P.parseExpression input
+    res `shouldBeRight` expected
+
+    let input = "x.y.z(x)"
+    let expected = HLIR.MkExprApplication (var "z") [HLIR.MkExprApplication (var "y") [var "x"], var "x"]
+    res <- P.parseTestContent P.parseExpression input
+    res `shouldBeRight` expected
+
+    let input = "x.y.z(x, y)"
+    let expected = HLIR.MkExprApplication (var "z") [HLIR.MkExprApplication (var "y") [var "x"], var "x", var "y"]
+    res <- P.parseTestContent P.parseExpression input
+    res `shouldBeRight` expected
+
+    let input = "x->y(x)->z(y)"
+    let expected = HLIR.MkExprSend (HLIR.MkExprSend (var "x") "y" [var "x"]) "z" [var "y"]
+    res <- P.parseTestContent P.parseExpression input
+    res `shouldBeRight` expected
+
+    let input = "x(y)(z)"
+    let expected = HLIR.MkExprApplication (HLIR.MkExprApplication (var "x") [var "y"]) [var "z"]
+    res <- P.parseTestContent P.parseExpression input
+    res `shouldBeRight` expected
 
     let input = "1 * 2"
     let expected = HLIR.MkExprBinary "*" Nothing (int 1) (int 2)
