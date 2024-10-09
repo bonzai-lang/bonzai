@@ -1,3 +1,0 @@
-[submodule "runtime/libraries/tgc"]
-	path = runtime/libraries/tgc
-	url = https://github.com/orangeduck/tgc.git
