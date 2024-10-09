@@ -171,7 +171,6 @@ Value MAKE_FRAME_NON_GC(int32_t ip, int32_t sp, int32_t bp);
 void gc(struct Module* vm);
 void force_sweep(struct Module* vm);
 HeapValue* allocate(struct Module* mod, ValueType type);
-void gc_free(struct Module* vm, HeapValue* object);
 
 #define MAKE_SPECIAL() kNull
 #define MAKE_ADDRESS(x) MAKE_INTEGER(x)

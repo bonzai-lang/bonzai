@@ -102,46 +102,6 @@ void mark_all(struct Module* vm) {
   }
 }
 
-void gc_free(struct Module* vm, HeapValue* object) {
-  // Remove the object from the list
-  HeapValue** obj = &vm->first_object;
-  while (obj != NULL) {
-    if (*obj == NULL) break;
-    if (*obj == object) break;
-    obj = &(*obj)->next;
-  }
-  *obj = object->next;
-
-  // Free the object
-  switch (object->type) {
-    case TYPE_LIST: {
-      for (uint32_t i = 0; i < object->length; i++) {
-        if (!IS_PTR(object->as_ptr[i])) continue;
-        gc_free(vm, GET_PTR(object->as_ptr[i]));
-      }
-
-      free(object->as_ptr);
-      break;
-    }
-
-    case TYPE_MUTABLE: {
-      if (IS_PTR(*(object->as_ptr))) {
-        gc_free(vm, GET_PTR(*(object->as_ptr)));
-      }
-
-      free(object->as_ptr);
-      break;
-    }
-
-    default: break;
-  }
-
-  free(object);
-
-  vm->num_objects--;
-  
-}
-
 void sweep(struct Module* vm) {
   HeapValue** object = &vm->first_object;
   while (*object) {
@@ -194,12 +154,7 @@ void force_sweep(struct Module* vm) {
   while (object) {
     HeapValue* next = object->next;
     switch (object->type) {
-      case TYPE_LIST: {
-        free(object->as_ptr);
-        break;
-      }
-
-      case TYPE_MUTABLE: {
+      case TYPE_LIST: case TYPE_MUTABLE: {
         free(object->as_ptr);
         break;
       }
