@@ -397,6 +397,8 @@ getGlobals (MLIR.MkExprFunction name _ _ : es) = Set.insert name (getGlobals es)
 getGlobals (MLIR.MkExprLet name _ : xs) = Set.insert name (getGlobals xs)
 getGlobals (MLIR.MkExprMut name _ : xs) = Set.insert name (getGlobals xs)
 getGlobals (MLIR.MkExprLoc _ e : xs) = getGlobals (e : xs)
+getGlobals (MLIR.MkExprTernary c t e : xs) = getGlobals (c : t : e : xs)
+getGlobals (MLIR.MkExprBlock es : xs) = getGlobals (es ++ xs)
 getGlobals (_ : xs) = getGlobals xs
 getGlobals [] = mempty
 

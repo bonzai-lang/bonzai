@@ -24,6 +24,7 @@ convert (HLIR.MkExprNative n ty) = MLIR.MkExprNative n ty
 convert (HLIR.MkExprMut a e) = MLIR.MkExprMut a.name (convert e)
 convert (HLIR.MkExprInterface {}) = MLIR.MkExprLiteral (HLIR.MkLitInt 0)
 convert (HLIR.MkExprWhile c e) = MLIR.MkExprWhile (convert c) (convert e)
+convert (HLIR.MkExprIndex e e') = MLIR.MkExprIndex (convert e) (convert e')
 
 convertUpdate :: HLIR.TLIR "update" -> MLIR.MLIR "update"
 convertUpdate (HLIR.MkUpdtVariable a) = MLIR.MkUpdtVariable a.name
