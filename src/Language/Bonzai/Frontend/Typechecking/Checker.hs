@@ -222,6 +222,16 @@ typecheck (HLIR.MkExprWhile c e) = do
   ty `U.unifiesWith` HLIR.MkTyBool
 
   pure (HLIR.MkExprWhile c' e', HLIR.MkTyUnit)
+typecheck (HLIR.MkExprIndex e i) = do
+  (e', ty) <- typecheck e
+  (i', idxTy) <- typecheck i
+
+  tvar <- M.fresh
+
+  ty `U.unifiesWith` HLIR.MkTyList tvar
+  idxTy `U.unifiesWith` HLIR.MkTyInt
+
+  pure (HLIR.MkExprIndex e' i', tvar)
 typecheck (HLIR.MkExprRequire _) = compilerError "typecheck: require should not appear in typechecking"
 
 typecheckUpdate :: M.MonadChecker m => HLIR.HLIR "update" -> m (HLIR.TLIR "update", HLIR.Type)

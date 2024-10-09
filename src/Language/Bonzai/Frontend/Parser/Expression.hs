@@ -225,6 +225,14 @@ parseExpression = localize $ P.makeExprParser parseTerm table
         ],
         [
           P.Postfix . Lex.makeUnaryOp $ do
+            void $ Lex.symbol "["
+            idx <- parseExpression
+            void $ Lex.symbol "]"
+
+            pure $ \e -> HLIR.MkExprIndex e idx
+        ],
+        [
+          P.Postfix . Lex.makeUnaryOp $ do
             void $ Lex.symbol "->"
             name <- Lex.identifier
             args <- Lex.parens (P.sepBy parseExpression Lex.comma)

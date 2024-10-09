@@ -188,6 +188,10 @@ resolveImports m (HLIR.MkExprMut name e) = do
 resolveImports m (HLIR.MkExprWhile c e) = do
   m1 <- resolveImports m c
   resolveImports m1 e
+resolveImports m (HLIR.MkExprIndex e e') = do
+  m1 <- resolveImports m e
+  void $ resolveImports m1 e'
+  pure m
 
 type Depth = Int
 
