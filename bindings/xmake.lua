@@ -5,6 +5,7 @@ else
 end
 
 set_warnings("allextra")
+add_requires("bdwgc", {system = false})
 
 target("bonzai-standard")
   add_rules("mode.release")
@@ -12,6 +13,7 @@ target("bonzai-standard")
   add_files("../runtime/src/**.c")
   add_includedirs("include")
   add_includedirs("../runtime/include")
+  add_packages("bdwgc")
 
   set_kind("shared")
   set_targetdir("bin")
@@ -25,6 +27,7 @@ target("bonzai-standard-test")
   add_files("../runtime/src/**.c")
   add_includedirs("include")
   add_includedirs("../runtime/include")
+  add_packages("bdwgc")
 
   set_kind("shared")
   set_targetdir("bin")
