@@ -1,0 +1,36 @@
+require "std:natives"
+
+extern fn get_args(): list<string>
+extern fn slice<A>(xs: list<A>, start: int, end: int): list<A>
+extern fn get_cwd(): string
+extern fn file_exists(path: string): bool
+extern fn get_env(name: string): string
+extern fn execute_command(command: string)
+extern fn execute_command_silent(command: string)
+extern fn length<A>(xs: list<A>): int
+
+fn error(msg: string) => print("\ESC[1;31m[error]:\ESC[0m " + msg)
+
+let cwd = get_cwd()
+let build_file = cwd + "/build.bzi"
+
+let args = get_args()
+
+if file_exists(build_file) then {
+  let bonzai_path = get_env("BONZAI_PATH")
+
+  execute_command_silent("bonzaic " + build_file)
+  execute_command("bonzai " + build_file + ".bin -l $BONZAI_PATH/bindings/bin/bindings.dylib")
+} else if length(args) == 5 then {
+  let bonzai_path = get_env("BONZAI_PATH")
+  let build_file = cwd + "/" + args[4]
+
+  if file_exists(build_file) then {
+    execute_command_silent("bonzaic " + build_file)
+    execute_command("bonzai " + build_file + ".bin -l $BONZAI_PATH/bindings/bin/bindings.dylib")
+  } else {
+    error("No build file found in " + build_file)
+  }
+} else {
+  error("You must either have a build.bzi file in the current directory or pass a build file as an argument")
+}
