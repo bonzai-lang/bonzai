@@ -127,11 +127,14 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
   case_list_get: {
     Value list = stack_pop(module);
-    int index = i1;
+    uint32_t index = i1;
 
     ASSERT_TYPE(module, "list_get", list, TYPE_LIST);
 
     Value* list_ptr = GET_LIST(list);
+
+    ASSERT_FMT(module, index >= 0 && index < GET_PTR(list)->length, "Index out of bounds, received %d", index);
+
     stack_push(module, list_ptr[index]);
 
     INCREASE_IP(module);
@@ -174,7 +177,11 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     ASSERT_TYPE(module, "get_index", index, TYPE_INTEGER);
 
     Value* list_ptr = GET_LIST(list);
-    stack_push(module, list_ptr[GET_INT(index)]);
+    uint32_t idx = GET_INT(index);
+    
+    ASSERT_FMT(module, idx >= 0 && idx < GET_PTR(list)->length, "Index out of bounds, received %d", idx);
+
+    stack_push(module, list_ptr[idx]);
 
     INCREASE_IP(module);
     goto *jmp_table[op];
