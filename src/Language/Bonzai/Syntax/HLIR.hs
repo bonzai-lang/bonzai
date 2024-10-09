@@ -51,6 +51,7 @@ data Expression f t
   | MkExprNative (Annotation [Text]) Ty.Type
   | MkExprInterface (Annotation [QuVar]) [Annotation t]
   | MkExprWhile (Expression f t) (Expression f t)
+  | MkExprIndex (Expression f t) (Expression f t)
 
 instance (ToText t, ToText (f t)) => Show (Expression f t) where
   show = T.unpack . toText
@@ -91,6 +92,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprMut a e) = T.concat ["mut ", toText a, " = ", toText e]
   toText (MkExprInterface ann as) = T.concat ["interface ", toText ann.name, "<", T.intercalate ", " (map toText as), ">"]
   toText (MkExprWhile c e) = T.concat ["while ", toText c, " { ", toText e, " }"]
+  toText (MkExprIndex e e') = T.concat [toText e, "[", toText e', "]"]
 
 instance (ToText t, ToText (f t)) => ToText [Expression f t] where
   toText = T.intercalate "\n" . map toText
