@@ -73,7 +73,7 @@ Here, let's decompose the code into steps:
   ```
 2. **Build the project**:
   ```sh
-  python3 build.py
+  python3 scripts/build.py
   ```
 3. **Set the environment variable**:
   ```sh
