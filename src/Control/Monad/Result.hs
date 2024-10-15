@@ -90,6 +90,24 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
         Nothing
         ("Environment variable " <> show name <> " not found", Just "check for typo issue with the variable name", pos)
         "Resolution"
+    
+    InvalidConstructor name ->
+      printErrorFromString
+        Nothing
+        ("Invalid constructor " <> show name, Just "check for typo issue with the constructor name", pos)
+        "Resolution"
+    
+    EmptyMatch ->
+      printErrorFromString
+        Nothing
+        ("Empty match statement", Just "check for missing cases in the match statement", pos)
+        "Resolution"
+    
+    InvalidPatternUnion env1 env2 ->
+      printErrorFromString
+        Nothing
+        ("Invalid pattern union between " <> show env1 <> " and " <> show env2, Nothing, pos)
+        "Resolution"
 
 
 type ImportStack = [FilePath]
@@ -109,6 +127,9 @@ data BonzaiError
   | ExpectedAnActor HLIR.Type
   | InvalidArgumentQuantity Int Int
   | EnvironmentVariableNotFound Text
+  | InvalidConstructor Text
+  | EmptyMatch
+  | InvalidPatternUnion (Set Text) (Set Text)
   deriving (Show, Eq)
 
 showError :: P.ParseError -> String
