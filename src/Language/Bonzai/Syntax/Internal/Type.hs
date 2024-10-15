@@ -28,7 +28,7 @@ data TyVar
   deriving (Eq)
 
 data Scheme = Forall [QuVar] Type
-  deriving (Eq)
+  deriving (Eq, Show)
 
 instance Eq Type where
   MkTyId a == MkTyId b = a == b
