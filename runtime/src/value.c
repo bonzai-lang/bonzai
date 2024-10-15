@@ -26,18 +26,36 @@ void native_print(Value value) {
       break;
     case TYPE_LIST: {
       HeapValue* list = GET_PTR(value);
-      printf("[");
+      
       if (list->length == 0) {
-        printf("]");
+        printf("[]");
         break;
       }
-      for (uint32_t i = 0; i < list->length; i++) {
-        native_print(list->as_ptr[i]);
-        if (i < list->length - 1) {
-          printf(", ");
+
+      if (list->as_ptr[0] == kNull) {
+        printf("%s::%s(", GET_STRING(list->as_ptr[1]), GET_STRING(list->as_ptr[2]));
+
+        for (uint32_t i = 3; i < list->length; i++) {
+          native_print(list->as_ptr[i]);
+          if (i < list->length - 1) {
+            printf(", ");
+          }
         }
+
+        printf(")");
+      } else {
+        printf("[");
+
+        for (uint32_t i = 0; i < list->length; i++) {
+          native_print(list->as_ptr[i]);
+          if (i < list->length - 1) {
+            printf(", ");
+          }
+        }
+        
+        printf("]");
       }
-      printf("]");
+
       break;
     }
     case TYPE_MUTABLE: {
