@@ -7,6 +7,11 @@ extern fn div_value<A>(x: A, y: A): A
 extern fn exit_with<A>(code: int): A
 extern fn mutable_value<A>(x: mutable<A>): A
 
+extern fn and_value<A>(x: bool, y: bool): bool
+extern fn or_value<A>(x: bool, y: bool): bool
+
+extern fn panic<A>(msg: string): A
+
 extern fn eq_value<A>(x: A, y: A): bool
 extern fn neq_value<A>(x: A, y: A): bool
 extern fn lt_value<A>(x: A, y: A): bool
@@ -30,3 +35,6 @@ let (+) = add_value
 let (-) = sub_value
 let (*) = mul_value
 let (/) = div_value
+
+let (&&) = and_value
+let (||) = or_value
