@@ -88,6 +88,23 @@ parseMut = localize $ do
 
   HLIR.MkExprMut (HLIR.MkAnnotation name Nothing) <$> parseExpression
 
+parseDatatype :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseDatatype = localize $ do
+  void $ Lex.reserved "type"
+  name <- Lex.identifier
+  gens <- P.option [] $ Lex.angles (P.sepBy Lex.identifier Lex.comma)
+
+  HLIR.MkExprData (HLIR.MkAnnotation name gens) <$> Lex.braces (P.sepBy1 parseDataConstructor Lex.comma)
+
+  where
+    parseDataConstructor :: MonadIO m => P.Parser m (HLIR.DataConstructor HLIR.Type)
+    parseDataConstructor = P.choice [
+       P.try $ HLIR.MkDataConstructor 
+            <$> Lex.identifier 
+            <*> Lex.parens (P.sepBy ((.value) <$> parseAnnotation' Typ.parseType) Lex.comma),
+        HLIR.MkDataVariable <$> Lex.identifier
+      ]
+
 parseInterface :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseInterface = localize $ do
   void $ Lex.reserved "interface"
@@ -107,6 +124,55 @@ parseInterface = localize $ do
       let funTy = map (.value) args HLIR.:->: HLIR.MkTyUnit
 
       pure $ HLIR.MkAnnotation name funTy
+
+parseMatch :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseMatch = localize $ do
+  void $ Lex.reserved "match"
+  expr <- parseExpression
+
+  void $ Lex.symbol "{"
+  cases <- P.many parseCase
+  void $ Lex.symbol "}"
+
+  pure $ HLIR.MkExprMatch expr cases
+
+  where
+    parseCase :: MonadIO m => P.Parser m (HLIR.HLIR "pattern", HLIR.HLIR "expression")
+    parseCase = do
+      void $ Lex.reserved "case"
+      pat <- parsePattern
+
+      void $ Lex.symbol "=>"
+      expr <- parseExpression
+
+      pure (pat, expr)
+
+    parsePatternTerm :: MonadIO m => P.Parser m (HLIR.HLIR "pattern")
+    parsePatternTerm = P.choice [
+        P.try $ HLIR.MkPatConstructor <$> Lex.identifier <*> Lex.parens (P.sepBy1 parsePattern Lex.comma),
+        HLIR.MkPatLiteral <$> Lex.lexeme Lit.parseLiteral,
+        HLIR.MkPatWildcard <$ Lex.symbol "_",
+        HLIR.MkPatVariable <$> Lex.identifier <*> pure Nothing
+      ]
+
+    parsePattern :: MonadIO m => P.Parser m (HLIR.HLIR "pattern")
+    parsePattern = P.makeExprParser parsePatternTerm table
+      where
+        table = [
+            [
+              P.InfixL $ do
+                void $ Lex.symbol "|"
+                pure $ \a b -> HLIR.MkPatOr a b
+            ],
+            [
+              P.Postfix . Lex.makeUnaryOp $ do
+                void $ Lex.symbol "if"
+                cond <- parseExpression
+                pure $ \p -> HLIR.MkPatCondition cond p
+            ]
+          ]
+
+    
 
 parseWhile :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseWhile = localize $ do
@@ -199,6 +265,7 @@ parseTerm =
     parseLambda,
     parseLet,
     parseMut,
+    parseMatch,
     parseTernary,
     parseLiteral,
     parseBlock,
@@ -291,6 +358,7 @@ parseToplevel :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseToplevel =
   localize $ P.choice [
     parseInterface,
+    parseDatatype,
     parseRequire,
     parseExtern,
     parseExpression

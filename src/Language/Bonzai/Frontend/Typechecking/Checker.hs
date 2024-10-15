@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module Language.Bonzai.Frontend.Typechecking.Checker where
 
 import qualified Language.Bonzai.Syntax.HLIR as HLIR
@@ -6,6 +7,7 @@ import Control.Monad.Result
 import qualified Data.Map as Map
 import qualified Language.Bonzai.Frontend.Typechecking.Unification as U
 import qualified Data.List as List
+import qualified Data.Foldable as Foldable
 
 typecheck :: M.MonadChecker m => HLIR.HLIR "expression" -> m (HLIR.TLIR "expression", HLIR.Type)
 typecheck (HLIR.MkExprVariable ann) = do
@@ -232,7 +234,119 @@ typecheck (HLIR.MkExprIndex e i) = do
   idxTy `U.unifiesWith` HLIR.MkTyInt
 
   pure (HLIR.MkExprIndex e' i', tvar)
+typecheck (HLIR.MkExprMatch scrut cases) = do
+  (scrut', scrutTy) <- typecheck scrut
+
+  (cases', tys) <- unzip <$> traverse (\(pat, e) -> do
+      (pat', patTy, env) <- typecheckPattern pat
+      scrutTy `U.unifiesWith` patTy
+
+      (e', eTy) <- M.with M.checkerState (\st -> st { M.variables = env <> st.variables }) $ typecheck e
+
+      pure ((pat', e'), eTy)
+    ) cases
+
+  (exprTy, exprTys) <- case tys of
+    [] -> throw M.EmptyMatch
+    (x : xs'') -> return (x, xs'')
+
+  -- Unify the return type with the type of the case expressions
+  forM_ exprTys $ U.unifiesWith exprTy
+
+  pure (HLIR.MkExprMatch scrut' cases', exprTy)
+
+typecheck (HLIR.MkExprData ann constrs) = do
+  let name = ann.name
+      generics = ann.value
+      header = if null generics then HLIR.MkTyId name else HLIR.MkTyApp (HLIR.MkTyId name) (HLIR.MkTyQuantified <$> generics)
+
+  let schemes = map (\case
+          HLIR.MkDataConstructor constrName args ->
+            (constrName, HLIR.Forall generics (args HLIR.:->: header))
+
+          HLIR.MkDataVariable varName ->
+            (varName, HLIR.Forall generics header)
+        ) constrs
+
+  modifyIORef M.checkerState $ \st -> st { M.variables = Map.fromList schemes <> st.variables }
+
+  pure (HLIR.MkExprData ann constrs, HLIR.MkTyId name)
 typecheck (HLIR.MkExprRequire _) = compilerError "typecheck: require should not appear in typechecking"
+
+typecheckPattern :: M.MonadChecker m => HLIR.HLIR "pattern" -> m (HLIR.TLIR "pattern", HLIR.Type, Map Text HLIR.Scheme)
+typecheckPattern (HLIR.MkPatVariable name varTy) = do
+  st <- readIORef M.checkerState
+
+  case Map.lookup name st.variables of
+    Just s -> do
+      ty' <- M.instantiate s
+      pure (HLIR.MkPatVariable name (Identity ty'), ty', Map.empty)
+    Nothing -> do
+      ty <- maybe M.fresh pure varTy
+      let scheme = HLIR.Forall [] ty
+      pure (HLIR.MkPatVariable name (Identity ty), ty, Map.singleton name scheme)
+typecheckPattern (HLIR.MkPatLiteral l) = do
+  let ty = case l of
+        HLIR.MkLitChar _ -> HLIR.MkTyChar
+        HLIR.MkLitInt _ -> HLIR.MkTyInt
+        HLIR.MkLitFloat _ -> HLIR.MkTyFloat
+        HLIR.MkLitString _ -> HLIR.MkTyString
+  pure (HLIR.MkPatLiteral l, ty, Map.empty)
+typecheckPattern (HLIR.MkPatConstructor name pats) = do
+  st <- readIORef M.checkerState
+  case Map.lookup name st.variables of
+    Just sch -> do
+      ty <- M.instantiate sch
+      case ty of
+        tys HLIR.:->: ret -> do
+          (pats', env) <- unzip <$> zipWithM (\pat ty' -> do
+              (pat', ty'', env) <- typecheckPattern pat
+              ty' `U.unifiesWith` ty''
+              pure (pat', env)
+            ) pats tys
+
+          pure (HLIR.MkPatConstructor name pats', ret, Map.unions env)
+        _ -> throw (M.InvalidConstructor name)
+    Nothing -> throw (M.InvalidConstructor name)
+typecheckPattern HLIR.MkPatWildcard = do
+  ty <- M.fresh
+  pure (HLIR.MkPatWildcard, ty, Map.empty)
+typecheckPattern (HLIR.MkPatSpecial {}) =
+  throw (CompilerError "typecheckPattern: special patterns are not supported")
+typecheckPattern (HLIR.MkPatLocated p loc) =
+  HLIR.pushPosition loc *> typecheckPattern p <* HLIR.popPosition
+typecheckPattern (HLIR.MkPatOr p1 p2) = do
+  (p1', ty, env1) <- typecheckPattern p1
+  (p2', ty', env2) <- typecheckPattern p2
+
+  ty `U.unifiesWith` ty'
+
+  instEnv1 <- traverse M.instantiate env1
+  instEnv2 <- traverse M.instantiate env2
+
+  -- Check if the environments are disjoint
+  common <- intersectionWithM U.doesUnifyWith instEnv1 instEnv2
+
+  if null common || (Map.size common /= Map.size env1 && Map.size common /= Map.size env2)
+    then throw (M.InvalidPatternUnion (Map.keysSet env1) (Map.keysSet env2)) 
+    else if and common
+      then pure (HLIR.MkPatOr p1' p2', ty, Map.union env1 env2)
+      else throw (M.InvalidPatternUnion (Map.keysSet env1) (Map.keysSet env2))
+typecheckPattern (HLIR.MkPatCondition e p) = do
+  (p', ty, env) <- typecheckPattern p
+  (e', ty') <- M.with M.checkerState (\st -> st { M.variables = env <> st.variables }) $ typecheck e
+
+  ty' `U.unifiesWith` HLIR.MkTyBool
+
+  pure (HLIR.MkPatCondition e' p', ty, env)
+
+intersectionWithM :: (Ord k, Monad m) => (a -> b -> m c) -> Map k a -> Map k b -> m (Map k c)
+intersectionWithM f m1 m2 = do
+  let common = Map.intersection m1 m2
+  Foldable.foldlM (\m (k, v) -> do
+      v' <- f v (m2 Map.! k)
+      pure $ Map.insert k v' m
+    ) Map.empty (Map.toList common)
 
 typecheckUpdate :: M.MonadChecker m => HLIR.HLIR "update" -> m (HLIR.TLIR "update", HLIR.Type)
 typecheckUpdate (HLIR.MkUpdtVariable ann) = do

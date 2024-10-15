@@ -72,3 +72,8 @@ association :: Ord a => Map a b -> Map a c -> Map a (Maybe b, Maybe c)
 association m1 m2 = Map.fromList $ do
   (k, v) <- Map.toList m1
   pure (k, (Just v, Map.lookup k m2))
+
+doesUnifyWith :: M.MonadChecker m => HLIR.Type -> HLIR.Type -> m Bool
+doesUnifyWith t t' = runExceptT (unifiesWith t t') >>= \case
+  Left _ -> pure False
+  Right _ -> pure True

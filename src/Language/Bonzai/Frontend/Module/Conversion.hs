@@ -21,13 +21,13 @@ data ModuleUnit = MkModuleUnit
   { name :: FilePath
   , path :: FilePath
   , public :: Bool
-  , imports :: [ModuleUnit]
+  , imports :: Set ModuleUnit
   , -- Imported data
     variables :: Set Text
   , types :: Set Text
   , classes :: Set Text
   }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 -- | Module state
 data ModuleState = MkModuleState
@@ -116,11 +116,17 @@ resolve path isPublic = do
           modifyIORef importStack (drop 1)
           pure modUnit
 
+foldM' :: (Monad m) => (a -> b -> m a) -> a -> [b] -> m a
+foldM' _ z [] = return z
+foldM' f z (x:xs) = do
+  z' <- f z x
+  z' `seq` foldM' f z' xs
+
 -- | Main conversion function
 resolveImports :: (MonadResolution m) => ModuleUnit -> HLIR.HLIR "expression" -> m ModuleUnit
 resolveImports m (HLIR.MkExprApplication f args) = do
   m1 <- resolveImports m f
-  foldlM resolveImports m1 args
+  foldM' resolveImports m1 args
 resolveImports m (HLIR.MkExprLambda args _ body) = do
   old <- readIORef moduleState
   modifyIORef' moduleState $ \st -> 
@@ -155,7 +161,7 @@ resolveImports m (HLIR.MkExprInterface name _) = do
   pure m'
 resolveImports m (HLIR.MkExprRequire path) = do
   m' <- resolve (toString path) False
-  pure $ m {imports = m' : imports m}
+  pure $ m {imports = Set.insert m' m.imports}
 resolveImports m (HLIR.MkExprUpdate u e) = do
   m1 <- resolveUpdate m u
   resolveImports m1 e
@@ -192,6 +198,35 @@ resolveImports m (HLIR.MkExprIndex e e') = do
   m1 <- resolveImports m e
   void $ resolveImports m1 e'
   pure m
+resolveImports m (HLIR.MkExprData ann cs) = do
+  let m' = m {types = Set.singleton ann.name <> types m}
+  foldM' resolveImportsDataConstr m' cs
+resolveImports m (HLIR.MkExprMatch e cs) = do
+  void $ resolveImports m e
+  mapM_ (\(p, b) -> do
+      m' <- resolveImportsPattern m p
+      resolveImports m' b
+    ) cs
+
+  pure m
+
+resolveImportsPattern :: MonadConversion m => ModuleUnit -> HLIR.HLIR "pattern" -> m ModuleUnit
+resolveImportsPattern m (HLIR.MkPatVariable n _) = pure m { variables = Set.insert n m.variables }
+resolveImportsPattern m (HLIR.MkPatConstructor _ ps) = foldM' resolveImportsPattern m ps
+resolveImportsPattern m (HLIR.MkPatLiteral _) = pure m
+resolveImportsPattern m HLIR.MkPatWildcard = pure m
+resolveImportsPattern m (HLIR.MkPatSpecial _) = pure m
+resolveImportsPattern m (HLIR.MkPatLocated p _) = resolveImportsPattern m p
+resolveImportsPattern m (HLIR.MkPatOr p p') = do
+  m1 <- resolveImportsPattern m p
+  resolveImportsPattern m1 p'
+resolveImportsPattern m (HLIR.MkPatCondition e p) = do
+  m1 <- resolveImportsPattern m p
+  resolveImports m1 e
+
+resolveImportsDataConstr :: MonadConversion m => ModuleUnit -> HLIR.DataConstructor HLIR.Type -> m ModuleUnit
+resolveImportsDataConstr m (HLIR.MkDataVariable n) = pure m { variables = Set.insert n m.variables }
+resolveImportsDataConstr m (HLIR.MkDataConstructor n _) = pure m { variables = Set.insert n m.variables }
 
 type Depth = Int
 
@@ -200,8 +235,8 @@ isVariableDefined depth v m =
   Set.member v m.variables
     || any (isVariableDefined (depth + 1) v) getPublicImports
  where
-  getPublicImports :: [ModuleUnit]
-  getPublicImports = filter (\m' -> public m' || depth == 0) m.imports
+  getPublicImports :: Set ModuleUnit
+  getPublicImports = Set.filter (\m' -> public m' || depth == 0) m.imports
 
 removeRequires :: [HLIR.HLIR "expression"] -> [HLIR.HLIR "expression"]
 removeRequires = filter (not . isRequire)
