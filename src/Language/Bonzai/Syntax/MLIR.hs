@@ -50,6 +50,7 @@ data Expression
   | MkExprMut Text Expression
   | MkExprLoc Position Expression
   | MkExprWhile Expression Expression
+  | MkExprSpecial
   deriving (Eq)
 
 pattern MkExprFunction :: Text -> [Text] -> Expression -> Expression
@@ -87,6 +88,7 @@ instance ToText Expression where
   toText (MkExprMut a e) = T.concat ["mut ", a, " = ", toText e]
   toText (MkExprLoc _ e) = toText e
   toText (MkExprWhile c e) = T.concat ["while ", toText c, " { ", toText e, " }"]
+  toText MkExprSpecial = "<special>"
 
 instance ToText [Expression] where
   toText = T.intercalate "\n" . map toText

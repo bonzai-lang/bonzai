@@ -3,6 +3,8 @@
 module Language.Bonzai.Syntax.HLIR (
   Update(..),
   Expression(..),
+  DataConstructor(..),
+  Pattern(..),
 
   pattern MkExprBinary,
 
@@ -52,6 +54,22 @@ data Expression f t
   | MkExprInterface (Annotation [QuVar]) [Annotation t]
   | MkExprWhile (Expression f t) (Expression f t)
   | MkExprIndex (Expression f t) (Expression f t)
+  | MkExprData (Annotation [Text]) [DataConstructor t]
+  | MkExprMatch (Expression f t) [(Pattern f t, Expression f t)]
+
+data DataConstructor t
+  = MkDataVariable Text
+  | MkDataConstructor Text [t]
+
+data Pattern f t 
+  = MkPatVariable Text (f t)
+  | MkPatConstructor Text [Pattern f t]
+  | MkPatLiteral Literal
+  | MkPatWildcard 
+  | MkPatSpecial Text
+  | MkPatLocated (Pattern f t) Position
+  | MkPatOr (Pattern f t) (Pattern f t)
+  | MkPatCondition (Expression f t) (Pattern f t)
 
 instance (ToText t, ToText (f t)) => Show (Expression f t) where
   show = T.unpack . toText
@@ -62,10 +80,14 @@ pattern MkExprBinary op t a b = MkExprApplication (MkExprVariable (MkAnnotation 
 type family HLIR (s :: Symbol) where
   HLIR "update" = Update Maybe Type
   HLIR "expression" = Expression Maybe Type
+  HLIR "pattern" = Pattern Maybe Type
+  HLIR "data" = DataConstructor Type
 
 type family TLIR (s :: Symbol) where
   TLIR "update" = Update Identity Type
   TLIR "expression" = Expression Identity Type
+  TLIR "pattern" = Pattern Identity Type
+  TLIR "data" = DataConstructor Type
 
 instance (ToText t, ToText (f t)) => ToText (Update f t) where
   toText (MkUpdtVariable a) = toText a
@@ -93,6 +115,22 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprInterface ann as) = T.concat ["interface ", toText ann.name, "<", T.intercalate ", " (map toText as), ">"]
   toText (MkExprWhile c e) = T.concat ["while ", toText c, " { ", toText e, " }"]
   toText (MkExprIndex e e') = T.concat [toText e, "[", toText e', "]"]
+  toText (MkExprData ann cs) = T.concat ["data ", toText ann.name, "<", T.intercalate ", " (map toText cs), ">"]
+  toText (MkExprMatch e cs) = T.concat ["match ", toText e, " { ", T.intercalate ", " (map (\(c, b) -> T.concat [toText c, " => ", toText b]) cs), " }"]
+
+instance ToText t => ToText (DataConstructor t) where
+  toText (MkDataVariable v) = v
+  toText (MkDataConstructor c ts) = T.concat [c, "<", T.intercalate ", " (map toText ts), ">"]
+
+instance (ToText (f t), ToText t) => ToText (Pattern f t) where
+  toText (MkPatVariable n t) = T.concat [n, ":", toText t]
+  toText (MkPatConstructor n ps) = T.concat [n, "(", T.intercalate ", " (map toText ps), ")"]
+  toText (MkPatLiteral l) = toText l
+  toText MkPatWildcard = "_"
+  toText (MkPatSpecial s) = s
+  toText (MkPatLocated p _) = toText p
+  toText (MkPatOr p p') = T.concat [toText p, " | ", toText p']
+  toText (MkPatCondition e p) = T.concat [toText p, " if ", toText e]
 
 instance (ToText t, ToText (f t)) => ToText [Expression f t] where
   toText = T.intercalate "\n" . map toText
