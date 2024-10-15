@@ -120,8 +120,7 @@ Value eq_value(Module* mod, Value* args, int argc) {
       return MAKE_INTEGER(1);
     }
 
-    default: 
-      THROW(mod, "Unsupported type for ==");
+    default: return MAKE_INTEGER(args[0] == args[1]);
   }
 }
 
