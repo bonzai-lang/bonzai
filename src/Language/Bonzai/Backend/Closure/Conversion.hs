@@ -211,6 +211,7 @@ convert (MLIR.MkExprIndex e i) = MLIR.MkExprIndex <$> convert e <*> convert i
 convert (MLIR.MkExprUnpack x e e') = MLIR.MkExprUnpack x <$> convert e <*> convert e'
 convert (MLIR.MkExprLoc p e) = MLIR.MkExprLoc p <$> convert e
 convert (MLIR.MkExprWhile c e) = MLIR.MkExprWhile <$> convert c <*> convert e
+convert MLIR.MkExprSpecial = pure MLIR.MkExprSpecial
 
 convertUpdate :: MonadIO m => MLIR.Update -> m MLIR.Update
 convertUpdate (MLIR.MkUpdtVariable x) = pure $ MLIR.MkUpdtVariable x
