@@ -187,7 +187,11 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     goto *jmp_table[op];
   }
 
-  case_special: {}
+  case_special: {
+    stack_push(module, kNull);
+    INCREASE_IP(module);
+    goto *jmp_table[op];
+  }
 
   case_halt: {
     module->is_terminated = true;
