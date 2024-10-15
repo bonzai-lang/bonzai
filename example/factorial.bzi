@@ -9,11 +9,12 @@ fn Factorial() => {
 
   actor < Factorial {
     on factorial(self, n) => {
-      if n == 0 then {
-        print(acc.value)
-      } else {
-        acc = acc.value * n
-        self->factorial(self, n - 1)
+      match n {
+        case 0 => print(acc.value)
+        case _ => {
+          acc = acc.value * n
+          self->factorial(self, n - 1)
+        }
       }
     }
   }
