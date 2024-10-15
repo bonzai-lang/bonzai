@@ -41,6 +41,7 @@ instance Free MLIR.Expression where
   free res (MLIR.MkExprUnpack n e e') = free res e <> free res e' <> Set.singleton n
   free res (MLIR.MkExprLoc _ e) = free res e
   free res (MLIR.MkExprWhile c e) = free res c <> free res e
+  free _ MLIR.MkExprSpecial = Set.empty
  
 instance Free MLIR.Update where
   free res (MLIR.MkUpdtVariable a) = Set.singleton a Set.\\ res

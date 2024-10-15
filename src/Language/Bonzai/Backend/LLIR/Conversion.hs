@@ -336,6 +336,9 @@ instance Assemble MLIR.Expression where
     e' <- assemble e
     pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (length e' + 2)) <> e' <> LLIR.instr (LLIR.JumpRel (-(length c' + length e' + 1)))
 
+  assemble MLIR.MkExprSpecial = do
+    pure (LLIR.instr LLIR.Special)
+
 instance Assemble MLIR.Update where
   assemble (MLIR.MkUpdtVariable n) = do
     gs <- readIORef globals
@@ -399,6 +402,13 @@ getGlobals (MLIR.MkExprMut name _ : xs) = Set.insert name (getGlobals xs)
 getGlobals (MLIR.MkExprLoc _ e : xs) = getGlobals (e : xs)
 getGlobals (MLIR.MkExprTernary c t e : xs) = getGlobals (c : t : e : xs)
 getGlobals (MLIR.MkExprBlock es : xs) = getGlobals (es ++ xs)
+getGlobals (MLIR.MkExprApplication f args : xs) = getGlobals (f : args ++ xs)
+getGlobals (MLIR.MkExprSend e _ es : xs) = getGlobals (e : es ++ xs)
+getGlobals (MLIR.MkExprSpawn e : xs) = getGlobals (e : xs)
+getGlobals (MLIR.MkExprList es : xs) = getGlobals (es ++ xs)
+getGlobals (MLIR.MkExprIndex e i : xs) = getGlobals (e : i : xs)
+getGlobals (MLIR.MkExprUnpack _ e e' : xs) = getGlobals (e : e' : xs)
+getGlobals (MLIR.MkExprWhile c e : xs) = getGlobals (c : e : xs)
 getGlobals (_ : xs) = getGlobals xs
 getGlobals [] = mempty
 
