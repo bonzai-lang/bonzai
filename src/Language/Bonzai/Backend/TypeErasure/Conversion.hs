@@ -11,7 +11,7 @@ convert :: HLIR.TLIR "expression" -> MLIR.MLIR "expression"
 convert (HLIR.MkExprLiteral l) = MLIR.MkExprLiteral l
 convert (HLIR.MkExprVariable a) = MLIR.MkExprVariable a.name
 convert (HLIR.MkExprApplication f args) = MLIR.MkExprApplication (convert f) (map convert args)
-convert (HLIR.MkExprLet ann e) = MLIR.MkExprLet ann.name (convert e)
+convert (HLIR.MkExprLet _ ann e) = MLIR.MkExprLet ann.name (convert e)
 convert (HLIR.MkExprBlock es) = MLIR.MkExprBlock (map convert es)
 convert (HLIR.MkExprActor _ es) = MLIR.MkExprEvent (map convert es)
 convert (HLIR.MkExprOn ev as e) = MLIR.MkExprOn ev (map (.name) as) (convert e)
