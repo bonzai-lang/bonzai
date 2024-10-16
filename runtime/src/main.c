@@ -93,8 +93,9 @@ int main(int argc, char* argv[]) {
   // Collecting and passing arguments to the module
   module.argc = argc;
   Value* args = /*test*/malloc(argc * sizeof(Value));
-  for (int i = 0; i < argc; i++) 
-    args[i] = MAKE_STRING(&module, argv[i]);
+  for (int i = 0; i < argc; i++) {
+    args[i] = MAKE_STRING((&module), strdup(argv[i]));
+  }
   module.argv = args;
 
   run_interpreter(&module, 0, false, 0);
@@ -111,6 +112,7 @@ int main(int argc, char* argv[]) {
   free(module.stack);
   free(module.instrs);
   free(module.constants.values);
+
   free(args);
   free_libraries(libraries);
   free(libs);
