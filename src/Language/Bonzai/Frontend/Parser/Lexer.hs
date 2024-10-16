@@ -61,7 +61,11 @@ reservedWords =
       "if",
       "then",
       "else",
-      "while"
+      "while",
+      "match",
+      "case",
+      "type",
+      "live"
     ]
 
 -- | Lexeme parser that consumes whitespace after the lexeme

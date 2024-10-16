@@ -29,13 +29,15 @@ parseFloat = P.signed (pure ()) $ do
 parseChar :: (MonadIO m) => P.Parser m Char
 parseChar = MC.char '\'' *> P.charLiteral <* MC.char '\''
 
+stringUnitLiteral :: (MonadIO m) => P.Parser m [Char]
+stringUnitLiteral = (:[]) <$> P.charLiteral <|> MC.string "\\$" $> "\\$"
+
 parseString :: (MonadIO m) => P.Parser m Text
-parseString = MC.char '"' *> P.manyTill P.charLiteral (MC.char '"') <&> T.pack
+parseString = MC.char '"' *> P.manyTill stringUnitLiteral (MC.char '"') <&> T.pack . concat
 
 parseLiteral :: (MonadIO m) => P.Parser m HLIR.Literal
 parseLiteral = P.choice [
     P.try $ HLIR.MkLitFloat <$> parseFloat,
     P.try $ HLIR.MkLitInt <$> parseInteger,
-    HLIR.MkLitChar <$> parseChar,
-    HLIR.MkLitString <$> parseString
+    HLIR.MkLitChar <$> parseChar
   ]

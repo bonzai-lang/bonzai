@@ -7,6 +7,7 @@ import qualified Language.Bonzai.Syntax.HLIR as HLIR
 import qualified Language.Bonzai.Frontend.Parser.Internal.Type as Typ
 import qualified Control.Monad.Combinators.Expr as P
 import qualified Text.Megaparsec.Char as P
+import qualified Data.Text as Text
 
 parseAnnotation :: MonadIO m => P.Parser m a -> P.Parser m (HLIR.Annotation (Maybe a))
 parseAnnotation p = P.choice [
@@ -30,7 +31,40 @@ localize p = do
   pure $ HLIR.locate x (start, end)
 
 parseLiteral :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseLiteral = localize . Lex.lexeme $ HLIR.MkExprLiteral <$> Lit.parseLiteral
+parseLiteral = localize . Lex.lexeme $ P.choice [
+    HLIR.MkExprLiteral <$> Lit.parseLiteral,
+    parseInterpolatedString
+  ]
+
+parseInterpolatedString :: (MonadIO m) => P.Parser m (HLIR.HLIR "expression")
+parseInterpolatedString = do
+  parts <- buildString . toString <$> Lit.parseString
+
+  pure $ buildExprString parts
+  where
+    buildString :: [Char] -> HLIR.HLIR "expression"
+    buildString [] = HLIR.MkExprLiteral (HLIR.MkLitString "")
+    buildString ('\\':'$':xs) = HLIR.MkExprBinary "+" Nothing (HLIR.MkExprString "$") (buildString xs)
+    buildString ('$':x:xs) | Lex.isIdentCharStart (Text.singleton x) = do
+      -- span the variable name
+      let (var, rest) = span Lex.isIdentChar xs
+      let var' = HLIR.MkExprVariable (HLIR.MkAnnotation (Text.pack (x:var)) Nothing)
+
+      HLIR.MkExprBinary "+" Nothing var' (buildString rest)
+    buildString (x:xs) = HLIR.MkExprBinary "+" Nothing (HLIR.MkExprString (Text.singleton x)) (buildString xs)
+
+    buildExprString :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
+    buildExprString (HLIR.MkExprBinary "+" Nothing (HLIR.MkExprString "") x) =
+      buildExprString x
+    buildExprString (HLIR.MkExprBinary "+" Nothing x (HLIR.MkExprString "")) = 
+      buildExprString x
+    buildExprString (HLIR.MkExprBinary "+" Nothing (HLIR.MkExprString a) (HLIR.MkExprString b)) = 
+      HLIR.MkExprString (a <> b)
+    buildExprString (HLIR.MkExprBinary "+" Nothing (HLIR.MkExprString a) x) = 
+      buildExprString $ HLIR.MkExprBinary "+" Nothing (HLIR.MkExprString a) (buildExprString x)
+    buildExprString (HLIR.MkExprBinary "+" Nothing x (HLIR.MkExprString a)) =
+      buildExprString $ HLIR.MkExprBinary "+" Nothing (buildExprString x) (HLIR.MkExprString a)
+    buildExprString x = x
 
 parseTernary :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseTernary = localize $ do
@@ -79,6 +113,14 @@ parseLet = localize $ do
   void $ Lex.reserved "="
 
   HLIR.MkExprLet (HLIR.MkAnnotation name Nothing) <$> parseExpression
+
+parseLive :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseLive = localize $ do
+  void $ Lex.reserved "live"
+  name <- Lex.identifier <|> Lex.parens Lex.operator
+  void $ Lex.reserved "="
+
+  HLIR.MkExprLive (HLIR.MkAnnotation name Nothing) <$> parseExpression
 
 parseMut :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseMut = localize $ do
@@ -264,6 +306,7 @@ parseTerm =
     P.try parseFunction,
     parseLambda,
     parseLet,
+    parseLive,
     parseMut,
     parseMatch,
     parseTernary,
