@@ -38,7 +38,7 @@ currentLevel = IO.unsafePerformIO $ newIORef 0
 
 data CheckerState = MkCheckerState {
     variables :: Map Text HLIR.Scheme
-  , interfaces :: Map Text (Map Text HLIR.Scheme)
+  , interfaces :: Map (Text, [HLIR.Type]) (Map Text HLIR.Scheme)
 }
 
 with :: MonadIO m => IORef a -> (a -> a) -> m b -> m b
@@ -87,6 +87,7 @@ instantiateWithSub :: (MonadChecker m) => Substitution -> HLIR.Scheme -> m (HLIR
 instantiateWithSub s (HLIR.Forall qvars ty) = do
   sub <- Map.fromList <$> mapM (\x -> (x,) <$> fresh) qvars
   let s' = Map.union sub s
+  print (sub, ty)
   (res, s2) <- go s' ty
   pure (res, s2)
   where

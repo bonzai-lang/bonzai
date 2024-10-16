@@ -134,7 +134,7 @@ resolveImports m (HLIR.MkExprLambda args _ body) = do
   writeIORef moduleState old
 
   return m'
-resolveImports m (HLIR.MkExprLet name expr) = do
+resolveImports m (HLIR.MkExprLet _ name expr) = do
   let m' = m {variables = Set.singleton name.name <> variables m}
   void $ resolveImports m' expr
   pure m'

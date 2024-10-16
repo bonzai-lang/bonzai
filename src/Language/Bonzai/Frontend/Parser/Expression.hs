@@ -112,7 +112,7 @@ parseLet = localize $ do
   name <- Lex.identifier <|> Lex.parens Lex.operator
   void $ Lex.reserved "="
 
-  HLIR.MkExprLet (HLIR.MkAnnotation name Nothing) <$> parseExpression
+  HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing) <$> parseExpression
 
 parseLive :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseLive = localize $ do
@@ -239,11 +239,12 @@ parseFunction :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseFunction = localize $ do
   void $ Lex.reserved "fn"
   name <- Lex.identifier <|> Lex.parens Lex.operator
+  generics <- P.option [] $ Lex.angles (P.sepBy Lex.identifier Lex.comma)
   args <- Lex.parens (P.sepBy (parseAnnotation Typ.parseType) Lex.comma)
 
   void $ Lex.symbol "=>"
 
-  HLIR.MkExprLet (HLIR.MkAnnotation name Nothing) . HLIR.MkExprLambda args Nothing <$> parseExpression
+  HLIR.MkExprLet (fromList generics) (HLIR.MkAnnotation name Nothing) . HLIR.MkExprLambda args Nothing <$> parseExpression
 
 parseLambda :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseLambda = localize $ do
@@ -264,15 +265,15 @@ parseActor :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseActor = localize $ do
   void $ Lex.reserved "actor"
   name <- Lex.identifier <|> Lex.parens Lex.operator
-  implemented <- Lex.symbol "<" *> Lex.identifier
-  HLIR.MkExprLet (HLIR.MkAnnotation name Nothing) 
+  implemented <- Lex.symbol "<" *> Typ.parseType
+  HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing) 
     . HLIR.MkExprActor implemented 
       <$> Lex.braces (P.many parseEvent)
 
 parseAnonActor :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseAnonActor = localize $ do
   void $ Lex.reserved "actor"
-  implemented <- Lex.symbol "<" *> Lex.identifier
+  implemented <- Lex.symbol "<" *> Typ.parseType
   HLIR.MkExprActor implemented <$> Lex.braces (P.many parseEvent)
 
 parseEvent :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
@@ -394,6 +395,11 @@ parseExpression = localize $ P.makeExprParser parseTerm table
           P.InfixL $ do
             void $ Lex.symbol "||"
             pure $ \a b -> HLIR.MkExprBinary "||" Nothing a b
+        ],
+        [
+          P.InfixR $ do
+            op <- Lex.operator
+            pure $ \a b -> HLIR.MkExprBinary op Nothing a b
         ]
       ]
 
