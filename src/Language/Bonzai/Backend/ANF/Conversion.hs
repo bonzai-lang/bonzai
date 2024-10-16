@@ -27,7 +27,11 @@ convert (MLIR.MkExprApplication f args) = do
 convert (MLIR.MkExprLambda args body) = do
   (body', stmts) <- convert body
   
-  pure (MLIR.MkExprLambda args body', stmts)
+  let newBody = case body' of
+        MLIR.MkExprBlock es -> MLIR.MkExprBlock $ map createLet stmts <> es
+        _ -> MLIR.MkExprBlock $ map createLet stmts <> [body']
+
+  pure (MLIR.MkExprLambda args newBody, [])
 convert (MLIR.MkExprTernary c t e) = do
   (c', stmts1) <- convert c
   (t', stmts2) <- convert t
