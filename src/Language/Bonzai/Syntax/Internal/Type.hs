@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternSynonyms #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Language.Bonzai.Syntax.Internal.Type where
 
 import Prelude hiding (Type)
@@ -19,13 +20,17 @@ data Type
   | MkTyApp Type [Type]
   | MkTyVar (IORef TyVar)
   | MkTyQuantified Text
+  deriving Ord
+
+instance (Ord a) => Ord (IORef a) where
+  compare a b = compare (IO.unsafePerformIO $ readIORef a) (IO.unsafePerformIO $ readIORef b)
 
 -- Type variable represents a type variable in Bonzai. It can either be a link to
 -- another type or an unbound type variable.
 data TyVar
   = Link Type
   | Unbound QuVar Level
-  deriving (Eq)
+  deriving (Eq, Ord)
 
 data Scheme = Forall [QuVar] Type 
   deriving (Eq, Show)
@@ -72,7 +77,7 @@ instance ToText Type where
   toText (MkTyQuantified a) = a
 
 instance ToText TyVar where
-  toText (Link a) = toText a
+  toText (Link a) = "#" <> toText a
   toText (Unbound a l) = a <> "@" <> T.pack (show l)
 
 instance ToText (Maybe Type) where

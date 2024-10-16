@@ -41,10 +41,10 @@ data Expression f t
   | MkExprLambda [Annotation (f t)] (f t) (Expression f t)
   | MkExprTernary (Expression f t) (Expression f t) (Expression f t)
   | MkExprUpdate (Update f t) (Expression f t)
-  | MkExprLet (Annotation (f t)) (Expression f t)
+  | MkExprLet (Set Text) (Annotation (f t)) (Expression f t)
   | MkExprMut (Annotation (f t)) (Expression f t)
   | MkExprBlock [Expression f t]
-  | MkExprActor Text [Expression f t]
+  | MkExprActor t [Expression f t]
   | MkExprOn Text [Annotation (f t)] (Expression f t)
   | MkExprSend (Expression f t) Text [Expression f t]
   | MkExprRequire Text
@@ -108,9 +108,9 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprLambda as ret e) = T.concat ["(", T.intercalate ", " (map toText as), "): ", toText ret, " => ", toText e]
   toText (MkExprTernary c t e) = T.concat [toText c, " ? ", toText t, " : ", toText e]
   toText (MkExprUpdate u e) = T.concat [toText u, " = ", toText e]
-  toText (MkExprLet a e) = T.concat ["let ", toText a, " = ", toText e]
+  toText (MkExprLet _ a e) = T.concat ["let ", toText a, " = ", toText e]
   toText (MkExprBlock es) = T.concat [T.intercalate "; " (map toText es)]
-  toText (MkExprActor i e) = T.concat ["event ",i , " ", toText e]
+  toText (MkExprActor i e) = T.concat ["event ", toText i , " ", toText e]
   toText (MkExprOn n as e) = T.concat ["on ", n, "(", T.intercalate ", " (map toText as), ") { ", toText e, " }"]
   toText (MkExprSend e n e') = T.concat ["(", toText e, ") -> ", n, "(", toText e', ")"]
   toText (MkExprRequire n) = T.concat ["require ", n]
@@ -161,8 +161,8 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprLambda as ret e == MkExprLambda as' ret' e' = as == as' && ret == ret' && e == e'
   MkExprTernary c t e == MkExprTernary c' t' e' = c == c' && t == t' && e == e'
   MkExprUpdate u e == MkExprUpdate u' e' = u == u' && e == e'
-  MkExprLet a e == MkExprLet a' e' = a == a' && e == e'
-  MkExprMut a e == MkExprMut a' e' = a == a' && e == e'
+  MkExprLet g a e == MkExprLet g' a' e' = a == a' && e == e' && g == g'
+  MkExprMut a e == MkExprMut a' e' = a == a' && e == e' 
   MkExprBlock es == MkExprBlock es' = es == es'
   MkExprActor i e == MkExprActor i' e' = i == i' && e == e'
   MkExprOn n as e == MkExprOn n' as' e' = n == n' && as == as' && e == e'
