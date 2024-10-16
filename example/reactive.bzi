@@ -1,0 +1,11 @@
+require "std:natives"
+
+live test = "Hello"
+
+let message = test + " world!"
+
+print(message)
+
+test = "Goodbye"
+
+print(message)
