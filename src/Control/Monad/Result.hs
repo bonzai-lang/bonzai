@@ -58,7 +58,7 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
     ActorNotFound name ->
       printErrorFromString
         Nothing
-        ("Event " <> show name <> " not found", Just "check for typo issue with the event name", pos)
+        ("Actor " <> show name <> " not found", Just "check for typo issue with the event name, or missing types in actor header", pos)
         "Resolution"
 
     NotAnActor name ty ->
@@ -121,7 +121,7 @@ data BonzaiError
   | VariableNotFound Text
   | CompilerError Text
   | UnificationFail HLIR.Type HLIR.Type
-  | ActorNotFound Text
+  | ActorNotFound HLIR.Type
   | NotAnActor Text HLIR.Type
   | EventNotFound Text
   | ExpectedAnActor HLIR.Type
