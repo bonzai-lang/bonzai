@@ -140,55 +140,55 @@ testLiteral = do
 
   it "parses a string literal" $ do
     let input = "\"hello\""
-    let expected = HLIR.MkLitString "hello"
-    res <- P.parseTestContent Lit.parseLiteral input
+    let expected = HLIR.MkExprString "hello"
+    res <- P.parseTestContent P.parseInterpolatedString input
     res `shouldBeRight` expected
 
     let input = "\"hello world\""
-    let expected = HLIR.MkLitString "hello world"
-    res <- P.parseTestContent Lit.parseLiteral input
+    let expected = HLIR.MkExprString "hello world"
+    res <- P.parseTestContent P.parseInterpolatedString input
     res `shouldBeRight` expected
 
     let input = "\"hello\\nworld\""
-    let expected = HLIR.MkLitString "hello\nworld"
-    res <- P.parseTestContent Lit.parseLiteral input
+    let expected = HLIR.MkExprString "hello\nworld"
+    res <- P.parseTestContent P.parseInterpolatedString input
     res `shouldBeRight` expected
 
     let input = "\"hello\\tworld\""
-    let expected = HLIR.MkLitString "hello\tworld"
-    res <- P.parseTestContent Lit.parseLiteral input
+    let expected = HLIR.MkExprString "hello\tworld"
+    res <- P.parseTestContent P.parseInterpolatedString input
     res `shouldBeRight` expected
 
     let input = "\"hello\\rworld\""
-    let expected = HLIR.MkLitString "hello\rworld"
-    res <- P.parseTestContent Lit.parseLiteral input
+    let expected = HLIR.MkExprString "hello\rworld"
+    res <- P.parseTestContent P.parseInterpolatedString input
     res `shouldBeRight` expected
 
     let input = "\"hello\\\"world\""
-    let expected = HLIR.MkLitString "hello\"world"
-    res <- P.parseTestContent Lit.parseLiteral input
+    let expected = HLIR.MkExprString "hello\"world"
+    res <- P.parseTestContent P.parseInterpolatedString input
     res `shouldBeRight` expected
 
     let input = "\"hello\\'world\""
-    let expected = HLIR.MkLitString "hello'world"
-    res <- P.parseTestContent Lit.parseLiteral input
+    let expected = HLIR.MkExprString "hello'world"
+    res <- P.parseTestContent P.parseInterpolatedString input
     res `shouldBeRight` expected
 
     let input = "\"hello\\\\world\""
-    let expected = HLIR.MkLitString "hello\\world"
-    res <- P.parseTestContent Lit.parseLiteral input
+    let expected = HLIR.MkExprString "hello\\world"
+    res <- P.parseTestContent P.parseInterpolatedString input
     res `shouldBeRight` expected
 
     let input = "\"hello"
-    res <- P.parseTestContent Lit.parseLiteral input
+    res <- P.parseTestContent P.parseInterpolatedString input
     shouldBeError res
 
     let input = "\"hello\\"
-    res <- P.parseTestContent Lit.parseLiteral input
+    res <- P.parseTestContent P.parseInterpolatedString input
     shouldBeError res
 
     let input = "\"hello\\a"
-    res <- P.parseTestContent Lit.parseLiteral input
+    res <- P.parseTestContent P.parseInterpolatedString input
     shouldBeError res
 
 testExpression :: Spec
@@ -324,7 +324,7 @@ testExpression = do
 
   it "parses let expression" $ do
     let input = "let x = 1"
-    let expected = HLIR.MkExprLet (HLIR.MkAnnotation "x" Nothing) (HLIR.MkExprLiteral $ HLIR.MkLitInt 1)
+    let expected = HLIR.MkExprLet mempty (HLIR.MkAnnotation "x" Nothing) (HLIR.MkExprLiteral $ HLIR.MkLitInt 1)
     res <- P.parseTestContent P.parseLet input
     res `shouldBeRight` expected
 
@@ -531,6 +531,11 @@ testExpression = do
     res <- P.parseTestContent P.parseAnonActor input
     res `shouldBeRight` expected
 
+    let input = "actor < T<x> { }"
+    let expected = HLIR.MkExprActor (HLIR.MkTyApp (HLIR.MkTyId "T") [HLIR.MkTyId "x"]) []
+    res <- P.parseTestContent P.parseAnonActor input
+    res `shouldBeRight` expected
+
     let input = "actor < x { 1 }"
     res <- P.parseTestContent P.parseAnonActor input
     shouldBeError res
@@ -574,6 +579,24 @@ testExpression = do
 
     let input = "spawn"
     res <- P.parseTestContent P.parseSpawn input
+    shouldBeError res
+
+  it "parses a live variable" $ do
+    let input = "live x = 1"
+    let expected = HLIR.MkExprLive (HLIR.MkAnnotation "x" Nothing) (int 1)
+    res <- P.parseTestContent P.parseLive input
+    (removeLocation <$> res) `shouldBeRight` expected
+
+    let input = "live x ="
+    res <- P.parseTestContent P.parseLive input
+    shouldBeError res
+
+    let input = "live x"
+    res <- P.parseTestContent P.parseLive input
+    shouldBeError res
+
+    let input = "live"
+    res <- P.parseTestContent P.parseLive input
     shouldBeError res
 
   it "parses an expression" $ do
@@ -628,7 +651,7 @@ testExpression = do
     res `shouldBeRight` expected
 
     let input = "let x = 1"
-    let expected = HLIR.MkExprLet (HLIR.MkAnnotation "x" Nothing) (int 1)
+    let expected = HLIR.MkExprLet mempty (HLIR.MkAnnotation "x" Nothing) (int 1)
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
@@ -830,6 +853,18 @@ testExpression = do
 
     let input = "1 || 2 && 2"
     let expected = HLIR.MkExprBinary "&&" Nothing (HLIR.MkExprBinary "||" Nothing (int 1) (int 2)) (int 2)
+    res <- P.parseTestContent P.parseExpression input
+    res `shouldBeRight` expected
+
+    -- Custom operators right associative
+
+    let input = "x %= 1"
+    let expected = HLIR.MkExprBinary "%=" Nothing (var "x") (int 1)
+    res <- P.parseTestContent P.parseExpression input
+    res `shouldBeRight` expected
+
+    let input = "x % 2 % 3"
+    let expected = HLIR.MkExprBinary "%" Nothing (var "x") (HLIR.MkExprBinary "%" Nothing (int 2) (int 3))
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
