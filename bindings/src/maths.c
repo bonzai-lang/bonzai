@@ -19,8 +19,9 @@ Value add_value(Module* mod, Value* args, int argc) {
     
     case TYPE_STRING: {
       char* s = malloc(strlen(GET_STRING(args[0])) + strlen(GET_STRING(args[1])) + 1);
-      strcpy(s, GET_STRING(args[0]));
-      strcat(s, GET_STRING(args[1]));
+      
+      sprintf(s, "%s%s", GET_STRING(args[0]), GET_STRING(args[1]));
+
       return MAKE_STRING(mod, s);
     }
 
