@@ -162,7 +162,6 @@ typecheck (HLIR.MkExprUpdate u e) = do
   pure (HLIR.MkExprUpdate u' modifier, HLIR.MkTyUnit)
 typecheck (HLIR.MkExprActor i es) = do
   checkSt <- readIORef M.checkerState
-  print checkSt.interfaces
 
   methodsTys <- case Map.lookup (decomposeHeader i) checkSt.interfaces of
     Just tys -> mapM M.instantiate tys

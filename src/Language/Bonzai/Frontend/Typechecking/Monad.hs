@@ -87,7 +87,6 @@ instantiateWithSub :: (MonadChecker m) => Substitution -> HLIR.Scheme -> m (HLIR
 instantiateWithSub s (HLIR.Forall qvars ty) = do
   sub <- Map.fromList <$> mapM (\x -> (x,) <$> fresh) qvars
   let s' = Map.union sub s
-  print (sub, ty)
   (res, s2) <- go s' ty
   pure (res, s2)
   where
