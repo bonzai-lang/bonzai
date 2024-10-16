@@ -229,6 +229,12 @@ convertToplevel (MLIR.MkExprLet x e) = do
         pure $ MLIR.MkExprLambda args body'
       _ -> compilerError "expected lambda"
     else convert e
+convertToplevel (MLIR.MkExprUpdate u e) | isLambda e = do
+  case getLambda e of
+    MLIR.MkExprLambda args body -> do
+      body' <- convert body
+      pure $ MLIR.MkExprUpdate u (MLIR.MkExprLambda args body')
+    _ -> compilerError "expected lambda"
 convertToplevel (MLIR.MkExprLoc p e) = MLIR.MkExprLoc p <$> convertToplevel e
 convertToplevel e = convert e
 

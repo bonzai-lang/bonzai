@@ -95,6 +95,29 @@ extractFrom (LLIR.Instruction instr) = [instr]
 extractFrom (LLIR.EventOn _ _ _ _ instrs) = instrs
 
 instance Assemble MLIR.Expression where
+
+  assemble (MLIR.MkExprUpdate (MLIR.MkUpdtVariable name) (MLIR.MkExprLambda args body)) = do
+    body' <- assemble body
+
+    let args' = Set.fromList args
+    glbs <- readIORef globals
+    ntvs <- readIORef natives
+    let reserved = glbs <> ntvs
+
+    let freed = M.free reserved body
+
+    let env = freed <> args'
+
+    let localSpaceSize = Set.size env
+
+    let body'' = filter shouldNotBeLabel body'
+    let finalBody = concatMap extractFrom body''
+
+    let locals = List.nub $ args <> Set.toList freed
+        localSpace = zip locals [0..]
+
+    pure [LLIR.Function name args localSpaceSize localSpace finalBody]
+
   assemble (MLIR.MkExprFunction name args body) = do
     writeIORef isFunctionCurrently True
     glbs <- readIORef globals

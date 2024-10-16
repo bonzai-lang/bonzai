@@ -110,6 +110,13 @@ hoistToplevel (MLIR.MkExprLet n e) | CC.isLambda e =
 
       pure $ hoisted <> [MLIR.MkExprLet n (MLIR.MkExprLambda args b')]
     _ -> compilerError "impossible"
+hoistToplevel (MLIR.MkExprUpdate u e) | CC.isLambda e = do
+  case CC.getLambda e of
+    MLIR.MkExprLambda args b -> do
+      (b', hoisted) <- hoist b
+
+      pure $ hoisted <> [MLIR.MkExprUpdate u (MLIR.MkExprLambda args b')]
+    _ -> compilerError "impossible"
 hoistToplevel e = do
   (e', hoisted) <- hoist e
 

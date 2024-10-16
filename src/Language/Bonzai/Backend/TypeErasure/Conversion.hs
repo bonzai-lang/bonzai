@@ -33,6 +33,8 @@ convert (HLIR.MkExprMatch e cs) = do
   let cases' = map (bimap (createCondition e') convert) cs
 
   createIfs cases'
+convert (HLIR.MkExprUnwrapLive e) = MLIR.MkExprApplication (convert e) []
+convert (HLIR.MkExprWrapLive e) = MLIR.MkExprLambda [] (convert e)
 convert _ = compilerError "unimplemented"
 
 createFunction :: Text -> HLIR.TLIR "data" -> MLIR.MLIR "expression"
