@@ -205,12 +205,12 @@ testTypechecking = do
 
   describe "let typechecking" $ do
     it "typechecks a let" $ do
-      let let' = HLIR.MkExprLet (HLIR.MkAnnotation "x" Nothing) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
+      let let' = HLIR.MkExprLet mempty (HLIR.MkAnnotation "x" Nothing) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
       res <- runTypechecking' let' env mempty
       shouldBeRight' res
     
     it "does not typecheck a let with an unknown variable" $ do
-      let let' = HLIR.MkExprLet (HLIR.MkAnnotation "x" Nothing) (HLIR.MkExprVariable (HLIR.MkAnnotation "y" Nothing))
+      let let' = HLIR.MkExprLet mempty (HLIR.MkAnnotation "x" Nothing) (HLIR.MkExprVariable (HLIR.MkAnnotation "y" Nothing))
       res <- runTypechecking' let' env mempty
       shouldBeError' res (VariableNotFound "y")
     
@@ -248,7 +248,7 @@ testTypechecking = do
     it "does not typecheck an actor with unknown interface" $ do
       let actor' = actor "event" "interface" [on "event" ["x"] (var "x")]
       res <- runTypechecking' actor' env mempty
-      shouldBeError' res (ActorNotFound "interface")
+      shouldBeError' res (ActorNotFound (HLIR.MkTyId "interface"))
 
     it "typechecks an actor" $ do
       let actor' = actor "event" "interface" [on "event" ["x"] (HLIR.MkExprBlock [
