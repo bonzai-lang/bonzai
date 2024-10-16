@@ -7,6 +7,7 @@ module Language.Bonzai.Syntax.HLIR (
   Pattern(..),
 
   pattern MkExprBinary,
+  pattern MkExprString,
 
   -- Re-exports
   module Lit,
@@ -56,6 +57,9 @@ data Expression f t
   | MkExprIndex (Expression f t) (Expression f t)
   | MkExprData (Annotation [Text]) [DataConstructor t]
   | MkExprMatch (Expression f t) [(Pattern f t, Expression f t)]
+  | MkExprLive (Annotation (f t)) (Expression f t)
+  | MkExprUnwrapLive (Expression f t)
+  | MkExprWrapLive (Expression f t)
 
 data DataConstructor t
   = MkDataVariable Text
@@ -76,6 +80,9 @@ instance (ToText t, ToText (f t)) => Show (Expression f t) where
 
 pattern MkExprBinary :: Text -> f t -> Expression f t -> Expression f t -> Expression f t
 pattern MkExprBinary op t a b = MkExprApplication (MkExprVariable (MkAnnotation op t)) [a, b]
+
+pattern MkExprString :: Text -> Expression f t
+pattern MkExprString s = MkExprLiteral (MkLitString s)
 
 type family HLIR (s :: Symbol) where
   HLIR "update" = Update Maybe Type
@@ -117,6 +124,9 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprIndex e e') = T.concat [toText e, "[", toText e', "]"]
   toText (MkExprData ann cs) = T.concat ["data ", toText ann.name, "<", T.intercalate ", " (map toText cs), ">"]
   toText (MkExprMatch e cs) = T.concat ["match ", toText e, " { ", T.intercalate ", " (map (\(c, b) -> T.concat [toText c, " => ", toText b]) cs), " }"]
+  toText (MkExprLive a e) = T.concat ["live ", toText a, " ", toText e]
+  toText (MkExprUnwrapLive e) = T.concat ["unwrap ", toText e]
+  toText (MkExprWrapLive e) = T.concat ["wrap ", toText e]
 
 instance ToText t => ToText (DataConstructor t) where
   toText (MkDataVariable v) = v

@@ -27,7 +27,7 @@ data TyVar
   | Unbound QuVar Level
   deriving (Eq)
 
-data Scheme = Forall [QuVar] Type
+data Scheme = Forall [QuVar] Type 
   deriving (Eq, Show)
 
 instance Eq Type where
@@ -52,6 +52,9 @@ pattern MkTyChar = MkTyId "char"
 pattern MkTyString = MkTyId "string"
 pattern MkTyBool = MkTyId "bool"
 pattern MkTyUnit = MkTyId "unit"
+
+pattern MkTyLive :: Type -> Type
+pattern MkTyLive a = MkTyApp (MkTyId "live") [a]
 
 pattern MkTyList :: Type -> Type
 pattern MkTyList a = MkTyApp (MkTyId "list") [a]
