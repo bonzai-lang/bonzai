@@ -47,6 +47,9 @@ unifiesWith t t' = do
       (HLIR.MkTyApp t1a t1b, HLIR.MkTyApp t2a t2b) | length t1b == length t2b -> do
         unifiesWith t1a t2a
         zipWithM_ unifiesWith t1b t2b
+      (HLIR.MkTyLive t1', HLIR.MkTyLive t2') -> unifiesWith t1' t2'
+      (HLIR.MkTyLive t1', t2') -> unifiesWith t1' t2'
+      (t1', HLIR.MkTyLive t2') -> unifiesWith t1' t2'
       (HLIR.MkTyId n, HLIR.MkTyId n') | n == n' -> pure ()
       _ -> M.throw (M.UnificationFail t1 t2)
 

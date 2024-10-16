@@ -10,7 +10,6 @@ import System.FilePath
 import System.Directory (makeAbsolute, doesFileExist)
 import qualified Language.Bonzai.Frontend.Parser as P
 import qualified Language.Bonzai.Frontend.Parser.Expression as P
-import qualified Data.List as List
 
 type MonadConversion m = (MonadIO m, MonadError Error m)
 
@@ -112,7 +111,7 @@ resolve path isPublic = do
             st
               { resolved = Map.insert newModuleName modUnit st'.resolved
               }
-          modifyIORef' resultState (List.nub . (<> ast))
+          modifyIORef' resultState (<> ast)
           modifyIORef importStack (drop 1)
           pure modUnit
 
@@ -137,6 +136,10 @@ resolveImports m (HLIR.MkExprLambda args _ body) = do
   return m'
 resolveImports m (HLIR.MkExprLet name expr) = do
   let m' = m {variables = Set.singleton name.name <> variables m}
+  void $ resolveImports m' expr
+  pure m'
+resolveImports m (HLIR.MkExprLive ann expr) = do
+  let m' = m {variables = Set.singleton ann.name <> variables m}
   void $ resolveImports m' expr
   pure m'
 resolveImports m (HLIR.MkExprBlock exprs) = do
@@ -209,6 +212,8 @@ resolveImports m (HLIR.MkExprMatch e cs) = do
     ) cs
 
   pure m
+resolveImports _ (HLIR.MkExprUnwrapLive {}) = compilerError "UnwrapLive not implemented"
+resolveImports _ (HLIR.MkExprWrapLive {}) = compilerError "WrapLive not implemented"
 
 resolveImportsPattern :: MonadConversion m => ModuleUnit -> HLIR.HLIR "pattern" -> m ModuleUnit
 resolveImportsPattern m (HLIR.MkPatVariable n _) = pure m { variables = Set.insert n m.variables }
@@ -223,6 +228,7 @@ resolveImportsPattern m (HLIR.MkPatOr p p') = do
 resolveImportsPattern m (HLIR.MkPatCondition e p) = do
   m1 <- resolveImportsPattern m p
   resolveImports m1 e
+  
 
 resolveImportsDataConstr :: MonadConversion m => ModuleUnit -> HLIR.DataConstructor HLIR.Type -> m ModuleUnit
 resolveImportsDataConstr m (HLIR.MkDataVariable n) = pure m { variables = Set.insert n m.variables }
