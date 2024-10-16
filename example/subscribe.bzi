@@ -1,0 +1,27 @@
+require "std:natives"
+
+interface Reactive<A> {
+  fn set(value: A)
+}
+
+fn Reactive<A>(value: A, onChange: fn(mutable<A>): unit) => {
+  mut subject = value
+
+  actor < Reactive<A> {
+    on set(value) => {
+      subject = value
+
+      onChange(subject)
+    }
+  }
+}
+
+let r = spawn Reactive("Hello", fn(var) => {
+  print("Hello " + var.value)
+})
+
+fn (%=)<A>(r: Reactive<A>, value: A) => r->set(value)
+
+r %= "Goodbye"
+
+r %= "World"
