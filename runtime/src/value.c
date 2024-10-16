@@ -129,13 +129,13 @@ void sweep(struct Module* vm) {
       HeapValue* unreached = *object;
 
       switch (unreached->type) {
-        case TYPE_LIST: {
+        case TYPE_LIST: case TYPE_MUTABLE: {
           free(unreached->as_ptr);
           break;
         }
 
-        case TYPE_MUTABLE: {
-          free(unreached->as_ptr);
+        case TYPE_STRING: {
+          free(unreached->as_string);
           break;
         }
 
@@ -174,6 +174,11 @@ void force_sweep(struct Module* vm) {
     switch (object->type) {
       case TYPE_LIST: case TYPE_MUTABLE: {
         free(object->as_ptr);
+        break;
+      }
+
+      case TYPE_STRING: {
+        free(object->as_string);
         break;
       }
 
