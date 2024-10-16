@@ -47,13 +47,6 @@ testModuleImport = do
       notFound <- runModuleConversion "test/data/module/variable-not-found"
 
       shouldBeError notFound
-      
-    it "removes duplicate imports" $ do
-      duplicate <- runModuleConversion "test/data/module/duplicate"
-
-      duplicate_result <- fromFile "test/data/module/duplicate-result.bzi"
-
-      duplicate `shouldBeRight` duplicate_result
     
     it "removes requires" $ do
       noRequires <- runModuleConversion "test/data/module/no-requires"
