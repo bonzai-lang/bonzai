@@ -4,6 +4,7 @@ import qualified Text.Megaparsec.Char as MC
 import qualified Data.Text as T
 import qualified Language.Bonzai.Syntax.HLIR as HLIR
 import Text.Megaparsec.Char (digitChar)
+import qualified Language.Bonzai.Frontend.Parser.Lexer as Lex
 
 decimal :: (MonadIO m) => P.Parser m Integer
 decimal = do
@@ -39,5 +40,7 @@ parseLiteral :: (MonadIO m) => P.Parser m HLIR.Literal
 parseLiteral = P.choice [
     P.try $ HLIR.MkLitFloat <$> parseFloat,
     P.try $ HLIR.MkLitInt <$> parseInteger,
+    P.try $ HLIR.MkLitBool True <$ Lex.reserved "true",
+    P.try $ HLIR.MkLitBool False <$ Lex.reserved "false",
     HLIR.MkLitChar <$> parseChar
   ]

@@ -65,7 +65,9 @@ reservedWords =
       "match",
       "case",
       "type",
-      "live"
+      "live",
+      "true",
+      "false"
     ]
 
 -- | Lexeme parser that consumes whitespace after the lexeme
@@ -113,12 +115,12 @@ validOperators =
 reservedOperators :: Set Text
 reservedOperators =
   Set.fromList
-    [ "." ]
+    [ ".", "..", "=>" ]
 
 -- | Parse a sequence of valid operators, checking if they are valid
 -- | and not reserved, and then return the concatenated operator
 operator :: (MonadIO m) => P.Parser m Text
-operator = do
+operator = P.try $ do
   op <- lexeme $ P.takeWhile1P Nothing (`Set.member` validOperators)
   guard (op `Set.notMember` reservedOperators)
   return op

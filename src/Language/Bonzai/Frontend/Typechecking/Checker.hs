@@ -84,6 +84,7 @@ typecheck (HLIR.MkExprLiteral l) = do
         HLIR.MkLitInt _ -> HLIR.MkTyInt
         HLIR.MkLitFloat _ -> HLIR.MkTyFloat
         HLIR.MkLitString _ -> HLIR.MkTyString
+        HLIR.MkLitBool _ -> HLIR.MkTyBool
   pure (HLIR.MkExprLiteral l, ty)
 typecheck (HLIR.MkExprTernary c t e) = do
   (c', ty) <- typecheck c
@@ -345,6 +346,7 @@ typecheckPattern (HLIR.MkPatLiteral l) = do
         HLIR.MkLitInt _ -> HLIR.MkTyInt
         HLIR.MkLitFloat _ -> HLIR.MkTyFloat
         HLIR.MkLitString _ -> HLIR.MkTyString
+        HLIR.MkLitBool _ -> HLIR.MkTyBool
   pure (HLIR.MkPatLiteral l, ty, Map.empty)
 typecheckPattern (HLIR.MkPatConstructor name pats) = do
   st <- readIORef M.checkerState
@@ -388,11 +390,25 @@ typecheckPattern (HLIR.MkPatOr p1 p2) = do
       else throw (M.InvalidPatternUnion (Map.keysSet env1) (Map.keysSet env2))
 typecheckPattern (HLIR.MkPatCondition e p) = do
   (p', ty, env) <- typecheckPattern p
+
   (e', ty') <- M.with M.checkerState (\st -> st { M.variables = env <> st.variables }) $ typecheck e
 
   ty' `U.unifiesWith` HLIR.MkTyBool
 
   pure (HLIR.MkPatCondition e' p', ty, env)
+typecheckPattern (HLIR.MkPatList pats slice) = do
+  ty <- M.fresh
+
+  (pats', tys, env) <- unzip3 <$> traverse typecheckPattern pats
+
+  forM_ tys $ U.unifiesWith ty
+
+  case slice of
+    Just p -> do
+      (p', ty', env') <- typecheckPattern p
+      HLIR.MkTyList ty `U.unifiesWith` ty'
+      pure (HLIR.MkPatList pats' (Just p'), HLIR.MkTyList ty, Map.unions env <> env')
+    Nothing -> pure (HLIR.MkPatList pats' Nothing, HLIR.MkTyList ty, Map.unions env)
 
 intersectionWithM :: (Ord k, Monad m) => (a -> b -> m c) -> Map k a -> Map k b -> m (Map k c)
 intersectionWithM f m1 m2 = do

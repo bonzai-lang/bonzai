@@ -228,7 +228,11 @@ resolveImportsPattern m (HLIR.MkPatOr p p') = do
 resolveImportsPattern m (HLIR.MkPatCondition e p) = do
   m1 <- resolveImportsPattern m p
   resolveImports m1 e
-  
+resolveImportsPattern m (HLIR.MkPatList ps slice) = do
+  m1 <- foldM' resolveImportsPattern m ps
+  case slice of
+    Just p -> resolveImportsPattern m1 p
+    Nothing -> pure m1
 
 resolveImportsDataConstr :: MonadConversion m => ModuleUnit -> HLIR.DataConstructor HLIR.Type -> m ModuleUnit
 resolveImportsDataConstr m (HLIR.MkDataVariable n) = pure m { variables = Set.insert n m.variables }
