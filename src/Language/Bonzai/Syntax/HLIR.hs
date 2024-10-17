@@ -74,6 +74,8 @@ data Pattern f t
   | MkPatLocated (Pattern f t) Position
   | MkPatOr (Pattern f t) (Pattern f t)
   | MkPatCondition (Expression f t) (Pattern f t)
+  | MkPatList [Pattern f t] (Maybe (Pattern f t))
+  deriving Show
 
 instance (ToText t, ToText (f t)) => Show (Expression f t) where
   show = T.unpack . toText
@@ -141,6 +143,8 @@ instance (ToText (f t), ToText t) => ToText (Pattern f t) where
   toText (MkPatLocated p _) = toText p
   toText (MkPatOr p p') = T.concat [toText p, " | ", toText p']
   toText (MkPatCondition e p) = T.concat [toText p, " if ", toText e]
+  toText (MkPatList ps Nothing) = T.concat ["[", T.intercalate ", " (map toText ps), "]"]
+  toText (MkPatList ps (Just p)) = T.concat ["[", T.intercalate ", " (map toText ps), " ..", toText p, "]"]
 
 instance (ToText t, ToText (f t)) => ToText [Expression f t] where
   toText = T.intercalate "\n" . map toText
