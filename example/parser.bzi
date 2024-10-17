@@ -1,27 +1,13 @@
 require "std:parser"
 require "std:natives"
 
-let path = "example/parser.bzi"
+let path = "example/parser.bzi,test"
 
 print(path)
 
-let p = char('e')
-        :and: char('x')
-        :and: char('a')
-        :and: char('m')
-        :and: char('p')
-        :and: char('l')
-        :and: char('e')
-        :and: char('/')
-        :and: char('p')
-        :and: char('a')
-        :and: char('r')
-        :and: char('s')
-        :and: char('e')
-        :and: char('r')
-        :and: char('.')
-        :and: char('b')
-        :and: char('z')
-        :and: char('i')
+let p = Parser::map(
+  many1(noneOf([','])).sepBy(char(',')),
+  fn(xs) => List::map(xs, implode)
+)
 
-print(p.run_parser(path))
+print(p.runParser(path))
