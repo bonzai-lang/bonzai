@@ -67,9 +67,13 @@ pattern MkTyList a = MkTyApp (MkTyId "list") [a]
 pattern MkTyMutable :: Type -> Type
 pattern MkTyMutable a = MkTyApp (MkTyId "mutable") [a]
 
+pattern MkTyTuple :: Type -> Type -> Type
+pattern MkTyTuple a b = MkTyApp (MkTyId "Tuple") [a, b]
+
 instance ToText Type where 
   toText (MkTyId a) = a
   toText (args :->: ret) = T.concat ["(", T.intercalate ", " (map toText args), ") -> ", toText ret]
+  toText (MkTyTuple a b) = T.concat ["(", toText a, ", ", toText b, ")"]
   toText (MkTyApp a b) = T.concat [toText a, "<", T.intercalate ", " (map toText b), ">"]
   toText (MkTyVar a) = do
     let a' = IO.unsafePerformIO $ readIORef a

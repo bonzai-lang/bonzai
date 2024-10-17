@@ -115,7 +115,7 @@ validOperators =
 reservedOperators :: Set Text
 reservedOperators =
   Set.fromList
-    [ ".", "..", "=>" ]
+    [ ".", "..", "=>", "," ]
 
 -- | Parse a sequence of valid operators, checking if they are valid
 -- | and not reserved, and then return the concatenated operator

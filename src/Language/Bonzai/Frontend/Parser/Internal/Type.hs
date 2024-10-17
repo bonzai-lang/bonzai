@@ -4,7 +4,7 @@ import qualified Language.Bonzai.Syntax.HLIR as HLIR
 import qualified Language.Bonzai.Frontend.Parser.Lexer as Lex
 
 parseType :: (MonadIO m) => P.Parser m HLIR.Type
-parseType = 
+parseType =
   P.choice [
     do
       void $ Lex.reserved "fn"
@@ -12,6 +12,12 @@ parseType =
       ret <- Lex.symbol ":" *> parseType
 
       pure $ tys HLIR.:->: ret,
+
+    Lex.parens $ do
+      x <- parseType
+      void $ Lex.reserved ","
+      HLIR.MkTyTuple x <$> parseType,
+
     P.try $ do
       idt <- Lex.identifier
       tys <- Lex.angles $ P.sepBy1 parseType Lex.comma

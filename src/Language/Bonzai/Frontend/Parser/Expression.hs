@@ -213,7 +213,11 @@ parseMatch = localize $ do
             ]
           ]
 
-
+parseTuple :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseTuple = localize . Lex.parens $ do
+  x <- parseExpression
+  void $ Lex.symbol ","
+  HLIR.MkExprTuple x <$> parseExpression
 
 parseWhile :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseWhile = localize $ do
@@ -317,6 +321,7 @@ parseTerm =
     parseLiteral,
     parseBlock,
     parseList,
+    P.try parseTuple,
     P.try parseUpdate,
     parseVariable,
     Lex.parens parseExpression

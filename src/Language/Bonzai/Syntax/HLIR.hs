@@ -8,6 +8,7 @@ module Language.Bonzai.Syntax.HLIR (
 
   pattern MkExprBinary,
   pattern MkExprString,
+  pattern MkExprTuple,
 
   -- Re-exports
   module Lit,
@@ -85,6 +86,9 @@ pattern MkExprBinary op t a b = MkExprApplication (MkExprVariable (MkAnnotation 
 
 pattern MkExprString :: Text -> Expression f t
 pattern MkExprString s = MkExprLiteral (MkLitString s)
+
+pattern MkExprTuple :: Expression Maybe t -> Expression Maybe t -> Expression Maybe t
+pattern MkExprTuple a b = MkExprApplication (MkExprVariable (MkAnnotation "Tuple" Nothing)) [a, b]
 
 type family HLIR (s :: Symbol) where
   HLIR "update" = Update Maybe Type
