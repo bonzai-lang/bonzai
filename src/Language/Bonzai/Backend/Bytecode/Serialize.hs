@@ -97,6 +97,8 @@ encodeConstant (MkLitInt i) = putWord8 0 >> encodeInteger i
 encodeConstant (MkLitFloat f) = putWord8 1 >> putDoublele f
 encodeConstant (MkLitString t) = putWord8 2 >> encodeText t
 encodeConstant (MkLitChar c) = putWord8 2 >> encodeText (fromString [c])
+encodeConstant (MkLitBool True) = putWord8 0 >> encodeInteger (1 :: Int)
+encodeConstant (MkLitBool False) = putWord8 0 >> encodeInteger (0 :: Int)
 
 runSerializer :: [Instruction] -> [Literal] -> BSL.ByteString
 runSerializer xs lits = runPut $ do
