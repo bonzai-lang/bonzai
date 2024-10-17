@@ -7,6 +7,7 @@ extern fn div_value<A>(x: A, y: A): A
 extern fn exit_with<A>(code: int): A
 extern fn mutable_value<A>(x: mutable<A>): A
 
+extern fn length<A>(xs: list<A>): int
 extern fn sliceFrom<A>(xs: list<A>, i: int): list<A>
 
 extern fn and_value(x: bool, y: bool): bool
@@ -39,13 +40,36 @@ let (-) = sub_value
 let (*) = mul_value
 let (/) = div_value
 
-let (&&) = and_value
-let (||) = or_value
-let (!) = not_value
+fn (&&) (x: bool, y: bool): bool => if x then y else false
+fn (||) (x: bool, y: bool): bool => if x then true else y
+fn (!) (x: bool): bool => if x then false else true
 
-fn elem<A>(x: A, xs: list<A>): bool =>
+fn List::elem<A>(x: A, xs: list<A>): bool =>
   match xs {
-    case [y .. ys] if x == y => true
-    case [y .. ys] => elem(x, ys)
     case [] => false
+    case [y .. ys] => if x == y then true else List::elem(x, ys)
+  }
+
+fn List::map<A, B>(xs: list<A>, f: fn(A): B): list<B> =>
+  match xs {
+    case [] => []
+    case [y .. ys] => [f(y)] + List::map(ys, f)
+  }
+
+fn List::foldl<A, B>(f: fn(A, B): B, acc: B, xs: list<A>): B =>
+  match xs {
+    case [] => acc
+    case [y .. ys] => List::foldl(f, f(y, acc), ys)
+  }
+
+fn List::foldr<A, B>(f: fn(A, B): B, acc: B, xs: list<A>): B =>
+  match xs {
+    case [] => acc
+    case [y .. ys] => f(y, List::foldr(f, acc, ys))
+  }
+
+fn List::length<A>(xs: list<A>): int =>
+  match xs {
+    case [] => 0
+    case [x .. xs] => 1 + List::length(xs)
   }
