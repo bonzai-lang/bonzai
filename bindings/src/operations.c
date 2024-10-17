@@ -5,9 +5,99 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+void print_with_level(Value value, int level) {
+  if (value == 0) {
+    printf("null");
+    return;
+  }
+  ValueType val_type = get_type(value);
+  switch (val_type) {
+    case TYPE_INTEGER:
+      printf("%d", (int32_t)value);
+      break;
+    case TYPE_SPECIAL:
+      printf("<special>");
+      break;
+    case TYPE_FLOAT:
+      printf("%f", GET_FLOAT(value));
+      break;
+    case TYPE_STRING:
+      if (level == 0) {
+        printf("%s", GET_STRING(value));
+      } else {
+        printf("\"%s\"", GET_STRING(value));
+      }
+      break;
+    case TYPE_LIST: {
+      HeapValue* list = GET_PTR(value);
+      
+      if (list->length == 0) {
+        printf("[]");
+        break;
+      }
+
+      if (list->as_ptr[0] == kNull) {
+        printf("%s::%s(", GET_STRING(list->as_ptr[1]), GET_STRING(list->as_ptr[2]));
+
+        for (uint32_t i = 3; i < list->length; i++) {
+          print_with_level(list->as_ptr[i], level + 1);
+          if (i < list->length - 1) {
+            printf(", ");
+          }
+        }
+
+        printf(")");
+      } else {
+        printf("[");
+
+        for (uint32_t i = 0; i < list->length; i++) {
+          print_with_level(list->as_ptr[i], level + 1);
+          if (i < list->length - 1) {
+            printf(", ");
+          }
+        }
+        
+        printf("]");
+      }
+
+      break;
+    }
+    case TYPE_MUTABLE: {
+      printf("<mutable ");
+      print_with_level(GET_MUTABLE(value), level + 1);
+      printf(">");
+      break;
+    }
+    case TYPE_FUNCTION: {
+      printf("<function>");
+      break;
+    }
+    case TYPE_FUNCENV: {
+      printf("<funcenv>");
+      break;
+    }
+
+    case TYPE_EVENT: {
+      printf("<event>");
+      break;
+    }
+
+    case TYPE_FRAME: {
+      printf("<frame>");
+      break;
+    }
+
+    case TYPE_UNKNOWN:
+    default: {
+      printf("<unknown>");
+      break;
+    }
+  }
+}
+
 Value print(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "print", argc, 1);
-  native_print(args[0]); printf("\n");
+  print_with_level(args[0], 0); printf("\n");
 
   return MAKE_INTEGER(0);
 }
@@ -254,6 +344,86 @@ Value toString(Module* mod, Value* args, int argc) {
     }
     default: {
       THROW(mod, "Unsupported type for toString");
+    }
+  }
+}
+
+Value is_whitespace(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "is_whitespace", argc, 1);
+  ASSERT_TYPE(mod, "is_whitespace", args[0], TYPE_STRING);
+
+  char chr = GET_STRING(args[0])[0];
+
+  return MAKE_INTEGER(chr == ' ' || chr == '\t' || chr == '\n' || chr == '\r');
+}
+
+Value is_digit(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "is_digit", argc, 1);
+  ASSERT_TYPE(mod, "is_digit", args[0], TYPE_STRING);
+
+  char chr = GET_STRING(args[0])[0];
+
+  return MAKE_INTEGER(chr >= '0' && chr <= '9');
+}
+
+Value is_alpha(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "is_alpha", argc, 1);
+  ASSERT_TYPE(mod, "is_alpha", args[0], TYPE_STRING);
+
+  char chr = GET_STRING(args[0])[0];
+
+  return MAKE_INTEGER((chr >= 'a' && chr <= 'z') || (chr >= 'A' && chr <= 'Z'));
+}
+
+Value is_alphanumeric(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "is_alphanumeric", argc, 1);
+  ASSERT_TYPE(mod, "is_alphanumeric", args[0], TYPE_STRING);
+
+  char chr = GET_STRING(args[0])[0];
+
+  return MAKE_INTEGER((chr >= '0' && chr <= '9') || (chr >= 'a' && chr <= 'z') || (chr >= 'A' && chr <= 'Z'));
+}
+
+Value toInt(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "toInt", argc, 1);
+
+  ValueType ty = get_type(args[0]);
+
+  switch (ty) {
+    case TYPE_INTEGER: {
+      return args[0];
+    }
+    case TYPE_FLOAT: {
+      return MAKE_INTEGER((int) GET_FLOAT(args[0]));
+    }
+    case TYPE_STRING: {
+      return MAKE_INTEGER(atoi(GET_STRING(args[0])));
+    }
+    default: {
+      THROW(mod, "Unsupported type for toInt");
+    }
+  }
+}
+
+Value toFloat(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "toFloat", argc, 1);
+
+  ValueType ty = get_type(args[0]);
+
+  switch (ty) {
+    case TYPE_INTEGER: {
+      double f = (double) GET_INT(args[0]);
+      return MAKE_FLOAT(f);
+    }
+    case TYPE_FLOAT: {
+      return args[0];
+    }
+    case TYPE_STRING: {
+      double f = atof(GET_STRING(args[0]));
+      return MAKE_FLOAT(f);
+    }
+    default: {
+      THROW(mod, "Unsupported type for toFloat");
     }
   }
 }

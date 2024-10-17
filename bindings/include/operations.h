@@ -20,5 +20,9 @@ Value explode(Module* mod, Value* args, int argc);
 Value implode(Module* mod, Value* args, int argc);
 Value sliceFrom(Module* mod, Value* args, int argc);
 Value toString(Module* mod, Value* args, int argc);
+Value is_whitespace(Module* mod, Value* args, int argc);
+Value is_digit(Module* mod, Value* args, int argc);
+Value is_alpha(Module* mod, Value* args, int argc);
+Value is_alphanumeric(Module* mod, Value* args, int argc);
 
 #endif  // OPERATIONS_H
