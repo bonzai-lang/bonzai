@@ -210,12 +210,6 @@ parseMatch = localize $ do
               P.InfixL $ do
                 void $ Lex.symbol "|"
                 pure $ \a b -> HLIR.MkPatOr a b
-            ],
-            [
-              P.Postfix . Lex.makeUnaryOp $ do
-                void $ Lex.reserved "if"
-                cond <- parseExpression
-                pure $ \p -> HLIR.MkPatCondition cond p
             ]
           ]
 
@@ -439,4 +433,4 @@ parseToplevel =
   ]
 
 parseProgram :: MonadIO m => P.Parser m [HLIR.HLIR "expression"]
-parseProgram = P.many parseToplevel <* P.eof
+parseProgram = Lex.scn *> P.many parseToplevel <* P.eof
