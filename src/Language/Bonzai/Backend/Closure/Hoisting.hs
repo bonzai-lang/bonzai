@@ -3,6 +3,12 @@ module Language.Bonzai.Backend.Closure.Hoisting where
 import qualified Language.Bonzai.Backend.Closure.Conversion as CC
 import qualified Language.Bonzai.Syntax.MLIR as MLIR
 import Control.Monad.Result (compilerError)
+import qualified Language.Bonzai.Backend.Closure.Free as CC
+
+isClosure :: MLIR.MLIR "expression" -> Bool
+isClosure (MLIR.MkExprList [lam, _]) = CC.isLambda lam
+isClosure (MLIR.MkExprLoc _ e) = isClosure e
+isClosure _ = False
 
 hoist 
   :: MonadIO m 
@@ -18,6 +24,20 @@ hoist (MLIR.MkExprLambda args e) = do
   (e', es) <- hoist e
 
   pure (MLIR.MkExprVariable name, MLIR.MkExprLet name (MLIR.MkExprLambda args e') : es)
+hoist (MLIR.MkExprLet name e) | isClosure e = 
+  case CC.removeLoc e of
+    MLIR.MkExprList [MLIR.MkExprLambda args body, dict] -> do
+      newName <- CC.freshLambda "hoist"
+      (dict', hoisted') <- hoist dict
+      (body', hoisted) <- hoist body
+      let newExpr = MLIR.MkExprList [MLIR.MkExprVariable newName, dict']
+      let finalBody = CC.substitute (name, newExpr) body'
+
+      pure (
+          MLIR.MkExprLet name (MLIR.MkExprList [MLIR.MkExprVariable newName, dict']), 
+          MLIR.MkExprLet newName (MLIR.MkExprLambda args finalBody) : hoisted <> hoisted'
+        )
+    _ -> compilerError "impossible"
 hoist (MLIR.MkExprBlock es) = do
   (es', hoisted) <- mapAndUnzipM hoist es
 
