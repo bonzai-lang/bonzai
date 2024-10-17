@@ -30,9 +30,10 @@ convert (HLIR.MkExprWhile c e) = MLIR.MkExprWhile (convert c) (convert e)
 convert (HLIR.MkExprIndex e e') = MLIR.MkExprIndex (convert e) (convert e')
 convert (HLIR.MkExprMatch e cs) = do
   let e' = convert e
-  let cases' = map (bimap (createCondition e') convert) cs
+  let scrut = MLIR.MkExprVariable "scrut"
+  let cases' = map (bimap (createCondition scrut) convert) cs
 
-  createIfs cases'
+  MLIR.MkExprUnpack "scrut" e' (createIfs cases')
 convert (HLIR.MkExprUnwrapLive e) = MLIR.MkExprApplication (convert e) []
 convert (HLIR.MkExprWrapLive e) = MLIR.MkExprLambda [] (convert e)
 convert _ = compilerError "unimplemented"
@@ -94,6 +95,9 @@ idx e i = MLIR.MkExprIndex e (MLIR.MkExprLiteral (HLIR.MkLitInt i))
 equalsTo :: MLIR.MLIR "expression" -> MLIR.MLIR "expression" -> MLIR.MLIR "expression"
 equalsTo a b = MLIR.MkExprApplication (MLIR.MkExprVariable "==") [a, b]
 
+sliceFrom :: MLIR.MLIR "expression" -> Integer -> MLIR.MLIR "expression"
+sliceFrom e i = MLIR.MkExprApplication (MLIR.MkExprVariable "sliceFrom") [e, MLIR.MkExprLiteral (HLIR.MkLitInt i)]
+
 createCondition
   :: MLIR.MLIR "expression"
   -> HLIR.TLIR "pattern"
@@ -122,6 +126,26 @@ createCondition x (HLIR.MkPatCondition e y) = do
   let (conds, maps) = createCondition x y
   let e' = convert e
   ([MLIR.MkExprApplication (MLIR.MkExprVariable "&&") [MLIR.MkExprBlock conds, susbstituteMap (Map.toList maps) e']], maps)
+createCondition x (HLIR.MkPatList pats slice) =
+  let (conds, maps) =
+        unzip $
+          zipWith
+            createCondition
+            [idx x (fromIntegral i) | i <- [0 .. length pats - 1]]
+            pats
+      (conds', maps') = maybe mempty (createCondition (sliceFrom x patLen)) slice
+      patLen = fromIntegral $ length pats
+      lenCond = case slice of
+        Just _ ->
+          MLIR.MkExprApplication (MLIR.MkExprVariable ">") [
+              MLIR.MkExprApplication (MLIR.MkExprVariable "length") [x]
+            , MLIR.MkExprLiteral (HLIR.MkLitInt $ patLen - 1)
+          ]
+        Nothing ->
+          equalsTo
+            (MLIR.MkExprApplication (MLIR.MkExprVariable "length") [x])
+            (MLIR.MkExprLiteral (HLIR.MkLitInt (toInteger patLen)))
+   in (lenCond : concat conds <> conds', mconcat maps <> maps')
 
 susbstituteMap :: [(Text, MLIR.MLIR "expression")] -> MLIR.MLIR "expression" -> MLIR.MLIR "expression"
 susbstituteMap xs e = List.foldl (flip substitute) e xs
