@@ -1,0 +1,83 @@
+require "std:natives"
+
+extern fn is_whitespace(c: char): bool
+extern fn is_digit(c: char): bool
+extern fn is_alpha(c: char): bool
+extern fn is_alphanumeric(c: char): bool
+extern fn slice<A>(xs: list<A>, start: int, end: int): list<A>
+extern fn length<A>(xs: list<A>): int
+extern fn explode(s: string): list<char>
+extern fn implode(cs: list<char>): string
+extern fn str_index(s: string, i: int): char
+extern fn toString<A>(x: A): string
+
+type Result<A> {
+  Ok(x: A, rest: string),
+  Error(err: string, rest: string)
+}
+
+type Parser<A> { Parser(p: fn(string): Result<A>) }
+
+fn run_parser<A>(parser: Parser<A>, input: string): Result<A> =>
+  match parser {
+    case Parser(f) => f(input)
+  }
+
+fn parse_error<A>(msg: string): Parser<A> =>
+  Parser(fn(inp) => Error(msg, inp))
+
+fn Parser::map<A, B>(self, f: fn(A): B): Parser<B> =>
+  Parser(fn(input) =>
+    match run_parser(self, input) {
+      case Ok(x, rest) => Ok(f(x), rest)
+      case Error(msg, rest) => Error(msg, rest)
+    }
+  )
+
+fn Parser::bind<A, B>(self, f: fn(A): Parser<B>): Parser<B> =>
+  Parser(fn(input) =>
+    match run_parser(self, input) {
+      case Ok(x, rest) => run_parser(f(x), rest)
+      case Error(msg, rest) => Error(msg, rest)
+    }
+  )
+
+fn Parser::and_then<A, B>(self: Parser<A>, other: Parser<B>): Parser<B> =>
+  Parser(fn(input) =>
+    match run_parser(self, input) {
+      case Ok(_, rest) => run_parser(other, rest)
+      case Error(msg, rest) => Error(msg, rest)
+    }
+  )
+
+fn satisfy(pred: fn(char): bool): Parser<char> => {
+  Parser(fn(input) => {
+    match input.explode() {
+      case [] => Error("Unexpected end of input", input)
+      case [c .. cs] if pred(c) => {
+        Ok(c, cs.implode)
+      }
+      case _ => {
+        Error("Unexpected character", input)
+      }
+    }
+  })
+}
+
+fn char(c: char): Parser<char> =>
+  satisfy(fn(x) => {
+    x == c
+  })
+
+fn string(s: string): Parser<string> => 
+  Parser(fn(input) => {
+    let len = length(s.explode())
+    let str = slice(input.explode(), 0, len).implode()
+    if str == s then Ok(s, input.explode.sliceFrom(len).implode) else Error("Unexpected string", input)
+  })
+
+let and = Parser::and_then
+
+fn none_of(cs: list<char>): Parser<char> =>
+  satisfy(fn(c) => !elem(c, cs))
+
