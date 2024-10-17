@@ -90,7 +90,7 @@ convert (MLIR.MkExprUnpack n e e') = do
 
   name <- freshSymbol "anf"
   
-  pure (MLIR.MkExprVariable name, stmts1 <> stmts2 <> [(n, e'')] <> [(name, e''')])
+  pure (MLIR.MkExprVariable name, stmts1 <> [(n, e'')] <> stmts2 <> [(name, e''')])
 convert (MLIR.MkExprLoc p e) = do
   (e', stmts) <- convert e
   
