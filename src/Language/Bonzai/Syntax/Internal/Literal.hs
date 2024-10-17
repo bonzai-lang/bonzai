@@ -7,6 +7,7 @@ data Literal
   | MkLitFloat Double
   | MkLitChar Char
   | MkLitString Text
+  | MkLitBool Bool
   deriving (Eq, Ord, Show)
 
 instance ToText Literal where
@@ -14,3 +15,4 @@ instance ToText Literal where
   toText (MkLitFloat f) = T.pack (show f)
   toText (MkLitChar c) = T.pack (show c)
   toText (MkLitString s) = T.pack (show s)
+  toText (MkLitBool b) = T.pack (show b)
