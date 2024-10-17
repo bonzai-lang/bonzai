@@ -18,17 +18,17 @@ type Result<A> {
 
 type Parser<A> { Parser(p: fn(string): Result<A>) }
 
-fn run_parser<A>(parser: Parser<A>, input: string): Result<A> =>
+fn runParser<A>(parser: Parser<A>, input: string): Result<A> =>
   match parser {
     case Parser(f) => f(input)
   }
 
-fn parse_error<A>(msg: string): Parser<A> =>
+fn parseError<A>(msg: string): Parser<A> =>
   Parser(fn(inp) => Error(msg, inp))
 
 fn Parser::map<A, B>(self, f: fn(A): B): Parser<B> =>
   Parser(fn(input) =>
-    match run_parser(self, input) {
+    match runParser(self, input) {
       case Ok(x, rest) => Ok(f(x), rest)
       case Error(msg, rest) => Error(msg, rest)
     }
@@ -36,38 +36,36 @@ fn Parser::map<A, B>(self, f: fn(A): B): Parser<B> =>
 
 fn Parser::bind<A, B>(self, f: fn(A): Parser<B>): Parser<B> =>
   Parser(fn(input) =>
-    match run_parser(self, input) {
-      case Ok(x, rest) => run_parser(f(x), rest)
+    match runParser(self, input) {
+      case Ok(x, rest) => runParser(f(x), rest)
       case Error(msg, rest) => Error(msg, rest)
     }
   )
 
-fn Parser::and_then<A, B>(self: Parser<A>, other: Parser<B>): Parser<B> =>
+fn Parser::andThen<A, B>(self: Parser<A>, other: Parser<B>): Parser<B> =>
   Parser(fn(input) =>
-    match run_parser(self, input) {
-      case Ok(_, rest) => run_parser(other, rest)
+    match runParser(self, input) {
+      case Ok(_, rest) => runParser(other, rest)
       case Error(msg, rest) => Error(msg, rest)
     }
   )
+
+fn Parser::pure<A>(x: A): Parser<A> =>
+  Parser(fn(input) => Ok(x, input))
 
 fn satisfy(pred: fn(char): bool): Parser<char> => {
   Parser(fn(input) => {
     match input.explode() {
       case [] => Error("Unexpected end of input", input)
-      case [c .. cs] if pred(c) => {
-        Ok(c, cs.implode)
-      }
-      case _ => {
-        Error("Unexpected character", input)
-      }
+      case [c .. cs] => if pred(c) 
+        then Ok(c, cs.implode()) 
+        else Error("Unexpected character", input)
     }
   })
 }
 
 fn char(c: char): Parser<char> =>
-  satisfy(fn(x) => {
-    x == c
-  })
+  satisfy(fn(x) => x == c)
 
 fn string(s: string): Parser<string> => 
   Parser(fn(input) => {
@@ -76,8 +74,50 @@ fn string(s: string): Parser<string> =>
     if str == s then Ok(s, input.explode.sliceFrom(len).implode) else Error("Unexpected string", input)
   })
 
-let and = Parser::and_then
+let and = Parser::andThen
 
-fn none_of(cs: list<char>): Parser<char> =>
-  satisfy(fn(c) => !elem(c, cs))
+fn noneOf(cs: list<char>): Parser<char> =>
+  satisfy(fn(c) => !List::elem(c, cs))
 
+fn oneOf(cs: list<char>): Parser<char> =>
+  satisfy(fn(c) => List::elem(c, cs))
+
+fn many<A>(parser: Parser<A>): Parser<list<A>> =>
+  Parser(fn(input) => {
+    fn loop(input: string, acc: list<A>): Result<list<A>> => {
+      match runParser(parser, input) {
+        case Ok(x, rest) => loop(rest, acc + [x])
+        case Error(_, _) => Ok(acc, input)
+      }
+    }
+    loop(input, [])
+  })
+
+fn many1<A>(parser: Parser<A>): Parser<list<A>> =>
+  Parser::bind(parser, fn(x) =>
+    Parser::map(many(parser), fn(xs) => [x] + xs)
+  )
+
+fn sepBy<A, B>(parser: Parser<A>, sep: Parser<B>): Parser<list<A>> =>
+  Parser(fn(input) => {
+    fn loop(input: string, acc: list<A>): Result<list<A>> => {
+      match runParser(parser, input) {
+        case Ok(x, rest) => {
+          match runParser(sep, rest) {
+            case Ok(_, rest) => loop(rest, acc + [x])
+            case Error(_, _) => Ok(acc + [x], rest)
+          }
+        }
+        case Error(_, _) => Ok(acc, input)
+      }
+    }
+    loop(input, [])
+  })
+
+fn sepBy1<A, B>(parser: Parser<A>, sep: Parser<B>): Parser<list<A>> =>
+  Parser::bind(parser, fn(x) =>
+    Parser::map(sepBy(parser, sep), fn(xs) => [x] + xs)
+  )
+
+fn between<A, B, C>(open: Parser<A>, close: Parser<C>, parser: Parser<B>): Parser<B> =>
+  and(open, Parser::bind(parser, fn(x) => and(close, Parser::pure(x))))
