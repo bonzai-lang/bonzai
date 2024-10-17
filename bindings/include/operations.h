@@ -15,5 +15,10 @@ Value file_exists(Module* mod, Value* args, int argc);
 Value get_env(Module* mod, Value* args, int argc);
 Value length(Module* mod, Value* args, int argc);
 Value execute_command_silent(Module* mod, Value* args, int argc);
+Value panic(Module* mod, Value* args, int argc);
+Value explode(Module* mod, Value* args, int argc);
+Value implode(Module* mod, Value* args, int argc);
+Value sliceFrom(Module* mod, Value* args, int argc);
+Value toString(Module* mod, Value* args, int argc);
 
 #endif  // OPERATIONS_H

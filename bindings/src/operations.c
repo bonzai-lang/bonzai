@@ -151,3 +151,109 @@ Value panic(Module* mod, Value* args, int argc) {
 
   THROW_FMT(mod, "%s", (GET_STRING(args[0])));
 }
+
+Value explode(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "explode", argc, 1);
+  ASSERT_TYPE(mod, "explode", args[0], TYPE_STRING);
+
+  char* str = GET_STRING(args[0]);
+  uint32_t len = strlen(str);
+
+  Value* list = malloc(len * sizeof(Value));
+  for (uint32_t i = 0; i < len; i++) {
+    char* c = malloc(2 * sizeof(char));
+    c[0] = str[i];
+    c[1] = '\0';
+
+    list[i] = MAKE_STRING(mod, c);
+  }
+
+  return MAKE_LIST(mod, list, len);
+}
+
+Value implode(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "implode", argc, 1);
+  ASSERT_TYPE(mod, "implode", args[0], TYPE_LIST);
+
+  HeapValue* list = GET_PTR(args[0]);
+  char* str = malloc(list->length + 1);
+
+  for (uint32_t i = 0; i < list->length; i++) {
+    str[i] = GET_STRING(list->as_ptr[i])[0];
+  }
+
+  str[list->length] = '\0';
+
+  return MAKE_STRING(mod, str);
+}
+
+Value sliceFrom(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "sliceFrom", argc, 2);
+  ASSERT_TYPE(mod, "sliceFrom", args[0], TYPE_LIST);
+  ASSERT_TYPE(mod, "sliceFrom", args[1], TYPE_INTEGER);
+
+  HeapValue* list = GET_PTR(args[0]);
+  uint32_t start = GET_INT(args[1]);
+  
+  if (start < 0 || start > list->length) {
+    THROW(mod, "Index out of bounds");
+  }
+
+  Value* new_list = malloc((list->length - start) * sizeof(Value));
+  for (uint32_t i = start; i < list->length; i++) {
+    new_list[i - start] = list->as_ptr[i];
+  }
+
+  return MAKE_LIST(mod, new_list, list->length - start);
+}
+
+Value toString(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "toString", argc, 1);
+
+  ValueType ty = get_type(args[0]);
+
+  switch (ty) {
+    case TYPE_INTEGER: {
+      char* str = malloc(12);
+      sprintf(str, "%d", (int) GET_INT(args[0]));
+      return MAKE_STRING(mod, str);
+    }
+    case TYPE_FLOAT: {
+      char* str = malloc(32);
+      sprintf(str, "%f", GET_FLOAT(args[0]));
+      return MAKE_STRING(mod, str);
+    }
+    case TYPE_STRING: {
+      return args[0];
+    }
+    case TYPE_LIST: {
+      HeapValue* list = GET_PTR(args[0]);
+      char* str = malloc(2 * list->length + 2);
+      str[0] = '[';
+
+      for (uint32_t i = 0; i < list->length; i++) {
+        char* item = GET_STRING(toString(mod, &list->as_ptr[i], 1));
+        strcat(str, item);
+        if (i < list->length - 1) {
+          strcat(str, ", ");
+        }
+      }
+
+      strcat(str, "]");
+      return MAKE_STRING(mod, str);
+    }
+    case TYPE_SPECIAL: {
+      return MAKE_STRING(mod, "<special>");
+    }
+    case TYPE_MUTABLE: {
+      HeapValue* mut = GET_PTR(args[0]);
+      return toString(mod, mut->as_ptr, 1);
+    }
+    case TYPE_UNKNOWN: {
+      return MAKE_STRING(mod, "unknown");
+    }
+    default: {
+      THROW(mod, "Unsupported type for toString");
+    }
+  }
+}
