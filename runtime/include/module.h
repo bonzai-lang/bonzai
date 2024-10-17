@@ -42,6 +42,7 @@ typedef struct Module {
 
   HeapValue* first_object;
   int num_objects, max_objects;
+  bool gc_enabled;
   
   Position latest_position;
   const char* file;
@@ -50,5 +51,6 @@ typedef struct Module {
 typedef Value (*Native)(struct Module *m, Value *args, int argc);
 
 Frame pop_frame(Module *mod);
+void init_gc(Module* vm);
 
 #endif  // MODULE_H

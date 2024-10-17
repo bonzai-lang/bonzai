@@ -39,6 +39,8 @@ Value deserialize_value(Module* mod, FILE* file) {
       hp->type = TYPE_STRING;
       hp->as_string = string_value;
       hp->length = length;
+      hp->is_constant = true;
+      hp->is_marked = true;
 
 
       value = MAKE_PTR(hp);
@@ -84,9 +86,6 @@ Constants deserialize_constants(Module *mod, FILE* file) {
 }
 
 void deserialize(Module *mod, FILE* file) {
-  mod->first_object = NULL;
-  mod->max_objects = INIT_OBJECTS;
-  mod->num_objects = 0;
   mod->callstack = 0;
   mod->is_terminated = false;
   mod->base_pointer = BASE_POINTER;

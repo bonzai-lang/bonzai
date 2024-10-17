@@ -61,6 +61,8 @@ int main(int argc, char* argv[]) {
   module.latest_position[0] = 0;
   module.latest_position[1] = 0;
 
+  init_gc(&module);
+
   if (argc < 2) THROW_FMT((&module), "Usage: %s <file>", argv[0]);
   FILE* file = fopen(argv[1], "rb");
 

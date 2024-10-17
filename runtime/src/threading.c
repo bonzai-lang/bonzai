@@ -42,9 +42,7 @@ void *actor_run(void *arg) {
 
   Module* new_module = malloc(sizeof(Module));
   new_module->stack = stack_new();
-  new_module->first_object = NULL;
-  new_module->num_objects = 0;
-  new_module->max_objects = INIT_OBJECTS;
+  init_gc(new_module);
   pthread_mutex_lock(&module->module_mutex);
   memcpy(new_module->stack->values, module->stack->values, GLOBALS_SIZE * sizeof(Value));
   new_module->instr_count = module->instr_count;

@@ -137,7 +137,7 @@ struct EventOn {
 typedef struct HeapValue {
   ValueType type;
   uint32_t length;
-  bool is_marked;
+  bool is_marked, is_constant;
   struct HeapValue* next;
 
   union {
@@ -167,7 +167,6 @@ Value MAKE_EVENT(struct Module* mod, uint32_t ons_count, uint32_t ipc);
 Value MAKE_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp);
 Value MAKE_EVENT_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int function_ipc);
 Value MAKE_EVENT_ON(struct Module* mod, int id, Value func);
-Value MAKE_FRAME_NON_GC(int32_t ip, int32_t sp, int32_t bp);
 void gc(struct Module* vm);
 void force_sweep(struct Module* vm);
 HeapValue* allocate(struct Module* mod, ValueType type);

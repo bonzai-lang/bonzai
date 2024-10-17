@@ -113,7 +113,8 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
   case_make_list: {
     Value* list = malloc(i1 * sizeof(Value));
-
+    module->gc_enabled = false;
+    
     // Loop in reverse order to pop values in the correct order
     for (int i = i1 - 1; i >= 0; i--) {
       list[i] = stack_pop(module);
@@ -121,6 +122,8 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
     Value value = MAKE_LIST(module, list, i1);
     stack_push(module, value);
+
+    module->gc_enabled = true;
     INCREASE_IP(module);
     goto *jmp_table[op];
   }

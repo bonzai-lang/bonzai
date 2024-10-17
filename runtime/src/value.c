@@ -95,10 +95,10 @@ void mark_value(Value value) {
   if (!IS_PTR(value)) return;
 
   HeapValue* ptr = GET_PTR(value);
-  if (ptr->is_marked) return;
+
+  if (ptr->is_marked || ptr->is_constant) return;
 
   ptr->is_marked = true;
-
   if (ptr->type == TYPE_LIST) {
     for (uint32_t i = 0; i < ptr->length; i++) {
       mark_value(ptr->as_ptr[i]);
@@ -115,7 +115,8 @@ void mark_value(Value value) {
 }
 
 void mark_all(struct Module* vm) {
-  for (int i = 0; i < MAX_STACK_SIZE; i++) {
+  for (int i = 0; i < vm->stack->stack_capacity; i++) {
+    // printf("Marking stack value %d\n", i);
     mark_value(vm->stack->values[i]);
   }
 }
@@ -123,7 +124,7 @@ void mark_all(struct Module* vm) {
 void sweep(struct Module* vm) {
   HeapValue** object = &vm->first_object;
   while (*object) {
-    if (!(*object)->is_marked) {
+    if (!(*object)->is_marked && !(*object)->is_constant) {
       /* This object wasn't reached, so remove it from the list
          and free it. */
       HeapValue* unreached = *object;
@@ -164,7 +165,7 @@ void gc(struct Module* vm) {
   vm->max_objects = vm->num_objects < INIT_OBJECTS ? INIT_OBJECTS : vm->num_objects * 2;
   
   // printf("Collected %d objects, %d remaining.\n", numObjects - vm->num_objects,
-  //        vm->num_objects);
+        //  vm->num_objects);
 }
 
 void force_sweep(struct Module* vm) {
@@ -192,30 +193,27 @@ void force_sweep(struct Module* vm) {
 }
 
 HeapValue* allocate(struct Module* mod, ValueType type) {
-  if (mod->num_objects == mod->max_objects) gc(mod);
+  if (mod->num_objects == mod->max_objects) {
+    if (mod->gc_enabled) {
+      gc(mod);
+    } else {
+      mod->max_objects += 2;
+    }
+  }
 
   HeapValue* v = malloc(sizeof(HeapValue));
 
   v->type = type;
   v->is_marked = false;
   v->next = mod->first_object;
+  v->is_constant = false;
 
   mod->first_object = v;
   mod->num_objects++;
 
+  // printf("Allocated %d objects, %d remaining.\n", mod->num_objects, mod->max_objects - mod->num_objects);
+
   return v;
-}
-
-Value MAKE_FRAME_NON_GC(int32_t ip, int32_t sp, int32_t bp) {
-  HeapValue* v = malloc(sizeof(HeapValue));
-
-  v->type = TYPE_FRAME;
-  v->as_frame.instruction_pointer = ip;
-  v->as_frame.stack_pointer = sp;
-  v->as_frame.base_ptr = bp;
-  v->as_frame.ons_count = 0;
-
-  return MAKE_PTR(v);
 }
 
 Value MAKE_STRING(struct Module* mod, char* x) {
