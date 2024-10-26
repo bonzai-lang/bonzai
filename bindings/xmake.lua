@@ -6,12 +6,16 @@ end
 
 set_warnings("allextra")
 
+add_requires("libcurl", {system = false})
+
 target("bonzai-standard")
   add_rules("mode.release")
   add_files("src/**.c")
   add_files("../runtime/src/**.c")
   add_includedirs("include")
   add_includedirs("../runtime/include")
+
+  add_packages("libcurl")
 
   set_kind("shared")
   set_targetdir("bin")
@@ -25,6 +29,8 @@ target("bonzai-standard-test")
   add_files("../runtime/src/**.c")
   add_includedirs("include")
   add_includedirs("../runtime/include")
+
+  add_packages("libcurl")
 
   set_kind("shared")
   set_targetdir("bin")
