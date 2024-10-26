@@ -1,0 +1,38 @@
+require "std:natives"
+
+fn List::elem<A>(x: A, xs: list<A>): bool =>
+  match xs {
+    case [] => false
+    case [y .. ys] => if x == y then true else List::elem(x, ys)
+  }
+
+fn List::map<A, B>(xs: list<A>, f: fn(A): B): list<B> =>
+  match xs {
+    case [] => []
+    case [y .. ys] => [f(y)] + List::map(ys, f)
+  }
+
+fn List::foldl<A, B>(f: fn(A, B): B, acc: B, xs: list<A>): B =>
+  match xs {
+    case [] => acc
+    case [y .. ys] => List::foldl(f, f(y, acc), ys)
+  }
+
+fn List::foldr<A, B>(f: fn(A, B): B, acc: B, xs: list<A>): B =>
+  match xs {
+    case [] => acc
+    case [y .. ys] => f(y, List::foldr(f, acc, ys))
+  }
+
+fn List::length<A>(xs: list<A>): int =>
+  match xs {
+    case [] => 0
+    case [x .. xs] => 1 + List::length(xs)
+  }
+
+fn List::join<A>(xs: list<A>, sep: A): list<A> =>
+  match xs {
+    case [] => []
+    case [x] => [x]
+    case [x .. xs] => [x, sep] + List::join(xs, sep)
+  }

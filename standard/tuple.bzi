@@ -1,0 +1,33 @@
+type Tuple<A, B> {
+  Tuple(x: A, y: B)
+}
+
+fn Tuple::first(self) => 
+  match self {
+    case Tuple(x, _) => x
+  }
+
+fn Tuple::second(self) =>
+  match self {
+    case Tuple(_, y) => y
+  }
+
+fn Tuple::mapFirst<A, B, C>(self, f: fn(A): B) =>
+  match self {
+    case Tuple(x, y) => Tuple(f(x), y)
+  }
+
+fn Tuple::mapSecond<A, B, C>(self, f: fn(B): C) =>
+  match self {
+    case Tuple(x, y) => Tuple(x, f(y))
+  }
+
+fn Tuple::map<A, B, C, D>(self, f: fn(A): B, g: fn(C): D) =>
+  match self {
+    case Tuple(x, y) => Tuple(f(x), g(y))
+  }
+
+fn Tuple::swap<A, B>(self) =>
+  match self {
+    case Tuple(x, y) => Tuple(y, x)
+  }

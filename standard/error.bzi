@@ -1,0 +1,37 @@
+type Throwable<A> {
+  Ok(x: A),
+  Error(err: string)
+}
+
+fn Throwable::map<A, B>(self, f: fn(A): B): Throwable<B> =>
+  match self {
+    case Ok(x) => Ok(f(x))
+    case Error(err) => Error(err)
+  }
+
+fn Throwable::bind<A, B>(self, f: fn(A): Throwable<B>): Throwable<B> =>
+  match self {
+    case Ok(x) => f(x)
+    case Error(err) => Error(err)
+  }
+
+fn Throwable::andThen<A, B>(self: Throwable<A>, other: Throwable<B>): Throwable<B> =>
+  match self {
+    case Ok(_) => other
+    case Error(err) => Error(err)
+  }
+
+fn Throwable::pure<A>(x: A): Throwable<A> =>
+  Ok(x)
+
+fn Throwable::catch<A>(self: Throwable<A>, f: fn(string): Throwable<A>): Throwable<A> =>
+  match self {
+    case Ok(x) => Ok(x)
+    case Error(err) => f(err)
+  }
+
+fn Throwable::catchError<A>(self: Throwable<A>, f: fn(string): A): A =>
+  match self {
+    case Ok(x) => x
+    case Error(err) => f(err)
+  }

@@ -1,0 +1,5 @@
+require "std:list"
+require "std:natives"
+
+fn String::join(xs: list<string>, sep: string): string =>
+  List::foldl(fn(x, acc) => if acc == "" then x else acc + sep + x, "", xs)
