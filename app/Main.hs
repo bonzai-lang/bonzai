@@ -39,6 +39,7 @@ main = do
       folder
       mempty
       mempty
+      mempty
   moduleResult <- runExceptT $ resolve fileNameWithoutDir True
   
   handle moduleResult . const $ do
