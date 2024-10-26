@@ -13,6 +13,12 @@ import qualified Language.Bonzai.Frontend.Parser.Expression as P
 
 type MonadConversion m = (MonadIO m, MonadError Error m)
 
+data VisitState
+  = NotVisited
+  | Visited
+  | Visiting
+  deriving (Show, Eq)
+
 -- | Module unit
 -- | A module unit is a file (resp. module) that contains a list of imports,
 -- | a list of variables, a list of types, and a list of classes.
@@ -34,6 +40,7 @@ data ModuleState = MkModuleState
   , currentDirectory :: FilePath
   , resolved :: Map FilePath ModuleUnit
   , boundArgs :: [Text]
+  , visitStateModules :: Map Text VisitState
   }
   deriving (Show, Eq)
 
@@ -44,7 +51,7 @@ importStack = IO.unsafePerformIO . newIORef $ []
 {-# NOINLINE moduleState #-}
 moduleState :: IORef ModuleState
 moduleState = IO.unsafePerformIO . newIORef $ 
-  MkModuleState "" "" Map.empty []
+  MkModuleState "" "" Map.empty [] Map.empty
 
 {-# NOINLINE resultState #-}
 resultState :: IORef [HLIR.HLIR "expression"]
@@ -76,19 +83,28 @@ resolve path isPublic = do
       , currentDirectory = takeDirectory newPath
       }
 
-  stack <- readIORef importStack
-  b <- liftIO $ doesFileExist newPath
-  unless b $ throw (ModuleNotFound newPath stack)
-
   let newModuleName = makeRelative st.initialPath newPath
 
-  if newPath `elem` stack
-    then throw (CyclicModuleDependency newPath stack)
-    else modifyIORef importStack (newPath :)
+  b <- liftIO $ doesFileExist newPath
+  unless b $ throw (ModuleNotFound newPath [])
 
-  case Map.lookup newModuleName st.resolved of
-    Just m -> pure m
-    Nothing -> do
+  case Map.lookup (fromString newModuleName) st.visitStateModules of
+    Just Visiting -> throw (CyclicModuleDependency newPath [])
+    Just Visited -> do
+      case Map.lookup newModuleName st.resolved of
+        Just m -> pure m
+        Nothing -> throw (ModuleNotFound newPath [])
+    _ -> do
+      -- Mark the module as being visited
+      modifyIORef moduleState $ \st' ->
+        st' { 
+          visitStateModules = 
+            Map.insert 
+              (fromString newModuleName) 
+              Visiting 
+              st'.visitStateModules 
+        }
+
       content <- liftIO $ readFileBS newPath
       let contentAsText :: Text = decodeUtf8 content
 
@@ -110,9 +126,14 @@ resolve path isPublic = do
           modifyIORef moduleState $ \st' ->
             st
               { resolved = Map.insert newModuleName modUnit st'.resolved
+              , visitStateModules = 
+                  Map.insert 
+                    (fromString newModuleName)
+                    Visited
+                    st'.visitStateModules
               }
           modifyIORef' resultState (<> ast)
-          modifyIORef importStack (drop 1)
+
           pure modUnit
 
 foldM' :: (Monad m) => (a -> b -> m a) -> a -> [b] -> m a
