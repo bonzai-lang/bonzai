@@ -1,0 +1,132 @@
+require "std:parser"
+require "std:natives"
+require "std:optional"
+require "std:tuple"
+require "std:list"
+require "std:string"
+
+type JSON {
+  Object(fields: list<(string, JSON)>),
+  Array(values: list<JSON>),
+  String(value: string),
+  Integer(value: int),
+  Float(value: float),
+  Boolean(value: bool),
+  Null
+}
+
+fn jsonParser(): Parser<JSON> => {
+  let ws = satisfy(is_whitespace).many()
+
+  let str = char('"') 
+            :right: (noneOf(['"']).many() 
+              :Parser::map: fn(xs) => String(xs.implode()))
+            :left: char('"')
+
+  let integer = satisfy(is_digit).many1() :Parser::map: fn(xs) => Integer(xs.implode().toInt())
+
+  let float = integer 
+            :Parser::bind: fn(intPart) => char('.')
+            :Parser::andThen: integer
+            :Parser::map: fn(fracPart) => 
+              Float((intPart.toString() + "." + fracPart.toString()).toFloat())
+
+  let boolean = choice([
+    string("true") :Parser::map: fn(_) => Boolean(true),
+    string("false") :Parser::map: fn(_) => Boolean(false)
+  ])
+
+  let null = string("null") :Parser::map: fn(_) => Null
+
+  let value = ws :right: choice([
+    str,
+    integer,
+    float,
+    boolean,
+    null
+  ]) :left: ws
+
+  let array = char('[') 
+              :right: jsonParser.lazy().sepBy(char(','))
+              :left: char(']')
+              :Parser::map: fn(xs) => Array(xs)
+
+  let field = char('"') 
+              :right: (satisfy(fn (x) => x != '"').many()
+                :Parser::map: fn(xs) => xs.implode())
+              :left: char('"')
+              :Parser::bind: fn (key) =>
+              ws :right: char(':') :left: ws
+              :Parser::andThen: jsonParser.lazy()
+              :Parser::map: fn(value) => (key, value)
+
+  let object = char('{') 
+              :right: ws
+              :right: field.sepBy(ws :left: char(',') :right: ws)
+              :left: ws
+              :left: char('}')
+              :Parser::map: fn(xs) => Object(xs)
+
+  choice([object, array, value])
+}
+
+fn parseJSON(input: string): Optional<JSON> => 
+  match jsonParser().runParser(input) {
+    case ParseResult(x, _) => Some(x)
+    case ParseError(_, _) => None
+  }
+
+fn getJSON(input: string): JSON =>
+  match parseJSON(input) {
+    case Some(x) => x
+    case None => Null
+  }
+
+fn stringify(json: JSON): string =>
+  match json {
+    case Object(fields) => {
+      let pairs = List::map(fields, fn (v) => 
+        "\"" 
+          + Tuple::first(v) 
+          + "\":" 
+          + stringify(Tuple::second(v))
+      )
+
+      "{" + String::join(pairs, ",") + "}"
+    }
+    case Array(values) => 
+      "[" + String::join(List::map(values, stringify), ",") + "]"
+    case String(val) => "\"" + val + "\""
+    case Integer(val) => val.toString()
+    case Float(val) => val.toString()
+    case Boolean(val) => val.toString()
+    case Null => "null"
+  }
+
+fn getKey(json: JSON, key: string): Optional<JSON> =>
+  match json {
+    case Object(fields) => {
+      List::foldl(fn (field, acc) =>
+        match acc {
+          case Some(x) => Some(x)
+          case None => 
+            if Tuple::first(field) == key 
+              then Some(Tuple::second(field)) 
+              else None
+        },
+        None,
+        fields
+      )
+    }
+    case _ => None
+  }
+
+fn getKeys(json: JSON, keys: list<string>): Optional<JSON> =>
+  List::foldl(fn (key, acc) =>
+    match acc {
+      case Some(x) => getKey(x, key)
+      case None => None
+    },
+    Some(json),
+    keys
+  )
