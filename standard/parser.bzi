@@ -1,4 +1,5 @@
 require "std:natives"
+require "std:list"
 
 extern fn is_whitespace(c: char): bool
 extern fn is_digit(c: char): bool
@@ -9,7 +10,8 @@ extern fn length<A>(xs: list<A>): int
 extern fn explode(s: string): list<char>
 extern fn implode(cs: list<char>): string
 extern fn str_index(s: string, i: int): char
-extern fn toString<A>(x: A): string
+extern fn toInt(s: string): int
+extern fn toFloat(s: string): float
 
 type Result<A> {
   Ok(x: A, rest: string),
@@ -121,3 +123,28 @@ fn sepBy1<A, B>(parser: Parser<A>, sep: Parser<B>): Parser<list<A>> =>
 
 fn between<A, B, C>(open: Parser<A>, close: Parser<C>, parser: Parser<B>): Parser<B> =>
   and(open, Parser::bind(parser, fn(x) => and(close, Parser::pure(x))))
+
+fn right<A, B>(parser: Parser<A>, f: Parser<B>): Parser<B> =>
+  Parser::andThen(parser, f)
+
+fn left<A, B>(parser: Parser<A>, f: Parser<B>): Parser<A> =>
+  Parser::bind(parser, fn(x) => Parser::andThen(f, Parser::pure(x)))
+
+fn or<A>(parser1: Parser<A>, parser2: Parser<A>): Parser<A> =>
+  Parser(fn(input) => {
+    match runParser(parser1, input) {
+      case Ok(x, rest) => Ok(x, rest)
+      case Error(_, _) => runParser(parser2, input)
+    }
+  })
+
+fn choice<A>(parsers: list<Parser<A>>): Parser<A> => 
+  match parsers {
+    case [] => parseError("No parsers provided")
+    case [p] => p
+    case [p..ps] => or(p, choice(ps))
+  }
+
+fn lazy<A>(f: fn(): Parser<A>): Parser<A> =>
+  Parser(fn(input) => runParser(f(), input))
+  
