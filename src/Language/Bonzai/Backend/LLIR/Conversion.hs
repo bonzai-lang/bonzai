@@ -219,35 +219,10 @@ instance Assemble MLIR.Expression where
 
     pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (length t' + 2)) <> t' <> LLIR.instr (LLIR.JumpRel (length e' + 1)) <> e'
 
-  -- assemble (MLIR.MkExprUpdate (MLIR.MkUpdtVariable v) e) = do
-  --   e' <- assemble e
-  --   gs <- readIORef globals
-  --   locals <- ask
-
-  --   var <- if Set.member v locals then
-  --       pure $ LLIR.storeLocal v
-  --     else if Set.member v gs then 
-  --       pure $ LLIR.storeGlobal v
-  --     else compilerError $ "Variable " <> v <> " not found in globals, locals or natives"
-
-  --   pure $ e' <> var
-
   assemble (MLIR.MkExprUpdate u e) = do
     u' <- assemble u
     e' <- assemble e
     pure $ e' <> u' <> LLIR.instr LLIR.Update
-
-  -- assemble (MLIR.MkExprLet n e) = do
-  --   e' <- assemble e
-
-  --   gs <- readIORef globals
-  --   locals <- ask
-
-  --   if Set.member n locals then
-  --     pure $ e' <> LLIR.storeLocal n
-  --   else if Set.member n gs then
-  --     pure $ e' <> LLIR.storeGlobal n
-  --   else compilerError $ "Variable " <> n <> " not found in globals, locals or natives"
 
   assemble (MLIR.MkExprMut n e) = do
     e' <- assemble e
@@ -420,11 +395,11 @@ getOns [] = []
 
 getGlobals :: [MLIR.Expression] -> Set Text
 getGlobals (MLIR.MkExprFunction name _ _ : es) = Set.insert name (getGlobals es)
-getGlobals (MLIR.MkExprLet name _ : xs) = Set.insert name (getGlobals xs)
-getGlobals (MLIR.MkExprMut name _ : xs) = Set.insert name (getGlobals xs)
+getGlobals (MLIR.MkExprLet name e : xs) = Set.insert name (getGlobals (e:xs))
+getGlobals (MLIR.MkExprMut name e : xs) = Set.insert name (getGlobals (e:xs))
 getGlobals (MLIR.MkExprLoc _ e : xs) = getGlobals (e : xs)
 getGlobals (MLIR.MkExprTernary c t e : xs) = getGlobals (c : t : e : xs)
-getGlobals (MLIR.MkExprBlock es : xs) = getGlobals (es ++ xs)
+getGlobals (MLIR.MkExprBlock es : xs) = getGlobals (es <> xs)
 getGlobals (MLIR.MkExprApplication f args : xs) = getGlobals (f : args ++ xs)
 getGlobals (MLIR.MkExprSend e _ es : xs) = getGlobals (e : es ++ xs)
 getGlobals (MLIR.MkExprSpawn e : xs) = getGlobals (e : xs)
