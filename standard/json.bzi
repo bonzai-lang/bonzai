@@ -99,7 +99,7 @@ fn stringify(json: JSON): string =>
     case String(val) => "\"" + val + "\""
     case Integer(val) => val.toString()
     case Float(val) => val.toString()
-    case Boolean(val) => val.toString()
+    case Boolean(val) => if val then "true" else "false"
     case Null => "null"
   }
 
