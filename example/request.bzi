@@ -1,0 +1,14 @@
+require "std:http"
+require "std:natives"
+require "std:json"
+require "std:parser"
+
+let url = "https://jsonplaceholder.typicode.com/todos/1"
+let res = fetch(url)
+
+try res
+  catch e => print(e)
+  finally r => {
+    print(r)
+    print(r.getJSON.stringify)
+  }

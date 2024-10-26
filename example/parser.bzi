@@ -1,13 +1,6 @@
-require "std:parser"
+require "std:json"
 require "std:natives"
 
-let path = "example/parser.bzi,test"
+let json = getJSON("{\"a\": 1, \"b\": {\"c\": 2}, \"d\": [1, 2, 3]}")
 
-print(path)
-
-let p = Parser::map(
-  many1(noneOf([','])).sepBy(char(',')),
-  fn(xs) => List::map(xs, implode)
-)
-
-print(p.runParser(path))
+print(json.getKeys(["d"]))
