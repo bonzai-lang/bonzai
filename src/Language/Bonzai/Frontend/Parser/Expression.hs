@@ -40,31 +40,33 @@ parseInterpolatedString :: (MonadIO m) => P.Parser m (HLIR.HLIR "expression")
 parseInterpolatedString = do
   parts <- buildString . toString <$> Lit.parseString
 
-  pure $ buildExprString parts
+  pure $ combineCharsIntoString parts
   where
+    toString' :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
+    toString' x = HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "toString" Nothing)) [x]
+
     buildString :: [Char] -> HLIR.HLIR "expression"
     buildString [] = HLIR.MkExprLiteral (HLIR.MkLitString "")
-    buildString ('\\':'$':xs) = HLIR.MkExprBinary "+" Nothing (HLIR.MkExprString "$") (buildString xs)
+    buildString ('\\':'$':xs) = HLIR.MkExprBinary "+" (HLIR.MkExprString "$") (buildString xs)
     buildString ('$':x:xs) | Lex.isIdentCharStart (Text.singleton x) = do
       -- span the variable name
       let (var, rest) = span Lex.isIdentChar xs
-      let var' = HLIR.MkExprVariable (HLIR.MkAnnotation (Text.pack (x:var)) Nothing)
+      let var' = toString' $ HLIR.MkExprVariable (HLIR.MkAnnotation (Text.pack (x:var)) Nothing)
 
-      HLIR.MkExprBinary "+" Nothing var' (buildString rest)
-    buildString (x:xs) = HLIR.MkExprBinary "+" Nothing (HLIR.MkExprString (Text.singleton x)) (buildString xs)
+      HLIR.MkExprBinary "+" var' (buildString rest)
+    buildString (x:xs) = HLIR.MkExprBinary "+" (HLIR.MkExprString (Text.singleton x)) (buildString xs)
 
-    buildExprString :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
-    buildExprString (HLIR.MkExprBinary "+" Nothing (HLIR.MkExprString "") x) =
-      buildExprString x
-    buildExprString (HLIR.MkExprBinary "+" Nothing x (HLIR.MkExprString "")) =
-      buildExprString x
-    buildExprString (HLIR.MkExprBinary "+" Nothing (HLIR.MkExprString a) (HLIR.MkExprString b)) =
-      HLIR.MkExprString (a <> b)
-    buildExprString (HLIR.MkExprBinary "+" Nothing (HLIR.MkExprString a) x) =
-      buildExprString $ HLIR.MkExprBinary "+" Nothing (HLIR.MkExprString a) (buildExprString x)
-    buildExprString (HLIR.MkExprBinary "+" Nothing x (HLIR.MkExprString a)) =
-      buildExprString $ HLIR.MkExprBinary "+" Nothing (buildExprString x) (HLIR.MkExprString a)
-    buildExprString x = x
+    combineCharsIntoString :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
+    combineCharsIntoString (HLIR.MkExprBinary "+" x (HLIR.MkExprLiteral (HLIR.MkLitString ""))) = combineCharsIntoString x 
+    combineCharsIntoString (HLIR.MkExprBinary "+" x y) = do
+      let x' = combineCharsIntoString x
+      let y' = combineCharsIntoString y
+
+      case (x', y') of
+        (HLIR.MkExprLiteral (HLIR.MkLitString a), HLIR.MkExprLiteral (HLIR.MkLitString b)) ->
+          HLIR.MkExprLiteral (HLIR.MkLitString (a <> b))
+        _ -> HLIR.MkExprBinary "+" x' y'
+    combineCharsIntoString x = x
 
 parseTernary :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseTernary = localize $ do
@@ -293,6 +295,22 @@ parseEvent = localize $ do
 
   HLIR.MkExprOn name args <$> parseExpression
 
+parseTryCatch :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseTryCatch = localize $ do
+  void $ Lex.reserved "try"
+  body <- parseExpression
+
+  catchVar <- Lex.reserved "catch" *> Lex.identifier <* Lex.symbol "=>"
+  catchBody <- parseExpression
+
+  finallyVar <- Lex.reserved "finally" *> Lex.identifier <* Lex.symbol "=>"
+  finallyBody <- parseExpression
+
+  pure $ HLIR.MkExprMatch body [
+      (HLIR.MkPatConstructor "Error" [HLIR.MkPatVariable catchVar Nothing], catchBody),
+      (HLIR.MkPatConstructor "Ok" [HLIR.MkPatVariable finallyVar Nothing], finallyBody)
+    ]
+
 parseSpawn :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseSpawn = localize $ do
   void $ Lex.reserved "spawn"
@@ -313,6 +331,7 @@ parseTerm =
     parseSpawn,
     P.try parseFunction,
     parseLambda,
+    parseTryCatch,
     parseLet,
     parseLive,
     parseMut,
@@ -362,48 +381,48 @@ parseExpression = localize $ P.makeExprParser parseTerm table
         [
           P.InfixL $ do
             void $ Lex.symbol "*"
-            pure $ \a b -> HLIR.MkExprBinary "*" Nothing a b,
+            pure $ \a b -> HLIR.MkExprBinary "*" a b,
           P.InfixL $ do
             void $ Lex.symbol "/"
-            pure $ \a b -> HLIR.MkExprBinary "/" Nothing a b
+            pure $ \a b -> HLIR.MkExprBinary "/" a b
         ],
         [
           P.InfixL $ do
             void $ Lex.symbol "+"
-            pure $ \a b -> HLIR.MkExprBinary "+" Nothing a b,
+            pure $ \a b -> HLIR.MkExprBinary "+" a b,
           P.InfixL $ do
             void $ Lex.symbol "-"
-            pure $ \a b -> HLIR.MkExprBinary "-" Nothing a b
+            pure $ \a b -> HLIR.MkExprBinary "-" a b
         ],
         [
           P.InfixN $ do
             void $ Lex.symbol "=="
-            pure $ \a b -> HLIR.MkExprBinary "==" Nothing a b,
+            pure $ \a b -> HLIR.MkExprBinary "==" a b,
           P.InfixN $ do
             void $ Lex.symbol "!="
-            pure $ \a b -> HLIR.MkExprBinary "!=" Nothing a b
+            pure $ \a b -> HLIR.MkExprBinary "!=" a b
         ],
         [
           P.InfixN $ do
             void $ Lex.symbol ">="
-            pure $ \a b -> HLIR.MkExprBinary ">=" Nothing a b,
+            pure $ \a b -> HLIR.MkExprBinary ">=" a b,
           P.InfixN $ do
             void $ Lex.symbol "<="
-            pure $ \a b -> HLIR.MkExprBinary "<=" Nothing a b,
+            pure $ \a b -> HLIR.MkExprBinary "<=" a b,
           P.InfixN $ do
             void $ Lex.symbol ">"
-            pure $ \a b -> HLIR.MkExprBinary ">" Nothing a b,
+            pure $ \a b -> HLIR.MkExprBinary ">" a b,
           P.InfixN $ do
             void $ Lex.symbol "<"
-            pure $ \a b -> HLIR.MkExprBinary "<" Nothing a b
+            pure $ \a b -> HLIR.MkExprBinary "<" a b
         ],
         [
           P.InfixL $ do
             void $ Lex.symbol "&&"
-            pure $ \a b -> HLIR.MkExprBinary "&&" Nothing a b,
+            pure $ \a b -> HLIR.MkExprBinary "&&" a b,
           P.InfixL $ do
             void $ Lex.symbol "||"
-            pure $ \a b -> HLIR.MkExprBinary "||" Nothing a b
+            pure $ \a b -> HLIR.MkExprBinary "||" a b
         ],
         [
           P.Prefix . Lex.makeUnaryOp $ do
@@ -413,7 +432,7 @@ parseExpression = localize $ P.makeExprParser parseTerm table
         [
           P.InfixL $ do
             op <- Lex.operator
-            pure $ \a b -> HLIR.MkExprBinary op Nothing a b
+            pure $ \a b -> HLIR.MkExprBinary op a b
         ],
         [
           P.InfixL $ do
@@ -423,7 +442,7 @@ parseExpression = localize $ P.makeExprParser parseTerm table
             void $ P.char ':'
             Lex.scn
 
-            pure $ \a b -> HLIR.MkExprBinary name Nothing a b
+            pure $ \a b -> HLIR.MkExprBinary name a b
         ]
       ]
 
