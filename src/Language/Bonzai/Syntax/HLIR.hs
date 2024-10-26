@@ -81,8 +81,8 @@ data Pattern f t
 instance (ToText t, ToText (f t)) => Show (Expression f t) where
   show = T.unpack . toText
 
-pattern MkExprBinary :: Text -> f t -> Expression f t -> Expression f t -> Expression f t
-pattern MkExprBinary op t a b = MkExprApplication (MkExprVariable (MkAnnotation op t)) [a, b]
+pattern MkExprBinary :: Text -> Expression Maybe t -> Expression Maybe t -> Expression Maybe t
+pattern MkExprBinary op a b = MkExprApplication (MkExprVariable (MkAnnotation op Nothing)) [a, b]
 
 pattern MkExprString :: Text -> Expression f t
 pattern MkExprString s = MkExprLiteral (MkLitString s)
@@ -120,7 +120,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprOn n as e) = T.concat ["on ", n, "(", T.intercalate ", " (map toText as), ") { ", toText e, " }"]
   toText (MkExprSend e n e') = T.concat ["(", toText e, ") -> ", n, "(", toText e', ")"]
   toText (MkExprRequire n) = T.concat ["require ", n]
-  toText (MkExprLoc e _) = "@" <> toText e
+  toText (MkExprLoc e _) = toText e
   toText (MkExprSpawn e) = T.concat ["spawn ", toText e]
   toText (MkExprList es) = T.concat ["[", T.intercalate ", " (map toText es), "]"]
   toText (MkExprNative ann ty) = T.concat ["native ", toText ann.name, "<", T.intercalate ", " ann.value, "> ", toText ty]
