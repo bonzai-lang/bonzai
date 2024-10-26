@@ -30,7 +30,7 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
     CyclicModuleDependency path stack ->
       printErrorFromString
         Nothing
-        ("Cyclic module dependency detected in " <> show (normalise path), Nothing, pos)
+        ("Cyclic module dependency detected with " <> show (normalise path), Nothing, pos)
         stackMsg
       where
         stackMsg = "Import stack:\n - "<> intercalate "\n - " (map normalise stack)
