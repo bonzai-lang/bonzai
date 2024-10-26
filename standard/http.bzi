@@ -1,0 +1,28 @@
+require "std:error"
+
+extern fn start_http_server(port: int): HTTP
+extern fn accept_request(server: HTTP): Request
+extern fn close_client(req: Request)
+extern fn get_buffer(req: Request): string
+extern fn send_buffer(req: Request, buffer: string)
+extern fn close_server(server: HTTP)
+extern fn fetch(url: string): Throwable<string>
+
+interface HTTPWrapper {
+  fn listen(self: HTTPWrapper, server: HTTP, handler: fn(Request): unit)
+  fn close(server: HTTP)
+}
+
+actor HTTPServer < HTTPWrapper {
+  on listen(self, server, handler) => {
+    let req = accept_request(server)
+
+    handler(req)
+    close_client(req)
+
+    self->listen(self, server, handler)
+  }
+  
+  on close(server) =>
+    close_server(server)
+}
