@@ -295,22 +295,6 @@ parseEvent = localize $ do
 
   HLIR.MkExprOn name args <$> parseExpression
 
-parseTryCatch :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseTryCatch = localize $ do
-  void $ Lex.reserved "try"
-  body <- parseExpression
-
-  catchVar <- Lex.reserved "catch" *> Lex.identifier <* Lex.symbol "=>"
-  catchBody <- parseExpression
-
-  finallyVar <- Lex.reserved "finally" *> Lex.identifier <* Lex.symbol "=>"
-  finallyBody <- parseExpression
-
-  pure $ HLIR.MkExprMatch body [
-      (HLIR.MkPatConstructor "Error" [HLIR.MkPatVariable catchVar Nothing], catchBody),
-      (HLIR.MkPatConstructor "Ok" [HLIR.MkPatVariable finallyVar Nothing], finallyBody)
-    ]
-
 parseSpawn :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseSpawn = localize $ do
   void $ Lex.reserved "spawn"
@@ -331,7 +315,6 @@ parseTerm =
     parseSpawn,
     P.try parseFunction,
     parseLambda,
-    parseTryCatch,
     parseLet,
     parseLive,
     parseMut,
