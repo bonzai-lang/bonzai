@@ -18,4 +18,6 @@ void *actor_run(void *arg);
 Actor *create_actor(struct Event event, struct Module* mod);
 void send_message(Actor *actor, int name, Value *args, int argc);
 
+Value list_get(Module* module, Value list, uint32_t index);
+
 #endif
