@@ -5,5 +5,6 @@
 #include <value.h>
 
 Value fetch(Module* module, Value* args, int argc);
+Value fetch_with(Module* module, Value* args, int argc);
 
 #endif // FETCH_H

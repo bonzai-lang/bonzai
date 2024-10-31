@@ -7,6 +7,7 @@ extern fn get_buffer(req: Request): string
 extern fn send_buffer(req: Request, buffer: string)
 extern fn close_server(server: HTTP)
 extern fn fetch(url: string): Throwable<string>
+extern fn fetch_with(url: string, headers: string): Throwable<string>
 
 interface HTTPWrapper {
   fn listen(self: HTTPWrapper, server: HTTP, handler: fn(Request): unit)
