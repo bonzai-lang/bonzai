@@ -1,0 +1,10 @@
+require "std:websocket"
+require "std:natives"
+
+let ws = spawn Websocket("localhost", 8080, "/")
+
+ws->receive(ws, fn (frame) => {
+  print(frame)
+  
+  ws->sendText("Hello from Bonzai!")
+})
