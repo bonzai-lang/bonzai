@@ -12,3 +12,5 @@ bindings/lib
 bindings/bin
 
 bin
+
+.DS_Store
