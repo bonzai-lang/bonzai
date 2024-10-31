@@ -6,9 +6,7 @@ require "std:parser"
 let url = "https://jsonplaceholder.typicode.com/todos/1"
 let res = fetch(url)
 
-try res
-  catch e => print(e)
-  finally r => {
-    print(r)
-    print(r.getJSON.stringify)
-  }
+match res {
+  case Ok(response) => print(response.getJSON)
+  case Error(err) => print(err)
+}
