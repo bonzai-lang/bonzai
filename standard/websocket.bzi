@@ -1,0 +1,41 @@
+require "std:natives"
+require "std:http"
+
+extern fn toBase64(data: string): string
+extern fn fromBase64(data: string): string
+
+extern fn initWebsocket(host: string, port: int): Websocket 
+extern fn sendTextFrame(ws: Websocket, data: string)
+extern fn receiveFrame(ws: Websocket): string
+extern fn closeWebsocket(ws: Websocket)
+extern fn performHandshake(ws: Websocket, path: string, host: string, port: int)
+
+interface Websocket {
+  fn sendText(data: string)
+  fn receive(self: Websocket, callback: fn(string): unit)
+  fn receiveOnce(self: Websocket, callback: fn(string): unit)
+  fn close()
+}
+
+fn Websocket(host: string, port: int, path: string) => {
+  let ws = initWebsocket(host, port)
+  performHandshake(ws, path, host, port)
+
+  actor < Websocket {
+    on sendText(data) => sendTextFrame(ws, data)
+    
+    on receive(self, callback) => {
+      let frame = receiveFrame(ws)
+      callback(frame)
+
+      self->receive(self, callback)
+    }
+
+    on close() => closeWebsocket(ws)
+
+    on receiveOnce(self, callback) => {
+      let frame = receiveFrame(ws)
+      callback(frame)
+    }
+  }
+}
