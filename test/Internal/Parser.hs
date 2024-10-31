@@ -797,74 +797,74 @@ testExpression = do
     res `shouldBeRight` expected
 
     let input = "1 * 2"
-    let expected = HLIR.MkExprBinary "*" Nothing (int 1) (int 2)
+    let expected = HLIR.MkExprBinary "*" (int 1) (int 2)
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "1 + 2"
-    let expected = HLIR.MkExprBinary "+" Nothing (int 1) (int 2)
+    let expected = HLIR.MkExprBinary "+" (int 1) (int 2)
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "1 - 2"
-    let expected = HLIR.MkExprBinary "-" Nothing (int 1) (int 2)
+    let expected = HLIR.MkExprBinary "-" (int 1) (int 2)
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "1 / 2"
-    let expected = HLIR.MkExprBinary "/" Nothing (int 1) (int 2)
+    let expected = HLIR.MkExprBinary "/" (int 1) (int 2)
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "1 * 2 + 3"
-    let expected = HLIR.MkExprBinary "+" Nothing (HLIR.MkExprBinary "*" Nothing (int 1) (int 2)) (int 3)
+    let expected = HLIR.MkExprBinary "+" (HLIR.MkExprBinary "*" (int 1) (int 2)) (int 3)
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "1 + 2 * 3"
-    let expected = HLIR.MkExprBinary "+" Nothing (int 1) (HLIR.MkExprBinary "*" Nothing (int 2) (int 3))
+    let expected = HLIR.MkExprBinary "+" (int 1) (HLIR.MkExprBinary "*" (int 2) (int 3))
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "1 == 2"
-    let expected = HLIR.MkExprBinary "==" Nothing (int 1) (int 2)
+    let expected = HLIR.MkExprBinary "==" (int 1) (int 2)
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "1 != 2"
-    let expected = HLIR.MkExprBinary "!=" Nothing (int 1) (int 2)
+    let expected = HLIR.MkExprBinary "!=" (int 1) (int 2)
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "1 < 2 + 2"
-    let expected = HLIR.MkExprBinary "<" Nothing (int 1) (HLIR.MkExprBinary "+" Nothing (int 2) (int 2))
+    let expected = HLIR.MkExprBinary "<" (int 1) (HLIR.MkExprBinary "+" (int 2) (int 2))
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "1 <= 2 + 2"
-    let expected = HLIR.MkExprBinary "<=" Nothing (int 1) (HLIR.MkExprBinary "+" Nothing (int 2) (int 2))
+    let expected = HLIR.MkExprBinary "<=" (int 1) (HLIR.MkExprBinary "+" (int 2) (int 2))
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "1 > 2 && 2 < 3"
-    let expected = HLIR.MkExprBinary "&&" Nothing (HLIR.MkExprBinary ">" Nothing (int 1) (int 2)) (HLIR.MkExprBinary "<" Nothing (int 2) (int 3))
+    let expected = HLIR.MkExprBinary "&&" (HLIR.MkExprBinary ">" (int 1) (int 2)) (HLIR.MkExprBinary "<" (int 2) (int 3))
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "1 || 2 && 2"
-    let expected = HLIR.MkExprBinary "&&" Nothing (HLIR.MkExprBinary "||" Nothing (int 1) (int 2)) (int 2)
+    let expected = HLIR.MkExprBinary "&&" (HLIR.MkExprBinary "||" (int 1) (int 2)) (int 2)
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     -- Custom operators right associative
 
     let input = "x %= 1"
-    let expected = HLIR.MkExprBinary "%=" Nothing (var "x") (int 1)
+    let expected = HLIR.MkExprBinary "%=" (var "x") (int 1)
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "x % 2 % 3"
-    let expected = HLIR.MkExprBinary "%" Nothing (var "x") (HLIR.MkExprBinary "%" Nothing (int 2) (int 3))
+    let expected = HLIR.MkExprBinary "%" (var "x") (HLIR.MkExprBinary "%" (int 2) (int 3))
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
