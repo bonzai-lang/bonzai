@@ -34,6 +34,8 @@ Value fetch(Module* module, Value *args, int argc) {
   CURLcode res;
   char *url = GET_STRING(args[0]);
 
+  curl_global_sslset(CURLSSLBACKEND_OPENSSL, NULL, NULL);
+
   curl = curl_easy_init();
   if (curl) {
     curl_easy_setopt(curl, CURLOPT_URL, url);
@@ -62,6 +64,7 @@ Value fetch(Module* module, Value *args, int argc) {
     return throwable_ok(module, MAKE_STRING(module, chunk.memory));
   }
   
+  curl_easy_cleanup(curl);
   return throwable_error(module, "Failed to initialize curl");
 }
 

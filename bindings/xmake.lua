@@ -6,7 +6,7 @@ end
 
 set_warnings("allextra")
 
-add_requires("libcurl", {system = false})
+add_requires("libcurl", {system = false, configs = { openssl = true }})
 add_requires("openssl", {system = false})
 
 target("bonzai-standard")

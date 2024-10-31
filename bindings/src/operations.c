@@ -200,10 +200,12 @@ Value get_env(Module* mod, Value* args, int argc) {
 
   char* env = getenv(GET_STRING(args[0]));
   if (env == NULL) {
-    return MAKE_STRING(mod, "");
+    char* empty = malloc(1);
+    empty[0] = '\0';
+    return MAKE_STRING(mod, empty);
   }
 
-  return MAKE_STRING(mod, env);
+  return MAKE_STRING(mod, strdup(env));
 }
 
 Value length(Module* mod, Value* args, int argc) {
