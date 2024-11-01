@@ -1,6 +1,7 @@
 ---
+import Navigation from '#/components/Navigation.astro';
+import Default from '#/layouts/Default.astro';
 import { type CollectionEntry, getCollection } from 'astro:content';
-import BlogPost from '../../layouts/BlogPost.astro';
 
 export async function getStaticPaths() {
 	const posts = await getCollection('blog');
@@ -15,6 +16,20 @@ const post = Astro.props;
 const { Content } = await post.render();
 ---
 
-<BlogPost {...post.data}>
-	<Content />
-</BlogPost>
+<Default title={`${post.data.title} - Bonzai`} description={post.data.description} class="bg-neutral-900">
+  <Navigation />
+  
+  <div class="prose prose-invert prose-neutral max-w-2xl mx-auto w-full py-32">
+    <div class="flex flex-row items-center">
+      <h1 class="flex-auto flex mb-0">
+        {post.data.title}
+      </h1>
+
+      <span class="text-white/50 text-sm">
+        {new Date(post.data.pubDate).toLocaleDateString()}
+      </span>
+    </div>
+
+    <Content />
+  </div>
+</Default>

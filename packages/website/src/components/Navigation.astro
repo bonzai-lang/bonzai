@@ -1,0 +1,33 @@
+---
+import { Image } from "astro:assets";
+---
+
+<nav class="grid grid-cols-3 max-w-6xl mx-auto py-8 place-items-center">
+  <a class="flex flex-row items-center gap-4 justify-self-start" href="/">
+    <Image src="/logo.svg" alt="Astro logo" class="h-20 w-20 rounded-lg" width={32} height={32} />
+
+    <div class="text-white font-mono">
+      <h1 class="text-3xl">
+        Bonzai
+      </h1>
+
+      <p class="text-white/70 text-lg">
+        Programming language
+      </p>
+    </div>
+  </a>
+
+  <div class="col-span-2 justify-self-end font-mono flex items-center gap-8">
+    <a href="/docs" class="text-white/70 hover:text-white">
+      Documentation
+    </a>
+
+    <a href="/blog" class="text-white/70 hover:text-white">
+      Blog
+    </a>
+
+    <a href="https://github.com/thomasvergne/bonzai" class="text-white/70 hover:text-white">
+      GitHub
+    </a>
+  </div>
+</nav>

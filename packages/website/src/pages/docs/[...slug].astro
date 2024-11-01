@@ -1,0 +1,44 @@
+---
+import { buildTree } from '#/components/fileTree';
+import Navigation from '#/components/Navigation.astro';
+import Default from '#/layouts/Default.astro';
+import type { CollectionEntry } from 'astro:content'
+import { getCollection } from 'astro:content';
+import FileTree from '#/components/FileTree.astro';
+
+export async function getStaticPaths() {
+	const posts = await getCollection('docs');
+	return posts.map((post) => ({
+		params: { slug: post.slug },
+		props: { post, posts, },
+	}));
+}
+type Props = {
+  post: CollectionEntry<'docs'>;
+  posts: CollectionEntry<'docs'>[];
+};
+
+const { post, posts } = Astro.props;
+const { Content } = await post.render();
+
+const fileTree = buildTree(posts);
+---
+
+<Default title={`${post.data.title} - Bonzai`} description={post.data.description} class="bg-neutral-900 pb-16">
+  <Navigation />
+  <hr class="border-white/10" />
+
+  <main class="grid grid-cols-7 gap-16">
+    <div class="p-8 px-0 col-span-2">
+      <FileTree posts={fileTree} />
+    </div>
+
+    <div class="col-span-5 prose prose-neutral prose-invert py-8">
+      <h1 class="text-4xl">
+        {post.data.title}
+      </h1>
+
+      <Content />
+    </div>
+  </main>
+</Default>

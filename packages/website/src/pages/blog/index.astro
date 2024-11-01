@@ -1,111 +1,47 @@
 ---
-import BaseHead from '../../components/BaseHead.astro';
-import Header from '../../components/Header.astro';
-import Footer from '../../components/Footer.astro';
-import { SITE_TITLE, SITE_DESCRIPTION } from '../../consts';
+import { SITE_TITLE, SITE_DESCRIPTION } from '#/consts';
 import { getCollection } from 'astro:content';
-import FormattedDate from '../../components/FormattedDate.astro';
+import Default from '#/layouts/Default.astro';
+import Navigation from '#/components/Navigation.astro';
 
 const posts = (await getCollection('blog')).sort(
 	(a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf(),
 );
 ---
 
-<!doctype html>
-<html lang="en">
-	<head>
-		<BaseHead title={SITE_TITLE} description={SITE_DESCRIPTION} />
-		<style>
-			main {
-				width: 960px;
-			}
-			ul {
-				display: flex;
-				flex-wrap: wrap;
-				gap: 2rem;
-				list-style-type: none;
-				margin: 0;
-				padding: 0;
-			}
-			ul li {
-				width: calc(50% - 1rem);
-			}
-			ul li * {
-				text-decoration: none;
-				transition: 0.2s ease;
-			}
-			ul li:first-child {
-				width: 100%;
-				margin-bottom: 1rem;
-				text-align: center;
-			}
-			ul li:first-child img {
-				width: 100%;
-			}
-			ul li:first-child .title {
-				font-size: 2.369rem;
-			}
-			ul li img {
-				margin-bottom: 0.5rem;
-				border-radius: 12px;
-			}
-			ul li a {
-				display: block;
-			}
-			.title {
-				margin: 0;
-				color: rgb(var(--black));
-				line-height: 1;
-			}
-			.date {
-				margin: 0;
-				color: rgb(var(--gray));
-			}
-			ul li a:hover h4,
-			ul li a:hover .date {
-				color: rgb(var(--accent));
-			}
-			ul a:hover img {
-				box-shadow: var(--box-shadow);
-			}
-			@media (max-width: 720px) {
-				ul {
-					gap: 0.5em;
-				}
-				ul li {
-					width: 100%;
-					text-align: center;
-				}
-				ul li:first-child {
-					margin-bottom: 0;
-				}
-				ul li:first-child .title {
-					font-size: 1.563em;
-				}
-			}
-		</style>
-	</head>
-	<body>
-		<Header />
-		<main>
-			<section>
-				<ul>
-					{
-						posts.map((post) => (
-							<li>
-								<a href={`/blog/${post.slug}/`}>
-									<img width={720} height={360} src={post.data.heroImage} alt="" />
-									<h4 class="title">{post.data.title}</h4>
-									<p class="date">
-										<FormattedDate date={post.data.pubDate} />
-									</p>
-								</a>
-							</li>
-						))
-					}
-				</ul>
-			</section>
-		</main>
-		<Footer />
-	</body>
-</html>
+<Default title="Blog - Bonzai" description={SITE_DESCRIPTION} class="bg-neutral-900">
+  <Navigation />
+
+  <main class="max-w-6xl mx-auto py-32">
+    <span class="text-white/50 text-center block uppercase font-mono">
+      Bonzai Language
+    </span>
+    <h2 class="text-4xl text-white text-center my-2">
+      Latest articles
+    </h2>
+
+    <ul class="flex flex-col gap-2 mt-16">
+      {posts.map((post, i) => {
+        return <>
+          <a href={`/blog/${post.slug}`} class="w-full px-8 pt-8 pb-4 flex items-center">
+            <div class="flex-auto">
+              <h3 class="text-white text-xl font-mono">
+                {post.data.title}
+              </h3>
+
+              <p class="text-white/50 text-justify">
+                {post.data.description}
+              </p>
+            </div>
+
+            <span class="text-white/50 text-right block">
+              {new Date(post.data.pubDate).toLocaleDateString()}
+            </span>
+          </a>
+
+          {i < posts.length - 1 && <hr class="border-white/10" />}
+        </>
+      })}
+    </ul>
+  </main>
+</Default>
