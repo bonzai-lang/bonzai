@@ -122,6 +122,52 @@ Value send_buffer(Module *module, Value* args, int argc) {
   return MAKE_INTEGER(bytes_sent);
 }
 
+Value redirect_to(Module* module, Value* args, int argc) {
+  ASSERT_ARGC(module, "send_buffer", argc, 2);
+  ASSERT_TYPE(module, "send_buffer", args[0], TYPE_INTEGER);
+  ASSERT_TYPE(module, "send_buffer", args[1], TYPE_STRING);
+
+  int client_socket = GET_INT(args[0]);
+  char *buf = GET_STRING(args[1]);
+
+  char* response = /*test*/malloc(strlen(buf) + 100);
+  sprintf(response,
+    "HTTP/1.1 302 Found\r\n"
+    "Location: %s\r\n"
+    "Content-Type: text/html\r\n"
+    "Content-Length: 54\r\n"
+    "Connection: close\r\n"
+    "\r\n"
+    "<html><body><h1>302 Found</h1><p>Redirecting...</p></body></html>", buf);
+
+  int bytes_sent = send(client_socket, response, strlen(response), 0);
+
+  if (bytes_sent < 0) {
+    return MAKE_INTEGER(0);
+  }
+
+  free(response);
+
+  return MAKE_INTEGER(bytes_sent);
+}
+
+Value send_buffer_with(Module *module, Value* args, int argc) {
+  ASSERT_ARGC(module, "send_buffer", argc, 2);
+  ASSERT_TYPE(module, "send_buffer", args[0], TYPE_INTEGER);
+  ASSERT_TYPE(module, "send_buffer", args[1], TYPE_STRING);
+
+  int client_socket = GET_INT(args[0]);
+  char *buf = GET_STRING(args[1]);
+
+  int bytes_sent = send(client_socket, buf, strlen(buf), 0);
+
+  if (bytes_sent < 0) {
+    return MAKE_INTEGER(0);
+  }
+
+  return MAKE_INTEGER(bytes_sent);
+}
+
 Value close_server(Module *module, Value* args, int argc) {
   ASSERT_ARGC(module, "close_server", argc, 1);
   ASSERT_TYPE(module, "close_server", args[0], TYPE_INTEGER);

@@ -1,9 +1,46 @@
-#include <value.h>
+#include <error.h>
 #include <module.h>
 #include <operations.h>
-#include <error.h>
-#include <unistd.h>
 #include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
+#include <value.h>
+
+void print_map_values(Value map) {
+  if (!IS_PTR(map)) return;
+
+  HeapValue* map_ptr = GET_PTR(map);
+  
+  if (map_ptr->type != TYPE_LIST) return;
+
+  if (map_ptr->length == 0) {
+    printf("{}");
+    return;
+  }
+
+  printf("{ ");
+
+  for (uint32_t i = 0; i < map_ptr->length; i++) {
+    Value tuple = map_ptr->as_ptr[i];
+
+    if (!IS_PTR(tuple)) return;
+
+    HeapValue* tuple_ptr = GET_PTR(tuple);
+
+    if (tuple_ptr->type != TYPE_LIST) return;
+    if (tuple_ptr->length != 5) return;
+
+    print_with_level(tuple_ptr->as_ptr[3], 0);
+    printf(": ");
+    print_with_level(tuple_ptr->as_ptr[4], 1);
+
+    if (i < map_ptr->length - 1) {
+      printf(", ");
+    }
+  }
+
+  printf(" }");
+}
 
 void print_with_level(Value value, int level) {
   if (value == 0) {
@@ -30,14 +67,22 @@ void print_with_level(Value value, int level) {
       break;
     case TYPE_LIST: {
       HeapValue* list = GET_PTR(value);
-      
+
       if (list->length == 0) {
         printf("[]");
         break;
       }
 
       if (list->as_ptr[0] == kNull) {
-        printf("%s::%s(", GET_STRING(list->as_ptr[1]), GET_STRING(list->as_ptr[2]));
+        char* data_name = GET_STRING(list->as_ptr[1]);
+
+        if (strcmp(data_name, "Map") == 0) {
+          print_map_values(list->as_ptr[3]);
+          break;
+        }
+
+        printf("%s::%s(", GET_STRING(list->as_ptr[1]),
+               GET_STRING(list->as_ptr[2]));
 
         for (uint32_t i = 3; i < list->length; i++) {
           print_with_level(list->as_ptr[i], level + 1);
@@ -56,7 +101,7 @@ void print_with_level(Value value, int level) {
             printf(", ");
           }
         }
-        
+
         printf("]");
       }
 
@@ -97,7 +142,8 @@ void print_with_level(Value value, int level) {
 
 Value print(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "print", argc, 1);
-  print_with_level(args[0], 0); printf("\n");
+  print_with_level(args[0], 0);
+  printf("\n");
 
   return MAKE_INTEGER(0);
 }
@@ -189,7 +235,7 @@ Value file_exists(Module* mod, Value* args, int argc) {
   if (file == NULL) {
     return MAKE_INTEGER(0);
   }
-  
+
   fclose(file);
   return MAKE_INTEGER(is_not_directory(filename));
 }
@@ -210,14 +256,15 @@ Value get_env(Module* mod, Value* args, int argc) {
 
 Value length(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "length", argc, 1);
-  
+
   switch (get_type(args[0])) {
     case TYPE_STRING:
       return MAKE_INTEGER(strlen(GET_STRING(args[0])));
     case TYPE_LIST:
       return MAKE_INTEGER(GET_PTR(args[0])->length);
     default:
-      THROW_FMT(mod, "Unsupported type for length, received %s", type_of(args[0]));
+      THROW_FMT(mod, "Unsupported type for length, received %s",
+                type_of(args[0]));
   }
 }
 
@@ -286,7 +333,7 @@ Value sliceFrom(Module* mod, Value* args, int argc) {
 
   HeapValue* list = GET_PTR(args[0]);
   uint32_t start = GET_INT(args[1]);
-  
+
   if (start < 0 || start > list->length) {
     THROW(mod, "Index out of bounds");
   }
@@ -307,7 +354,7 @@ Value toString(Module* mod, Value* args, int argc) {
   switch (ty) {
     case TYPE_INTEGER: {
       char* str = malloc(12);
-      sprintf(str, "%d", (int) GET_INT(args[0]));
+      sprintf(str, "%d", (int)GET_INT(args[0]));
       return MAKE_STRING(mod, str);
     }
     case TYPE_FLOAT: {
@@ -383,7 +430,8 @@ Value is_alphanumeric(Module* mod, Value* args, int argc) {
 
   char chr = GET_STRING(args[0])[0];
 
-  return MAKE_INTEGER((chr >= '0' && chr <= '9') || (chr >= 'a' && chr <= 'z') || (chr >= 'A' && chr <= 'Z'));
+  return MAKE_INTEGER((chr >= '0' && chr <= '9') ||
+                      (chr >= 'a' && chr <= 'z') || (chr >= 'A' && chr <= 'Z'));
 }
 
 Value toInt(Module* mod, Value* args, int argc) {
@@ -396,7 +444,7 @@ Value toInt(Module* mod, Value* args, int argc) {
       return args[0];
     }
     case TYPE_FLOAT: {
-      return MAKE_INTEGER((int) GET_FLOAT(args[0]));
+      return MAKE_INTEGER((int)GET_FLOAT(args[0]));
     }
     case TYPE_STRING: {
       return MAKE_INTEGER(atoi(GET_STRING(args[0])));
@@ -414,7 +462,7 @@ Value toFloat(Module* mod, Value* args, int argc) {
 
   switch (ty) {
     case TYPE_INTEGER: {
-      double f = (double) GET_INT(args[0]);
+      double f = (double)GET_INT(args[0]);
       return MAKE_FLOAT(f);
     }
     case TYPE_FLOAT: {
@@ -428,4 +476,32 @@ Value toFloat(Module* mod, Value* args, int argc) {
       THROW(mod, "Unsupported type for toFloat");
     }
   }
+}
+
+Value randomValue(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "randomValue", argc, 0);
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+
+  // Combine seconds and nanoseconds to get a more unique seed
+  unsigned int seed = ts.tv_sec ^ ts.tv_nsec;
+
+  int f = rand_r(&seed);
+  return MAKE_INTEGER(f);
+}
+
+Value itof(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "itof", argc, 1);
+  ASSERT_TYPE(mod, "itof", args[0], TYPE_INTEGER);
+
+  double f = (double)GET_INT(args[0]);
+  return MAKE_FLOAT(f);
+}
+
+Value ftoi(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "ftoi", argc, 1);
+  ASSERT_TYPE(mod, "ftoi", args[0], TYPE_FLOAT);
+
+  int i = (int)GET_FLOAT(args[0]);
+  return MAKE_INTEGER(i);
 }

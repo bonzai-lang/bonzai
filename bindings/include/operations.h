@@ -4,6 +4,9 @@
 #include <module.h>
 #include <value.h>
 
+void print_map_values(Value map);
+void print_with_level(Value value, int level);
+
 Value print(Module* mod, Value* args, int argc);
 Value exit_with(Module* mod, Value* args, int argc);
 Value mutable_value(Module* mod, Value* args, int argc);
@@ -24,5 +27,8 @@ Value is_whitespace(Module* mod, Value* args, int argc);
 Value is_digit(Module* mod, Value* args, int argc);
 Value is_alpha(Module* mod, Value* args, int argc);
 Value is_alphanumeric(Module* mod, Value* args, int argc);
+Value randomValue(Module* mod, Value* args, int argc);
+Value itof(Module* mod, Value* args, int argc);
+Value ftoi(Module* mod, Value* args, int argc);
 
 #endif  // OPERATIONS_H

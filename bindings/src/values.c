@@ -23,3 +23,15 @@ Value throwable_error(Module* module, char* error) {
   Value result = MAKE_LIST(module, args, 4);
   return result;
 }
+
+Value make_tuple(Module* mod, Value a, Value b) {
+  Value* tuple = malloc(5 * sizeof(Value));
+
+  tuple[0] = kNull;
+  tuple[1] = MAKE_STRING(mod, strdup("Tuple"));
+  tuple[2] = MAKE_STRING(mod, strdup("Tuple"));
+  tuple[3] = a;
+  tuple[4] = b;
+
+  return MAKE_LIST(mod, tuple, 5);
+}
