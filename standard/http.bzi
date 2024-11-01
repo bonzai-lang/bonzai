@@ -1,29 +1,129 @@
 require "std:error"
+require "std:natives"
+require "std:tuple"
+require "std:string"
 
 extern fn start_http_server(port: int): HTTP
 extern fn accept_request(server: HTTP): Request
 extern fn close_client(req: Request)
 extern fn get_buffer(req: Request): string
 extern fn send_buffer(req: Request, buffer: string)
+extern fn send_buffer_with(req: Request, buffer: string)
 extern fn close_server(server: HTTP)
-extern fn fetch(url: string): Throwable<string>
-extern fn fetch_with(url: string, headers: string): Throwable<string>
+extern fn fetch(url: string): Throwable<(string, string)>
+extern fn fetch_with(url: string, headers: string): Throwable<(string, string)>
+extern fn redirect_to(req: Request, url: string): unit
 
-interface HTTPWrapper {
-  fn listen(self: HTTPWrapper, server: HTTP, handler: fn(Request): unit)
-  fn close(server: HTTP)
+type Header {
+  Header(code: int, reason: string)
 }
 
-actor HTTPServer < HTTPWrapper {
-  on listen(self, server, handler) => {
-    let req = accept_request(server)
+fn Header::show(header: Header): string => match header {
+  case Header(code, reason) => "HTTP/1.1 $code $reason"
+}
 
-    handler(req)
-    close_client(req)
-
-    self->listen(self, server, handler)
-  }
+fn Map::mapToHeaders(headers: Map<string>): string => {
+  mut headersString = ""
+  mut i = 0
   
-  on close(server) =>
-    close_server(server)
+  match headers {
+    case Map(entries) => {
+      while i.value < entries.length {
+        match entries[i.value] {
+          case Tuple(key, val) => {
+            headersString = headersString.value + "$key: $val\r\n"
+            i = i.value + 1
+          }
+        }
+      }
+    }
+  }
+
+  headersString.value
+}
+
+fn respondHeaders(req: Request, buffer: Map<string>, header_line: Header, content: string) => {
+  let headers = Map::mapToHeaders(buffer)
+
+  print(Header::show(header_line) + "\r\n" + headers + "\r\n" + content)
+
+  req.send_buffer_with(Header::show(header_line) + "\r\n" + headers + "\r\n" + content)
+}
+
+fn respondOk(req: Request, buffer: Map<string>, content: string) => {
+  respondHeaders(req, buffer, Header(200, "OK"), content)
+}
+
+fn respondText(req: Request, ty: string, content: string) =>
+  req.respondOk(#{
+    "Content-Type": ty,
+    "Content-Length": String::length(content).toString,
+    "Connection": "close"
+  }, content)
+
+fn fetchWithHeaders(url: string, headers: Map<string>): Throwable<(string, string)> => {
+  match fetch_with(url, Map::mapToHeaders(headers)) {
+    case Ok(Tuple(buffer, content)) => Ok(Tuple(buffer, content))
+    case Error(e) => Error(e)
+  }
+}
+
+interface HTTPWrapper {
+  fn listen(self: HTTPWrapper, handler: fn(Request): unit)
+  fn close()
+}
+
+fn HTTPServer(port: int) => {
+  let http = start_http_server(port)
+
+  actor < HTTPWrapper {
+    on listen(self, handler) => {
+      let req = accept_request(http)
+
+      handler(req)
+      close_client(req)
+
+      self->listen(self, handler)
+    }
+    
+    on close() =>
+      close_server(http)
+  }
+}
+
+fn range(start: int, end: int): list<int> => {
+  match start < end {
+    case true => [start] + range(start + 1, end)
+    case false => []
+  }
+}
+
+fn createParallelHTTP(quantity: int, f: fn(Request, int): unit) => {
+  // Creating a list of HTTP instances
+  let instances = range(0, quantity).map(fn(port) => {
+    let newPort = 8001 + port
+    let httpServer = spawn HTTPServer(newPort)
+
+    httpServer->listen(httpServer, fn(req) => f(req, port))
+
+    httpServer
+  })
+
+  // Creating the main dispatcher instance
+  let initialInstance = spawn HTTPServer(8000)
+
+  initialInstance->listen(initialInstance, fn(req) => {
+    // Randomly dispatching the request to one of the instances
+    let dispatcher = random() % quantity
+    let dispatchedPort = 8001 + dispatcher
+
+    // Fetching the response from the dispatched instance
+    let res = fetch("http://localhost:$dispatchedPort")
+
+    // Sending the response back to the client
+    match res {
+      case Ok(Tuple(buffer, headers)) => send_buffer_with(req, headers + buffer)
+      case Error(e) => send_buffer(req, "Error: $e")
+    }
+  })
 }
