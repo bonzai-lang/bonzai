@@ -1,0 +1,11 @@
+require "std:http"
+require "std:natives"
+require "std:tuple"
+
+createParallelHTTP(10, fn(req, id) => {
+  print("Received request on $id")
+  req.respondText("text/html", "<h1>Hello, world!</h1>")
+})
+
+print("Server running on port http://localhost:8000")
+

@@ -2,11 +2,10 @@ require "std:http"
 require "std:natives"
 
 let port = 8000
-let http = start_http_server(port)
-let server = spawn HTTPServer
+let server = spawn HTTPServer(port)
 
-server->listen(server, http, fn(req) => {
-  send_buffer(req, "Hello world!")
+server->listen(server, fn(req) => {
+  req.respondText("text/html", "<h1>Hello, world!</h1>")
 })
 
 print("Server running on port $port")
