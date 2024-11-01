@@ -21,44 +21,24 @@ Bonzai is a programming language that relies on [Actor model](https://en.wikiped
 - **Strong typechecker**: Throw errors for incompatible types, to ensure security when running your code.
 - **Actors as expressions**: Make use of first-class actors to express every code you want to.
 - **Reactive variables**: described as *live* variables, they are updated in real-time.
-- **Bytecode compilation**: Enable multi-platform code-running.
+- **Bytecode compilation**: Suitable for Unix-like systems, enabling almost multi-platform code running.
 
 ## Example Code
 
-A factorial example :
+A parallel HTTP server dispatcher example :
 
 ```v
-interface Factorial {
-  fn factorial(self: Factorial, n: int)
-}
+require "std:http"
+require "std:natives"
+require "std:tuple"
 
-fn Factorial() => {
-  mut acc = 1
+createParallelHTTP(10, fn(req, id) => {
+  print("Received request on $id")
+  req.respondText("text/html", "<h1>Hello, world!</h1>")
+})
 
-  actor < Factorial {
-    on factorial(self, n) => {
-      if n == 0 then {
-        print(acc.value)
-      } else {
-        acc = acc.value * n
-        self->factorial(self, n - 1)
-      }
-    }
-  }
-}
-
-let f = spawn Factorial()
-f->factorial(f, 5)
+print("Server running on port http://localhost:8000")
 ```
-
-Here, let's decompose the code into steps:
-- First we declare a function `Factorial` that defines a mutable variable corresponding to an accumulator
-- Then, we return an anonymous actor implementing interface Factorial that takes two arguments: itself (anonymous Factorial actor), and an integer `n`.
-- For each `n` received, we compare it to zero:
-  - If `n` is equal to zero, then we print the value (because an event **never** returns a value)
-  - Else we update the accumulator and send another event to the actor itself (used to loop recursively over `n`).
-- Finally, we spawn Factorial and store spawning result (the actor value itself) into the variable `f` (spawning create a loop in another thread).
-- We send at the end the event to print factorial of 5.
 
 ## Building Bonzai
 
