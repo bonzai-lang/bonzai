@@ -1,0 +1,150 @@
+---
+import { SITE_DESCRIPTION, SITE_TITLE } from "#/consts";
+import Default from "#/layouts/Default.astro";
+import { Image } from "astro:assets";
+import { Code } from "astro:components";
+import ShikiTheme from 'shiki/themes/github-dark-default.mjs';
+import { Icon } from 'astro-icon/components';
+
+const code = `require "std:http"
+require "std:natives"
+require "std:tuple"
+
+createParallelHTTP(10, fn(req, id) => {
+  print("Received request on $id")
+  req.respondText("text/html", "<h1>Hello, world!</h1>")
+})
+
+print("Server running on port http://localhost:8000")`;
+
+const data = await fetch('https://raw.githubusercontent.com/thomasvergne/bonzai/refs/heads/main/packages/vscode/syntaxes/bonzai.tmLanguage.json');
+const json = await data.json();
+
+---
+
+<Default 
+  title={SITE_TITLE} 
+  description={SITE_DESCRIPTION}
+  class="bg-neutral-900"
+>
+  <nav class="grid grid-cols-3 max-w-6xl mx-auto py-8 place-items-center">
+    <a class="flex flex-row items-center gap-4 justify-self-start" href="/">
+      <Image src="/logo.svg" alt="Astro logo" class="h-20 w-20 rounded-lg" width={32} height={32} />
+
+      <div class="text-white font-mono">
+        <h1 class="text-3xl">
+          Bonzai
+        </h1>
+
+        <p class="text-white/70 text-lg">
+          Programming language
+        </p>
+      </div>
+    </a>
+
+    <div class="col-span-2 justify-self-end font-mono flex items-center gap-8">
+      <a href="" class="text-white/70 hover:text-white">
+        Documentation
+      </a>
+
+      <a href="" class="text-white/70 hover:text-white">
+        Blog
+      </a>
+
+      <a href="" class="text-white/70 hover:text-white">
+        GitHub
+      </a>
+    </div>
+  </nav>
+
+  <main class="max-w-6xl mx-auto py-32 grid grid-cols-2 gap-16 place-items-center">
+    <div>
+      <h1 class="text-white text-4xl">
+        Bring concurrency to the next level
+      </h1>
+
+      <p class="text-lg text-white/50 my-6">
+        Bonzai is a programming language that supports actor model execution and reactive programming. It is designed to be simple, easy to learn, and efficient.
+      </p>
+      
+      <div class="flex gap-4 mt-12">
+        <a href="" class="bg-cobalt-800 hover:bg-cobalt-900 text-white py-3 px-8 inline-block rounded-lg font-mono font-medium">
+          Get started
+        </a>
+
+        <a href="" class="bg-white/10 hover:bg-white/20 text-white py-3 px-8 rounded-lg font-mono font-medium flex items-center gap-4">
+          <Icon name="tabler:brand-github" class="text-white w-6 h-6" />
+
+          Star on GitHub
+        </a>
+      </div>
+    </div>
+
+    <div class="bg-neutral-950 rounded-3xl shadow-xl w-full px-8 pt-8 pb-4"> 
+      <Code class="overflow-x-auto pb-4" theme={{
+        bg: "#0a0a0a",
+        ...ShikiTheme
+      }} {code} lang={json} />
+    </div>
+  </main>
+  
+  <section class="max-w-6xl mx-auto py-16">
+    <span class="text-white/50 text-center block uppercase font-mono">
+      Bonzai Language
+    </span>
+    <h2 class="text-4xl text-white text-center my-2">
+      Core Features
+    </h2>
+
+    <div class="grid grid-cols-3 gap-16 mt-16">
+      <div class="">
+        <span class="bg-white inline-block p-2 rounded-lg">
+          <Icon name="tabler:bolt" class="text-cobalt-600 w-8 h-8" />
+        </span>
+
+        <h3 class="text-white text-2xl my-4 font-mono">
+          Concurrency
+        </h3>
+
+        <p class="text-white/50 text-justify">
+          Bonzai is designed to be a concurrent programming language. It implements the actor model as first-class citizens, enabling you to express complex systems in a simple way.
+        </p>
+      </div>
+
+      <div class="">
+        <span class="bg-white inline-block p-2 rounded-lg">
+          <Icon name="tabler:activity" class="text-cobalt-600 w-8 h-8" />
+        </span>
+
+        <h3 class="text-white text-2xl my-4 font-mono">
+          Reactive
+        </h3>
+
+        <p class="text-white/50 text-justify">
+          Bonzai is also designed to support reactive programming. While providing a simple and easy-to-use API, it allows you to build complex and efficient systems. It also brings a native syntax for "live" variables.
+        </p>
+      </div>
+
+
+      <div class="">
+        <span class="bg-white inline-block p-2 rounded-lg">
+          <Icon name="tabler:bolt" class="text-cobalt-600 w-8 h-8" />
+        </span>
+
+        <h3 class="text-white text-2xl my-4 font-mono">
+          Mixed paradigms
+        </h3>
+
+        <p class="text-white/50 text-justify">
+          Bonzai supports multiple paradigms, including functional, imperative and event-driven programming. It is designed to be flexible and to adapt to your needs.
+        </p>
+      </div>
+    </div>
+
+    <div class="flex justify-center mt-16">
+      <a href="" class="bg-cobalt-800 hover:bg-cobalt-900 text-white py-3 px-8 inline-block rounded-lg font-mono font-medium">
+        Learn more
+      </a>
+    </div>
+  </section>
+</Default>
