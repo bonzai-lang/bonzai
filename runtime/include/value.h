@@ -51,7 +51,6 @@ typedef int32_t reg;
 
 Value equal(Value x, Value y);
 char* constructor_name(Value x);
-void native_print(Value value);
 
 // The type of the stored value
 typedef enum {

@@ -5,92 +5,6 @@
 #include <value.h>
 #include <math.h>
 
-void native_print(Value value) {
-  if (value == 0) {
-    printf("null");
-    return;
-  }
-  ValueType val_type = get_type(value);
-  switch (val_type) {
-    case TYPE_INTEGER:
-      printf("%d", (int32_t)value);
-      break;
-    case TYPE_SPECIAL:
-      printf("<special>");
-      break;
-    case TYPE_FLOAT:
-      printf("%f", GET_FLOAT(value));
-      break;
-    case TYPE_STRING:
-      printf("%s", GET_STRING(value));
-      break;
-    case TYPE_LIST: {
-      HeapValue* list = GET_PTR(value);
-      
-      if (list->length == 0) {
-        printf("[]");
-        break;
-      }
-
-      if (list->as_ptr[0] == kNull) {
-        printf("%s::%s(", GET_STRING(list->as_ptr[1]), GET_STRING(list->as_ptr[2]));
-
-        for (uint32_t i = 3; i < list->length; i++) {
-          native_print(list->as_ptr[i]);
-          if (i < list->length - 1) {
-            printf(", ");
-          }
-        }
-
-        printf(")");
-      } else {
-        printf("[");
-
-        for (uint32_t i = 0; i < list->length; i++) {
-          native_print(list->as_ptr[i]);
-          if (i < list->length - 1) {
-            printf(", ");
-          }
-        }
-        
-        printf("]");
-      }
-
-      break;
-    }
-    case TYPE_MUTABLE: {
-      printf("<mutable ");
-      native_print(GET_MUTABLE(value));
-      printf(">");
-      break;
-    }
-    case TYPE_FUNCTION: {
-      printf("<function>");
-      break;
-    }
-    case TYPE_FUNCENV: {
-      printf("<funcenv>");
-      break;
-    }
-
-    case TYPE_EVENT: {
-      printf("<event>");
-      break;
-    }
-
-    case TYPE_FRAME: {
-      printf("<frame>");
-      break;
-    }
-
-    case TYPE_UNKNOWN:
-    default: {
-      printf("<unknown>");
-      break;
-    }
-  }
-}
-
 void mark_value(Value value) {
   if (!IS_PTR(value)) return;
 
@@ -157,15 +71,15 @@ void sweep(struct Module* vm) {
 }
 
 void gc(struct Module* vm) {
-  // int numObjects = vm->num_objects;
+  int numObjects = vm->num_objects;
 
   mark_all(vm);
   sweep(vm);
 
   vm->max_objects = vm->num_objects < INIT_OBJECTS ? INIT_OBJECTS : vm->num_objects * 2;
   
-  // printf("Collected %d objects, %d remaining.\n", numObjects - vm->num_objects,
-        //  vm->num_objects);
+  printf("Collected %d objects, %d remaining.\n", numObjects - vm->num_objects,
+         vm->num_objects);
 }
 
 void force_sweep(struct Module* vm) {
@@ -193,23 +107,23 @@ void force_sweep(struct Module* vm) {
 }
 
 HeapValue* allocate(struct Module* mod, ValueType type) {
-  if (mod->num_objects == mod->max_objects) {
-    if (mod->gc_enabled) {
-      gc(mod);
-    } else {
-      mod->max_objects += 2;
-    }
-  }
+  // if (mod->num_objects == mod->max_objects) {
+  //   if (mod->gc_enabled) {
+  //     gc(mod);
+  //   } else {
+  //     mod->max_objects += 2;
+  //   }
+  // }
 
   HeapValue* v = malloc(sizeof(HeapValue));
 
   v->type = type;
   v->is_marked = false;
-  v->next = mod->first_object;
+  // v->next = mod->first_object;
   v->is_constant = false;
 
-  mod->first_object = v;
-  mod->num_objects++;
+  // mod->first_object = v;
+  // mod->num_objects++;
 
   // printf("Allocated %d objects, %d remaining.\n", mod->num_objects, mod->max_objects - mod->num_objects);
 

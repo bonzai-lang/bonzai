@@ -19,6 +19,7 @@ typedef struct Module {
   int32_t *instrs;
 
   int32_t base_pointer;
+  int32_t spawn_pointer;
   int32_t callstack;
 
   Constants constants;
@@ -51,6 +52,7 @@ typedef struct Module {
 typedef Value (*Native)(struct Module *m, Value *args, int argc);
 
 Frame pop_frame(Module *mod);
+Frame pop_event_frame(Module* mod);
 void init_gc(Module* vm);
 
 #endif  // MODULE_H

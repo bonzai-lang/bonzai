@@ -132,6 +132,8 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     Value list = stack_pop(module);
     uint32_t index = i1;
 
+    // native_print(list); printf("\n");
+
     ASSERT_TYPE(module, "list_get", list, TYPE_LIST);
 
     Value* list_ptr = GET_LIST(list);
@@ -222,6 +224,8 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
       ev->as_event.ipc
     ));
 
+    // printf("%d\n", module->spawn_pointer);
+
     module->base_pointer = module->stack->stack_pointer - 1;
     module->callstack++;
     module->pc = ev->as_event.ipc + 5;
@@ -304,9 +308,15 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     }
 
     hp->as_event.actor = create_actor(hp->as_event, module);
+    
+    module->stack->stack_pointer = fr.stack_pointer;
+    module->base_pointer = fr.base_ptr;
+    
     stack_push(module, MAKE_PTR(hp));
     
     module->pc = fr.instruction_pointer;
+
+    // printf("Returning event, %d\n", module->pc / 5);
 
     goto *jmp_table[op];
   }
