@@ -300,6 +300,24 @@ parseSpawn = localize $ do
   void $ Lex.reserved "spawn"
   HLIR.MkExprSpawn <$> parseExpression
 
+parseMap :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseMap = do
+  xs <- P.string "#{" *> Lex.scn *> P.sepBy parseMapPair Lex.comma <* Lex.symbol "}"
+
+  let mapVar = HLIR.MkExprVariable (HLIR.MkAnnotation "Map" Nothing)
+  pure $ HLIR.MkExprApplication mapVar [HLIR.MkExprList xs]
+
+  where
+    parseMapPair :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+    parseMapPair = do
+      key <- P.choice [
+          HLIR.MkExprLiteral . HLIR.MkLitString <$> Lex.identifier,
+          parseInterpolatedString
+        ]
+      void $ Lex.symbol ":"
+      
+      HLIR.MkExprTuple key <$> parseExpression
+
 parseRequire :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseRequire = localize $ do
   void $ Lex.reserved "require"
@@ -321,6 +339,7 @@ parseTerm =
     parseMatch,
     parseTernary,
     parseLiteral,
+    P.try parseMap,
     parseBlock,
     parseList,
     P.try parseTuple,
