@@ -1,3 +1,7 @@
+require "std:natives"
+require "std:error"
+require "std:list"
+
 type Tuple<A, B> {
   Tuple(x: A, y: B)
 }
@@ -31,3 +35,75 @@ fn Tuple::swap<A, B>(self) =>
   match self {
     case Tuple(x, y) => Tuple(y, x)
   }
+
+type Map<V> {
+  Map(entries: list<Tuple<string, V>>)
+}
+
+fn Map::empty<V>(): Map<V> =>
+  Map([])
+
+fn Map::insert<V>(self: Map<V>, key: string, value: V): Map<V> =>
+  match self {
+    case Map(entries) => Map(entries + [Tuple(key, value)])
+  }
+
+fn Map::lookup<V>(self: Map<V>, key: string): Throwable<V> =>
+  match self {
+    case Map(entries) => 
+      match entries {
+        case [] => Error("Key not found")
+        case [Tuple(k, v) .. rest] => if k == key then Ok(v) else Map::lookup(Map(rest), key)
+      }
+  }
+  
+fn Map::map<V, W>(self: Map<V>, f: fn(V): W): Map<W> =>
+  match self {
+    case Map(entries) => Map(List::map(entries, fn (entry) => Tuple::mapSecond(entry, fn (v) => f(v))))
+  }
+
+fn Map::foldl<V, A>(self: Map<V>, f: fn(string, V, A): A, acc: A): A =>
+  match self {
+    case Map(entries) => List::foldl(fn (entry, acc) => 
+      match entry {
+        case Tuple(k, v) => f(k, v, acc)
+      },
+      acc,
+      entries
+    )
+  }
+
+fn Map::foldr<V, A>(self: Map<V>, f: fn(string, V, A): A, acc: A): A =>
+  match self {
+    case Map(entries) => List::foldr(fn (entry, acc) => 
+      match entry {
+        case Tuple(k, v) => f(k, v, acc)
+      },
+      acc,
+      entries
+    )
+  }
+
+fn Map::keys<V>(self: Map<V>): list<string> =>
+  match self {
+    case Map(entries) => List::map(entries, fn (entry) => Tuple::first(entry))
+  }
+
+fn Map::values<V>(self: Map<V>): list<V> =>
+  match self {
+    case Map(entries) => List::map(entries, fn (entry) => Tuple::second(entry))
+  }
+
+fn Map::fromList<V>(entries: list<Tuple<string, V>>): Map<V> =>
+  Map(entries)
+
+fn Map::toList<V>(self: Map<V>): list<Tuple<string, V>> =>
+  match self {
+    case Map(entries) => entries
+  }
+
+fn Map::size<V>(self: Map<V>): int =>
+  match self {
+    case Map(entries) => List::length(entries)
+  }
+  

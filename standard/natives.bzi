@@ -1,6 +1,5 @@
 extern fn print<A>(x: A)
 extern fn toString<A>(x: A): string
-extern fn map<A, B>(f: fn(A): B, xs: list<A, B>): list<B>
 extern fn mul_value<A>(x: A, y: A): A
 extern fn add_value<A>(x: A, y: A): A
 extern fn sub_value<A>(x: A, y: A): A
@@ -24,6 +23,10 @@ extern fn gt_value<A>(x: A, y: A): bool
 extern fn lte_value<A>(x: A, y: A): bool
 extern fn gte_value<A>(x: A, y: A): bool
 
+extern fn randomValue(): int
+extern fn itof(i: int): float
+extern fn ftoi(f: float): int
+
 // Defining basic functions
 
 let value = mutable_value
@@ -40,7 +43,16 @@ let (+) = add_value
 let (-) = sub_value
 let (*) = mul_value
 let (/) = div_value
+let (%) = fn (x: int, y: int): int => x - (x / y) * y
 
 fn (&&) (x: bool, y: bool): bool => if x then y else false
 fn (||) (x: bool, y: bool): bool => if x then true else y
 fn (!) (x: bool): bool => if x then false else true
+
+let random = randomValue
+
+fn map<A, B>(xs: list<A>, f: fn(A): B): list<B> =>
+  match xs {
+    case [] => []
+    case [y .. ys] => [f(y)] + map(ys, f)
+  }

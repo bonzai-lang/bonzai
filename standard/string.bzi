@@ -1,5 +1,10 @@
 require "std:list"
 require "std:natives"
 
+extern fn explode(s: string): list<char>
+
 fn String::join(xs: list<string>, sep: string): string =>
   List::foldl(fn(x, acc) => if acc == "" then x else acc + sep + x, "", xs)
+
+fn String::length(s: string): int =>
+  List::length(s.explode())
