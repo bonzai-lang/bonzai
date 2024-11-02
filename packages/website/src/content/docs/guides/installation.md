@@ -1,6 +1,8 @@
 ---
 title: Installation
 description: Build locally Bonzai and start beginning your first project with it.
+sidebar:
+  order: 0
 ---
 
 To get started with Bonzai, you first need to install it. At the time of writing, Bonzai is only available by cloning the repository and running it locally.
