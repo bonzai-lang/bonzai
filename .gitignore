@@ -2,6 +2,7 @@ dist-newstyle
 build
 .xmake
 .vscode
+.idea
 
 *.bin
 
