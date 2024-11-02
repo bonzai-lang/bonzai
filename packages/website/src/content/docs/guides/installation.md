@@ -5,7 +5,7 @@ description: Build locally Bonzai and start beginning your first project with it
 
 To get started with Bonzai, you first need to install it. At the time of writing, Bonzai is only available by cloning the repository and running it locally.
 
-**Note:** Bonzai is still in development and is not yet available as a stable release. If you encounter any issues, please report them on the [GitHub repository](https://github.com/thomasvergne/bonzai). Furthermore, the language might be only available for suitable Unix-based systems.
+**Note:** Bonzai is still in development and is not yet available as a stable release. If you encounter any issues, please report them on the [GitHub repository](https://github.com/thomasvergne/bonzai). Furthermore, the language might be only available for **suitable Unix-based systems**.
 
 ## Dependencies
 

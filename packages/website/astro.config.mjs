@@ -7,17 +7,11 @@ import tailwind from '@astrojs/tailwind';
 const data = await fetch('https://raw.githubusercontent.com/thomasvergne/bonzai/refs/heads/main/packages/vscode/syntaxes/bonzai.tmLanguage.json');
 const json = await data.json();
 
-import ShikiTheme from 'shiki/themes/github-dark-default.mjs';
-
 // https://astro.build/config
 export default defineConfig({
   site: 'https://bonzai.thomas-vergne.fr',
   markdown: {
     shikiConfig: {
-      theme: {
-        ...ShikiTheme,
-        bg: '#0a0a0a',
-      },
       langs: [
         {
           ...json,
