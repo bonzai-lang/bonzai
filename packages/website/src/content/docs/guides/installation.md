@@ -1,9 +1,11 @@
 ---
-title: Get started with Bonzai
-description: A quick guide to getting started with Bonzai.
+title: Installation
+description: Build locally Bonzai and start beginning your first project with it.
 ---
 
 To get started with Bonzai, you first need to install it. At the time of writing, Bonzai is only available by cloning the repository and running it locally.
+
+**Note:** Bonzai is still in development and is not yet available as a stable release. If you encounter any issues, please report them on the [GitHub repository](https://github.com/thomasvergne/bonzai). Furthermore, the language might be only available for suitable Unix-based systems.
 
 ## Dependencies
 
@@ -38,7 +40,3 @@ To install Bonzai, follow these steps:
     ``` 
 
 4. You're all set! You can now run Bonzai by typing `bonzaic` in your terminal.
-
-## Next steps
-
-Now that you have Bonzai installed, you can start writing your first Bonzai program. Check out the [documentation](/docs) for more information on how to get started. 
