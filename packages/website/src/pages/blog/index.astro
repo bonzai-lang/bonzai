@@ -23,7 +23,7 @@ const posts = (await getCollection('blog')).sort(
     <ul class="flex flex-col gap-2 mt-16">
       {posts.map((post, i) => {
         return <>
-          <a href={`/blog/${post.slug}`} class="w-full px-8 pt-8 pb-4 flex items-center">
+          <a href={`/blog/${post.slug}`} class="w-full px-8 pt-8 pb-4 flex items-center max-sm:flex-col max-sm:items-start">
             <div class="flex-auto">
               <h3 class="text-white text-xl font-mono">
                 {post.data.title}

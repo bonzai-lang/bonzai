@@ -7,12 +7,12 @@ const { posts }= Astro.props;
 ---
 
 {
-  posts.slug !== "/" && posts.children.length !== 0 && <li class="p-2 px-4 text-white m-2 font-mono">/{posts.slug}</li>
+  posts.slug !== "/" && posts.children.length !== 0 && <li class="p-2 px-4 text-white font-mono">/{posts.slug}</li>
 }
-<ul class="list-inside pl-4">
+<ul class={`list-inside ${posts.slug !== '/' && 'pl-4'}`}>
   {
     posts.post 
-      ? <li class="m-2 text-white/70 font-mono">
+      ? <li class="text-white/70 font-mono">
           <a href={`/docs/${posts.post.slug}`} class="p-2 px-4 hover:bg-white/10 rounded-lg block">
             <span>{posts.post.data.title}</span>
             <p class="text-white/50 text-xs text-ellipsis whitespace-nowrap overflow-hidden">{posts.post.data.description}</p>

@@ -19,8 +19,8 @@ const { Content } = await post.render();
 <Default title={`${post.data.title} - Bonzai`} description={post.data.description} class="bg-neutral-900">
   <Navigation />
   
-  <div class="prose prose-invert prose-neutral max-w-2xl mx-auto w-full py-32">
-    <div class="flex flex-row items-center">
+  <div class="prose prose-invert prose-neutral max-w-2xl mx-auto w-full py-8 sm:py-32 px-4">
+    <div class="flex flex-row items-center max-sm:flex-col max-sm:items-start">
       <h1 class="flex-auto flex mb-0">
         {post.data.title}
       </h1>

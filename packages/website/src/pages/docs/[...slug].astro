@@ -28,12 +28,12 @@ const fileTree = buildTree(posts);
   <Navigation />
   <hr class="border-white/10" />
 
-  <main class="grid grid-cols-7 gap-16">
-    <div class="p-8 px-0 col-span-2">
+  <main class="grid grid-cols-7 gap-16 max-md:grid-cols-1 max-md:px-4">
+    <div class="py-8 md:col-span-2 max-w-screen-sm">
       <FileTree posts={fileTree} />
     </div>
 
-    <div class="col-span-5 prose prose-neutral prose-invert py-8">
+    <div class="md:col-span-5 prose prose-neutral prose-invert py-8">
       <h1 class="text-4xl">
         {post.data.title}
       </h1>
