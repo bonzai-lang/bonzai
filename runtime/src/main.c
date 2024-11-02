@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
   module.argc = argc;
   Value* args = /*test*/malloc(argc * sizeof(Value));
   for (int i = 0; i < argc; i++) {
-    args[i] = MAKE_STRING((&module), strdup(argv[i]));
+    args[i] = MAKE_STRING_NON_GC((&module), argv[i]);
   }
   module.argv = args;
 

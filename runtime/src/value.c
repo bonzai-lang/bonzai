@@ -50,7 +50,9 @@ void sweep(struct Module* vm) {
         }
 
         case TYPE_STRING: {
-          free(unreached->as_string);
+          if (!unreached->is_constant) {
+            free(unreached->as_string);
+          }
           break;
         }
 
@@ -93,7 +95,9 @@ void force_sweep(struct Module* vm) {
       }
 
       case TYPE_STRING: {
-        free(object->as_string);
+        if (!object->is_constant) {
+          free(object->as_string);
+        }
         break;
       }
 
@@ -107,23 +111,23 @@ void force_sweep(struct Module* vm) {
 }
 
 HeapValue* allocate(struct Module* mod, ValueType type) {
-  // if (mod->num_objects == mod->max_objects) {
-  //   if (mod->gc_enabled) {
-  //     gc(mod);
-  //   } else {
-  //     mod->max_objects += 2;
-  //   }
-  // }
+  if (mod->num_objects == mod->max_objects) {
+    if (mod->gc_enabled) {
+      gc(mod);
+    } else {
+      mod->max_objects += 2;
+    }
+  }
 
   HeapValue* v = malloc(sizeof(HeapValue));
 
   v->type = type;
   v->is_marked = false;
-  // v->next = mod->first_object;
+  v->next = mod->first_object;
   v->is_constant = false;
 
-  // mod->first_object = v;
-  // mod->num_objects++;
+  mod->first_object = v;
+  mod->num_objects++;
 
   // printf("Allocated %d objects, %d remaining.\n", mod->num_objects, mod->max_objects - mod->num_objects);
 
@@ -134,6 +138,15 @@ Value MAKE_STRING(struct Module* mod, char* x) {
   HeapValue* v = allocate(mod, TYPE_STRING);
   v->as_string = x;
   v->length = strlen(x);
+
+  return MAKE_PTR(v);
+}
+
+Value MAKE_STRING_NON_GC(struct Module* mod, char* x) {
+  HeapValue* v = allocate(mod, TYPE_STRING);
+  v->as_string = x;
+  v->length = strlen(x);
+  v->is_constant = true;
 
   return MAKE_PTR(v);
 }
