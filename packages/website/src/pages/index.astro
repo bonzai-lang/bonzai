@@ -4,6 +4,7 @@ import Default from "#/layouts/Default.astro";
 import { Icon } from 'astro-icon/components';
 import Navigation from "#/components/Navigation.astro";
 import BonzaiCode from "#/components/BonzaiCode.astro";
+import Tabs from "#/components/Tabs.astro";
 
 const code = `require "std:http"
 require "std:natives"
@@ -15,6 +16,36 @@ createParallelHTTP(10, fn(req, id) => {
 })
 
 print("Server running on port http://localhost:8000")`;
+
+const codeConcurrency = `actor Greeter < Greetings {
+  on greet(name: string) => {
+    print("Hello, $name!")
+  }
+}
+
+let g1 = spawn Greeter
+let g2 = spawn Greeter
+
+g1->greet("Alice")
+g2->greet("Bob")`;
+
+const codeReactive = `live count = 0
+let newCount = count + 1 // Count is 1 here
+
+count = 1
+
+// newCount is 2 here`;
+
+const codeDataTypes = `type Person {
+  Person(name: string, age: int)
+}
+
+let alice = Person("Alice", 30)
+
+match alice {
+  case Person(name, age) => 
+    print("Hello $name! You are $age.")
+}`;
 ---
 
 <Default 
@@ -49,7 +80,7 @@ print("Server running on port http://localhost:8000")`;
     <BonzaiCode {code} />
   </main>
   
-  <section class="max-w-6xl mx-auto py-16">
+  <section class="py-16 bg-white/[0.02]">
     <span class="text-white/50 text-center block uppercase font-mono">
       Bonzai Language
     </span>
@@ -57,55 +88,51 @@ print("Server running on port http://localhost:8000")`;
       Core Features
     </h2>
 
-    <div class="grid grid-cols-3 gap-16 mt-16">
-      <div class="">
-        <span class="bg-white inline-block p-2 rounded-lg">
-          <Icon name="tabler:bolt" class="text-cobalt-600 w-8 h-8" />
-        </span>
+    <Tabs class="grid grid-cols-2 gap-16 items-center mt-16 max-w-6xl mx-auto ">
+      <div slot="triggers" class="flex flex-col items-start">
+        <button class="text-white/50 py-2 px-4 rounded-lg text-left prose prose-invert group" tabindex="0" data-tabs-trigger>
+          <h3 class="font-mono">
+            Built-in concurrency
+          </h3>
+          <p class="group-aria-selected:block hidden">
+            Bonzai provides a simple and efficient way to write concurrent programs. It supports parallel execution, asynchronous I/O, and non-blocking operations.
+          </p>
+        </button>
 
-        <h3 class="text-white text-2xl my-4 font-mono">
-          Concurrency
-        </h3>
+        <button class="text-white/50 py-2 px-4 rounded-lg text-left prose prose-invert group" tabindex="1" data-tabs-trigger>
+          <h3 class="font-mono">
+            Reactive programming
+          </h3>
+          <p class="group-aria-selected:block hidden">
+            Bonzai supports reactive programming, which allows you to write event-driven and responsive applications. It provides a simple and declarative way to handle asynchronous events.
+          </p>
+        </button>
 
-        <p class="text-white/50 text-justify">
-          Bonzai is designed to be a concurrent programming language. It implements the actor model as first-class citizens, enabling you to express complex systems in a simple way.
-        </p>
+        
+        <button class="text-white/50 py-2 px-4 rounded-lg text-left prose prose-invert group" tabindex="2" data-tabs-trigger>
+          <h3 class="font-mono">
+            User defined data-types
+          </h3>
+          <p class="group-aria-selected:block hidden">
+            Bonzai allows you to define your own data types, which makes it easy to model complex data structures. It provides a simple and powerful way to work with data.
+          </p>
+        </button>
       </div>
 
-      <div class="">
-        <span class="bg-white inline-block p-2 rounded-lg">
-          <Icon name="tabler:activity" class="text-cobalt-600 w-8 h-8" />
-        </span>
+      <div slot="panels" data-tabs-panel class="col-span-1">
+        <BonzaiCode code={codeConcurrency} />
 
-        <h3 class="text-white text-2xl my-4 font-mono">
-          Reactive
-        </h3>
+        <BonzaiCode code={codeReactive} />
 
-        <p class="text-white/50 text-justify">
-          Bonzai is also designed to support reactive programming. While providing a simple and easy-to-use API, it allows you to build complex and efficient systems. It also brings a native syntax for "live" variables.
-        </p>
+        <BonzaiCode code={codeDataTypes} />
       </div>
-
-
-      <div class="">
-        <span class="bg-white inline-block p-2 rounded-lg">
-          <Icon name="tabler:bolt" class="text-cobalt-600 w-8 h-8" />
-        </span>
-
-        <h3 class="text-white text-2xl my-4 font-mono">
-          Mixed paradigms
-        </h3>
-
-        <p class="text-white/50 text-justify">
-          Bonzai supports multiple paradigms, including functional, imperative and event-driven programming. It is designed to be flexible and to adapt to your needs.
-        </p>
-      </div>
-    </div>
+    </Tabs>
 
     <div class="flex justify-center mt-16">
-      <a href="/docs" class="bg-cobalt-800 hover:bg-cobalt-900 text-white py-3 px-8 inline-block rounded-lg font-mono font-medium">
+      <a href="/docs/language-reference/features" class="bg-cobalt-800 hover:bg-cobalt-900 text-white py-3 px-8 inline-block rounded-lg font-mono font-medium">
         Learn more
       </a>
     </div>
   </section>
+
 </Default>

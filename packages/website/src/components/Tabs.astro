@@ -1,0 +1,51 @@
+---
+type Props = { class?: string; };
+
+const { class: cls } = Astro.props;
+---
+
+<script>
+function updatePanels(index: number, panels: HTMLCollection) {
+  for (let i = 0; i < panels.length; i++) {
+    const panel = panels[i] as HTMLDivElement;
+    if (i === index) {
+      panel.style.display = 'block';
+    } else {
+      panel.style.display = 'none';
+    }
+  }
+}
+
+const container = document.querySelector('[data-tabs-container]')!;
+const triggers: NodeListOf<HTMLButtonElement> = container.querySelectorAll('[data-tabs-trigger]');
+const panelsContainer = container.querySelector('[data-tabs-panel]');
+
+const defaultSelected = triggers[0];
+const defaultIndex = defaultSelected.tabIndex;
+defaultSelected.ariaSelected = 'true';
+
+const panels = panelsContainer?.children!;
+
+updatePanels(defaultIndex, panels);
+
+for (const trigger of triggers) {
+  trigger.addEventListener('click', () => {
+    const index = trigger.tabIndex;
+    const panels = panelsContainer?.children!;
+
+    for (const trigger of triggers) {
+      trigger.ariaSelected = 'false';
+    }
+
+    trigger.ariaSelected = 'true';
+
+    updatePanels(index, panels);
+  });
+}
+</script>
+
+<div class={cls} data-tabs-container>
+  <slot name="triggers" />
+
+  <slot name="panels" />
+</div>
