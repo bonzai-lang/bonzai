@@ -8,6 +8,7 @@ set_warnings("allextra")
 
 add_requires("libcurl", {system = false, configs = { openssl = true }})
 add_requires("openssl", {system = false})
+add_requires("libpq", {system = false})
 
 target("bonzai-standard")
   add_rules("mode.release")
@@ -16,7 +17,7 @@ target("bonzai-standard")
   add_includedirs("include")
   add_includedirs("../runtime/include")
 
-  add_packages("libcurl", "openssl")
+  add_packages("libcurl", "openssl", "libpq")
 
   set_kind("shared")
   set_targetdir("bin")
@@ -31,7 +32,7 @@ target("bonzai-standard-test")
   add_includedirs("include")
   add_includedirs("../runtime/include")
 
-  add_packages("libcurl", "openssl")
+  add_packages("libcurl", "openssl", "libpq")
 
   set_kind("shared")
   set_targetdir("bin")
