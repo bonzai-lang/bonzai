@@ -15,6 +15,7 @@ extern fn or_value(x: bool, y: bool): bool
 extern fn not_value(x: bool): bool
 
 extern fn panic<A>(msg: string): A
+extern fn wait_time(time: int)
 
 extern fn eq_value<A>(x: A, y: A): bool
 extern fn neq_value<A>(x: A, y: A): bool
