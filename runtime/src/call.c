@@ -16,7 +16,10 @@ void op_call(Module *module, Value callee, int32_t argc) {
 
   int32_t new_pc = module->pc + 5;
 
-  stack_push(module, MAKE_FRAME(module, new_pc, old_sp, module->base_pointer));
+  module->gc_enabled = false;
+  Value frame = MAKE_FRAME(module, new_pc, old_sp, module->base_pointer);
+  module->gc_enabled = true;
+  stack_push(module, frame);
 
   module->base_pointer = module->stack->stack_pointer - 1;
   module->callstack++;
