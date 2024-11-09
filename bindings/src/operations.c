@@ -505,3 +505,13 @@ Value ftoi(Module* mod, Value* args, int argc) {
   int i = (int)GET_FLOAT(args[0]);
   return MAKE_INTEGER(i);
 }
+
+Value wait_time(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "wait", argc, 1);
+  ASSERT_TYPE(mod, "wait", args[0], TYPE_INTEGER);
+
+  int ms = GET_INT(args[0]);
+  usleep(ms * 1000);
+
+  return MAKE_INTEGER(0);
+}
