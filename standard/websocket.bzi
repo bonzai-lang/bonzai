@@ -4,7 +4,7 @@ require "std:http"
 extern fn toBase64(data: string): string
 extern fn fromBase64(data: string): string
 
-extern fn initWebsocket(host: string, port: int): Websocket 
+extern fn initWebsocket(host: string, port: int, useSSL: bool): Websocket 
 extern fn sendTextFrame(ws: Websocket, data: string)
 extern fn receiveFrame(ws: Websocket): string
 extern fn closeWebsocket(ws: Websocket)
@@ -17,8 +17,8 @@ interface Websocket {
   fn close()
 }
 
-fn Websocket(host: string, port: int, path: string) => {
-  let ws = initWebsocket(host, port)
+fn Websocket(host: string, port: int, path: string, isSecure: bool) => {
+  let ws = initWebsocket(host, port, isSecure)
   performHandshake(ws, path, host, port)
 
   actor < Websocket {
