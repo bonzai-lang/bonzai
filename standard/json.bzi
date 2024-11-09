@@ -16,10 +16,21 @@ type JSON {
 }
 
 fn jsonParser(): Parser<JSON> => {
+  let charLiteral = choice([
+    char('\\') :right: char('\\'),
+    char('\\') :right: char('"'),
+    char('\\') :right: char('/'),
+    char('\\') :right: char('b')  :Parser::bind: fn(_) => Parser::pure('\b'),
+    char('\\') :right: char('f')  :Parser::bind: fn(_) => Parser::pure('\f'),
+    char('\\') :right: char('n')  :Parser::bind: fn(_) => Parser::pure('\n'),
+    char('\\') :right: char('r')  :Parser::bind: fn(_) => Parser::pure('\r'),
+    char('\\') :right: char('t')  :Parser::bind: fn(_) => Parser::pure('\t')
+  ])
+
   let ws = satisfy(is_whitespace).many()
 
   let str = char('"') 
-            :right: (noneOf(['"']).many() 
+            :right: (many(or(charLiteral, satisfy(fn (x) => x != '"')))
               :Parser::map: fn(xs) => String(xs.implode()))
             :left: char('"')
 
@@ -130,3 +141,18 @@ fn getKeys(json: JSON, keys: list<string>): Optional<JSON> =>
     Some(json),
     keys
   )
+
+fn JSON::stringifyMap(json: Map<JSON>): string => {
+  let pairs = Map::toList(json)
+  let fields = List::map(pairs, fn (v) => 
+    "\"" 
+      + Tuple::first(v) 
+      + "\":" 
+      + stringify(Tuple::second(v))
+  )
+
+  "{" + String::join(fields, ",") + "}"
+}
+
+fn JSON::fromMap(json: Map<JSON>): JSON =>
+  Object(Map::toList(json))

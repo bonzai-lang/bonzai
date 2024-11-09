@@ -78,6 +78,8 @@ fn string(s: string): Parser<string> =>
 
 let and = Parser::andThen
 
+let anything = satisfy(fn(_) => true)
+
 fn noneOf(cs: list<char>): Parser<char> =>
   satisfy(fn(c) => !List::elem(c, cs))
 
@@ -147,4 +149,34 @@ fn choice<A>(parsers: list<Parser<A>>): Parser<A> =>
 
 fn lazy<A>(f: fn(): Parser<A>): Parser<A> =>
   Parser(fn(input) => runParser(f(), input))
+
+fn manyTill<A, B>(parser: Parser<A>, end: Parser<B>): Parser<list<A>> =>
+  Parser(fn(input) => {
+    fn loop(input: string, acc: list<A>): Result<list<A>> => {
+      match runParser(end, input) {
+        case ParseResult(_, rest) => ParseResult(acc, rest)
+        case ParseError(_, _) => {
+          match runParser(parser, input) {
+            case ParseResult(x, rest) => loop(rest, acc + [x])
+            case ParseError(_, _) => ParseError("Unexpected end of input", input)
+          }
+        }
+      }
+    }
+    loop(input, [])
+  })
   
+
+fn manyN<A>(parser: Parser<A>, n: int): Parser<list<A>> =>
+  Parser(fn(input) => {
+    fn loop(input: string, acc: list<A>, n: int): Result<list<A>> => {
+      if n == 0 then ParseResult(acc, input)
+      else {
+        match runParser(parser, input) {
+          case ParseResult(x, rest) => loop(rest, acc + [x], n - 1)
+          case ParseError(_, _) => ParseResult(acc, input)
+        }
+      }
+    }
+    loop(input, [], n)
+  })
