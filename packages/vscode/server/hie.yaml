@@ -1,0 +1,13 @@
+cradle:
+  cabal:
+    - path: "./app/Main.hs"
+      component: "bonzai-lsp:exe:bonzai-lsp"
+
+    - path: "../../../src"
+      component: "lib:bonzai"
+
+    - path: "../../../app/Main.hs"
+      component: "bonzai:exe:Bonzai"
+
+    - path: "../../../test"
+      component: "bonzai:test:bonzai-test"
