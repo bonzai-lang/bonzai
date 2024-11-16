@@ -1,0 +1,3 @@
+packages:
+	./bonzai-lsp.cabal
+	../../../
