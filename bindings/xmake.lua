@@ -6,9 +6,9 @@ end
 
 set_warnings("allextra")
 
-add_requires("libcurl", {system = false, configs = { openssl = true }})
-add_requires("openssl", {system = false})
-add_requires("libpq", {system = false})
+add_requires("libcurl", {configs = { openssl = true }})
+add_requires("openssl")
+add_requires("libpq")
 
 target("bonzai-standard")
   add_rules("mode.release")
