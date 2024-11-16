@@ -94,6 +94,32 @@ Value get_buffer(Module *module, Value* args, int argc) {
   return MAKE_PTR(buffer);
 }
 
+Value get_path(Module *module, Value* args, int argc) {
+  ASSERT_ARGC(module, "get_path", argc, 1);
+  ASSERT_TYPE(module, "get_path", args[0], TYPE_INTEGER);
+
+  int client_socket = GET_INT(args[0]);
+
+  char *buffer = malloc(BUFFER_SIZE);
+
+  int bytes_read = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+
+  if (bytes_read < 0) {
+    return MAKE_STRING(module, "");
+  }
+
+  buffer[bytes_read] = '\0';
+  strtok(buffer, " ");
+
+  char *path = strtok(NULL, " ");
+
+  if (path == NULL) {
+    return MAKE_STRING(module, "");
+  }
+
+  return MAKE_STRING(module, path);
+}
+
 Value send_buffer(Module *module, Value* args, int argc) {
   ASSERT_ARGC(module, "send_buffer", argc, 2);
   ASSERT_TYPE(module, "send_buffer", args[0], TYPE_INTEGER);
