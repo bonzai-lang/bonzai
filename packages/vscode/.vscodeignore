@@ -2,6 +2,7 @@
 vsc-extension-quickstart.md
 .vscode/**
 **/*.ts
+server/
 **/*.map
 .gitignore
 **/tsconfig.json
