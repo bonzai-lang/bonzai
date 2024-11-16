@@ -15,10 +15,11 @@ import Language.Bonzai.Frontend.Typechecking.Checker (runTypechecking, decompose
 import Data.Map qualified as Map
 import System.FilePath (takeDirectory, dropExtension, takeFileName)
 import Language.Bonzai.Frontend.Module.Conversion (moduleState, ModuleState (MkModuleState), resolve, removeRequires, resultState, resolveContent)
-import Language.Bonzai.Frontend.Parser hiding (parse)
+import Language.Bonzai.Frontend.Parser hiding (parse, Label)
 import qualified Data.Text as Text
 import Relude.Unsafe ((!!))
 import GHC.IO (unsafePerformIO)
+import Data.Row
 
 {-# NOINLINE lastValidAST #-}
 lastValidAST :: IORef [HLIR.TLIR "expression"]
@@ -375,8 +376,11 @@ handlers =
           -- Get updated text content
 
           let content = foldr (\(TextDocumentContentChangeEvent opt) acc -> case opt of
-                  InR (TextDocumentContentChangeWholeDocument text) -> acc <> text
-                  InL (TextDocumentContentChangePartial _ _ text) -> acc <> text
+                  InR ((Label :: Label "text") :== text) -> acc <> text
+                  InL (
+                    ((Label :: Label "range") :== _) 
+                      :+ ((Label :: Label "rangeLength") :== _) 
+                        :+ (Label :== text)) -> acc <> text
                 ) "" updates
           let path = fromJust $ uriToFilePath uri
 

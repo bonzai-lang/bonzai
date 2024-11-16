@@ -78,6 +78,7 @@ executable bonzai-lsp
     , lsp
     , lsp-types
     , containers
+    , row-types
 
   mixins:
     base hiding (Prelude),
