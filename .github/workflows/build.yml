@@ -67,7 +67,7 @@ jobs:
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
       - name: Build compiler and VM
-        run: python3 scripts/build_project.py
+        run: python3 scripts/build.py
 
       - name: Build LSP
         run: |
