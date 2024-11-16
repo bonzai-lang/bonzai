@@ -379,3 +379,55 @@ int value_eq(Module* mod, Value a, Value b) {
       return 0;
   }
 }
+
+void debug_value(Value v) {
+  switch (get_type(v)) {
+    case TYPE_INTEGER:
+      printf("%d", (int) GET_INT(v));
+      break;
+    
+    case TYPE_FLOAT:
+      printf("%f", GET_FLOAT(v));
+      break;
+
+    case TYPE_STRING:
+      printf("%s", GET_STRING(v));
+      break;
+    
+    case TYPE_LIST: {
+      HeapValue* list = GET_PTR(v);
+      printf("[");
+      for (uint32_t i = 0; i < list->length; i++) {
+        debug_value(list->as_ptr[i]);
+        if (i < list->length - 1) {
+          printf(", ");
+        }
+      }
+      printf("]");
+      break;
+    }
+
+    case TYPE_MUTABLE:
+      printf("Mutable(");
+      debug_value(GET_MUTABLE(v));
+      printf(")");
+      break;
+
+    case TYPE_SPECIAL:
+      printf("Special");
+      break;
+    
+    case TYPE_FUNCTION:
+      printf("Function");
+      break;
+    
+    case TYPE_FUNCENV:
+      printf("FunctionEnv");
+      break;
+    
+    case TYPE_UNKNOWN:
+    default:
+      printf("Unknown");
+      break;
+  }
+}

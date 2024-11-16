@@ -184,4 +184,6 @@ Value stack_pop(struct Module* mod);
 
 int value_eq(struct Module* mod, Value a, Value b);
 
+void debug_value(Value v);
+
 #endif  // VALUE_H

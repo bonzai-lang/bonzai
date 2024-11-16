@@ -17,7 +17,7 @@
   do {                                               \
     printf("[");                                     \
     for (int i = 0; i < stack->stack_pointer; i++) { \
-      native_print(stack->values[i]);                \
+      debug_value(stack->values[i]);                \
       if (i < stack->stack_pointer - 1) {            \
         printf(", ");                                \
       }                                              \
@@ -29,7 +29,7 @@
   do {                                               \
     printf("[");                                     \
     for (int i = idx; i < stack->stack_pointer; i++) { \
-      native_print(stack->values[i]);                \
+      debug_value(stack->values[i]);                \
       if (i < stack->stack_pointer - 1) {            \
         printf(", ");                                \
       }                                              \
