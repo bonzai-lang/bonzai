@@ -31,7 +31,7 @@ convert (HLIR.MkExprIndex e e') = MLIR.MkExprIndex (convert e) (convert e')
 convert (HLIR.MkExprMatch e cs) = do
   let e' = convert e
   let scrut = MLIR.MkExprVariable "scrut"
-  let cases' = map (\(p, e', _) -> (createCondition scrut p, convert e')) cs
+  let cases' = map (\(p, b, _) -> (createCondition scrut p, convert b)) cs
 
   MLIR.MkExprUnpack "scrut" e' (createIfs cases')
 convert (HLIR.MkExprUnwrapLive e) = MLIR.MkExprApplication (convert e) []
