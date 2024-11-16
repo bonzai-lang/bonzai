@@ -11,6 +11,6 @@ Value compare_and(Module* mod, Value a, Value b);
 Value compare_or(Module* mod, Value a, Value b);
 Value compare_gt(Module* mod, Value a, Value b);
 
-ComparisonFun comparison_table[7];
+extern ComparisonFun comparison_table[7];
 
 #endif

@@ -8,6 +8,6 @@ void op_call(Module *module, Value callee, int32_t argc);
 void op_native_call(Module *module, Value callee, int32_t argc);
 typedef void (*InterpreterFunc)(Module*, Value, int32_t);
 
-InterpreterFunc interpreter_table[2];
+extern InterpreterFunc interpreter_table[2];
 
 #endif
