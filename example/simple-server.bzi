@@ -1,0 +1,15 @@
+require "std:oak/server"
+require "std:http"
+require "std:natives"
+
+let server = spawn OakServer(8000)
+
+server->listen(fn () => {
+  server->get("/", fn(req) => {
+    req.respondText("text/plain", "Hello, world!")
+  })
+
+  server->get("/html", fn(req) => {
+    req.respondText("text/html", "<h1>Hello, world!</h1>")
+  })
+})
