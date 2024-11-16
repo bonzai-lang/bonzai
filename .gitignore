@@ -15,3 +15,7 @@ bindings/bin
 bin
 
 .DS_Store
+
+cmake-build-debug
+cmmake-build-release
+CMakeLists.txt

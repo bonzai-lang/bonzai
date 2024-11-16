@@ -117,7 +117,8 @@ library
         directory,
         filepath,
         diagnose,
-        binary
+        binary,
+        aeson
 
     mixins:
         base hiding (Prelude),
@@ -157,11 +158,20 @@ executable Bonzai
         relude,
         filepath,
         directory,
+        optparse-applicative,
+        aeson
 
     mixins:
         base hiding (Prelude),
         relude (Relude as Prelude),
         relude
+
+    default-extensions:
+        DataKinds
+        OverloadedRecordDot
+        OverloadedStrings
+        TemplateHaskell
+        DuplicateRecordFields
 
     -- Directories containing source files.
     hs-source-dirs:   app
