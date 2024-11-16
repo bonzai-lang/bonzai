@@ -39,11 +39,11 @@ runtime_executable = f"bonzai-runtime{ext}"
 runtime_executable_out = f"bonzai{ext}"
 
 xmake_root = '--root' if is_root else ''
-system(f'xmake b {xmake_root} -P runtime')
+system(f'xmake b {xmake_root} -P runtime bonzai-runtime')
 system(f"cp runtime/bin/{runtime_executable} bin/{runtime_executable_out}")
 
 system(f'xmake config {xmake_root} -P bindings --ccache=n -y')
-system(f'xmake b {xmake_root} -P bindings')
+system(f'xmake b {xmake_root} -P bindings bonzai-standard')
 
 # Write simple shell script
 shell_script = f"""#!/bin/sh

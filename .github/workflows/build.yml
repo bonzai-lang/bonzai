@@ -88,7 +88,7 @@ jobs:
       - name: Build LSP
         run: |
           cd packages/vscode/server
-          python3 build_lsp.py
+          python3 build-lsp.py
 
       - name: Create ZIP archive on UNIX
         if: startsWith(matrix.os, 'ubuntu') || startsWith(matrix.os, 'macos')
