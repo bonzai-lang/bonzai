@@ -27,9 +27,4 @@ if len(executable_files) == 0:
 executable = executable_files[0]
 executable_out = f"bonzai-lsp{ext}"
 
-BONZAI_BIN_PATH = os.path.join(os.environ.get('BONZAI_PATH', None), 'bin')
-
-
-if not os.path.isdir(BONZAI_BIN_PATH): os.mkdir(BONZAI_BIN_PATH)
-
-system(f"cp {executable} {BONZAI_BIN_PATH}/{executable_out}")
+system(f"cp {executable} ../../../bin/{executable_out}")
