@@ -6,6 +6,7 @@ import Prelude hiding (Type)
 import qualified GHC.IO as IO
 import qualified Data.Text as T
 import GHC.Show qualified as S
+import Data.Aeson (ToJSON (toJSON), FromJSON (parseJSON))
 
 -- Level represents the level of a type variable. It is used to determine the
 -- scope of a type variable.
@@ -20,7 +21,7 @@ data Type
   | MkTyApp Type [Type]
   | MkTyVar (IORef TyVar)
   | MkTyQuantified Text
-  deriving Ord
+  deriving (Ord, Generic)
 
 instance (Ord a) => Ord (IORef a) where
   compare a b = compare (IO.unsafePerformIO $ readIORef a) (IO.unsafePerformIO $ readIORef b)
@@ -30,7 +31,7 @@ instance (Ord a) => Ord (IORef a) where
 data TyVar
   = Link Type
   | Unbound QuVar Level
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Generic)
 
 data Scheme = Forall [QuVar] Type 
   deriving (Eq, Show)
@@ -80,8 +81,20 @@ instance ToText Type where
     toText a'
   toText (MkTyQuantified a) = a
 
+simplify :: MonadIO m => Type -> m Type
+simplify (MkTyVar a) = do
+  a' <- readIORef a
+  case a' of
+    Link b -> simplify b
+    _ -> pure $ MkTyVar a
+simplify (MkTyApp a b) = do
+  a' <- simplify a
+  b' <- mapM simplify b
+  pure $ MkTyApp a' b'
+simplify a = pure a
+
 instance ToText TyVar where
-  toText (Link a) = "#" <> toText a
+  toText (Link a) = toText a
   toText (Unbound a l) = a <> "@" <> T.pack (show l)
 
 instance ToText (Maybe Type) where
@@ -96,3 +109,19 @@ instance ToText (Identity Type) where
 
 instance Show Type where
   show = T.unpack . toText
+
+instance ToJSON Type
+
+instance ToJSON TyVar
+
+instance ToJSON a => ToJSON (IORef a) where
+  toJSON a = toJSON $ IO.unsafePerformIO $ readIORef a
+
+instance FromJSON a => FromJSON (IORef a) where
+  parseJSON a = do
+    a' <- parseJSON a
+    pure $ IO.unsafePerformIO $ newIORef a'
+
+instance FromJSON Type
+
+instance FromJSON TyVar

@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE DerivingVia #-}
 module Language.Bonzai.Syntax.HLIR (
   Update(..),
   Expression(..),
@@ -19,6 +20,11 @@ module Language.Bonzai.Syntax.HLIR (
   -- Type families
   HLIR,
   TLIR,
+
+  hlirToJSON,
+  programToJSON,
+  jsonToHLIR,
+  jsonToProgram
 ) where
 import Language.Bonzai.Syntax.Internal.Literal as Lit
 import Language.Bonzai.Syntax.Internal.Annotation as Ann
@@ -28,12 +34,14 @@ import qualified Data.Text as T
 import GHC.TypeLits (Symbol)
 import Prelude hiding (Type)
 import GHC.Show qualified as S
+import Data.Aeson
+import qualified Relude as BS
 
 data Update f t
   = MkUpdtVariable (Annotation (f t))
   | MkUpdtField (Update f t) Text
   | MkUpdtIndex (Update f t) (Expression f t)
-  deriving Show
+  deriving (Show, Generic)
 
 data Expression f t
   = MkExprLiteral Literal
@@ -47,7 +55,7 @@ data Expression f t
   | MkExprBlock [Expression f t]
   | MkExprActor t [Expression f t]
   | MkExprOn Text [Annotation (f t)] (Expression f t)
-  | MkExprSend (Expression f t) Text [Expression f t]
+  | MkExprSend (Expression f t) Text [Expression f t] (f t)
   | MkExprRequire Text
   | MkExprLoc (Expression f t) Position
   | MkExprSpawn (Expression f t)
@@ -57,14 +65,16 @@ data Expression f t
   | MkExprWhile (Expression f t) (Expression f t)
   | MkExprIndex (Expression f t) (Expression f t)
   | MkExprData (Annotation [Text]) [DataConstructor t]
-  | MkExprMatch (Expression f t) [(Pattern f t, Expression f t)]
+  | MkExprMatch (Expression f t) [(Pattern f t, Expression f t, Position)]
   | MkExprLive (Annotation (f t)) (Expression f t)
   | MkExprUnwrapLive (Expression f t)
   | MkExprWrapLive (Expression f t)
+  deriving Generic
 
 data DataConstructor t
   = MkDataVariable Text
   | MkDataConstructor Text [t]
+  deriving Generic
 
 data Pattern f t 
   = MkPatVariable Text (f t)
@@ -76,7 +86,23 @@ data Pattern f t
   | MkPatOr (Pattern f t) (Pattern f t)
   | MkPatCondition (Expression f t) (Pattern f t)
   | MkPatList [Pattern f t] (Maybe (Pattern f t))
-  deriving Show
+  deriving (Show, Generic)
+
+instance (ToJSON (f t), ToJSON t) => ToJSON (Expression f t)
+
+instance (ToJSON (f t), ToJSON t) => ToJSON (Update f t)
+
+instance (ToJSON t) => ToJSON (DataConstructor t)
+
+instance (ToJSON (f t), ToJSON t) => ToJSON (Pattern f t)
+
+instance (FromJSON (f t), FromJSON t) => FromJSON (Expression f t)
+
+instance (FromJSON (f t), FromJSON t) => FromJSON (Update f t)
+
+instance (FromJSON t) => FromJSON (DataConstructor t)
+
+instance (FromJSON (f t), FromJSON t) => FromJSON (Pattern f t)
 
 instance (ToText t, ToText (f t)) => Show (Expression f t) where
   show = T.unpack . toText
@@ -118,7 +144,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprBlock es) = T.concat [T.intercalate "; " (map toText es)]
   toText (MkExprActor i e) = T.concat ["event ", toText i , " ", toText e]
   toText (MkExprOn n as e) = T.concat ["on ", n, "(", T.intercalate ", " (map toText as), ") { ", toText e, " }"]
-  toText (MkExprSend e n e') = T.concat ["(", toText e, ") -> ", n, "(", toText e', ")"]
+  toText (MkExprSend e n e' _) = T.concat ["(", toText e, ") -> ", n, "(", toText e', ")"]
   toText (MkExprRequire n) = T.concat ["require ", n]
   toText (MkExprLoc e _) = toText e
   toText (MkExprSpawn e) = T.concat ["spawn ", toText e]
@@ -129,7 +155,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprWhile c e) = T.concat ["while ", toText c, " { ", toText e, " }"]
   toText (MkExprIndex e e') = T.concat [toText e, "[", toText e', "]"]
   toText (MkExprData ann cs) = T.concat ["data ", toText ann.name, "<", T.intercalate ", " (map toText cs), ">"]
-  toText (MkExprMatch e cs) = T.concat ["match ", toText e, " { ", T.intercalate ", " (map (\(c, b) -> T.concat [toText c, " => ", toText b]) cs), " }"]
+  toText (MkExprMatch e cs) = T.concat ["match ", toText e, " { ", T.intercalate ", " (map (\(c, b, _) -> T.concat [toText c, " => ", toText b]) cs), " }"]
   toText (MkExprLive a e) = T.concat ["live ", toText a, " = ", toText e]
   toText (MkExprUnwrapLive e) = T.concat ["unwrap ", toText e]
   toText (MkExprWrapLive e) = T.concat ["wrap ", toText e]
@@ -156,6 +182,10 @@ instance (ToText t, ToText (f t)) => ToText [Expression f t] where
 instance Locate (Expression f t) where
   locate = MkExprLoc
 
+instance Locate (Pattern f t) where
+  locate = MkPatLocated
+
+
 instance (Eq (f t), Eq t) => Eq (Update f t) where
   MkUpdtVariable a == MkUpdtVariable b = a == b
   MkUpdtField u f == MkUpdtField u' f' = u == u' && f == f'
@@ -174,7 +204,7 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprBlock es == MkExprBlock es' = es == es'
   MkExprActor i e == MkExprActor i' e' = i == i' && e == e'
   MkExprOn n as e == MkExprOn n' as' e' = n == n' && as == as' && e == e'
-  MkExprSend e n es == MkExprSend e' n' es' = e == e' && n == n' && es == es'
+  MkExprSend e n es t == MkExprSend e' n' es' t' = e == e' && n == n' && es == es' && t == t'
   MkExprRequire n == MkExprRequire n' = n == n'
   MkExprLoc e _ == MkExprLoc e' _ = e == e'
   MkExprLoc e _ == e' = e == e'
@@ -207,3 +237,15 @@ instance (Eq (f t), Eq t) => Eq (Pattern f t) where
   MkPatOr p p' == MkPatOr p'' p''' = p == p'' && p' == p'''
   MkPatCondition e p == MkPatCondition e' p' = e == e' && p == p'
   _ == _ = False
+
+hlirToJSON :: (ToJSON (f t), ToJSON t) => Expression f t -> Value
+hlirToJSON = toJSON
+
+programToJSON :: (ToJSON (f t), ToJSON t) => [Expression f t] -> String
+programToJSON = BS.decodeUtf8 . encode
+
+jsonToHLIR :: (FromJSON (f t), FromJSON t) => String -> Maybe (Expression f t)
+jsonToHLIR = decode . BS.encodeUtf8
+
+jsonToProgram :: (FromJSON (f t), FromJSON t) => String -> Maybe [Expression f t]
+jsonToProgram = decode . BS.encodeUtf8

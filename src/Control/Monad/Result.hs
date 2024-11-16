@@ -12,8 +12,10 @@ import qualified Data.Maybe as Mb
 import System.Directory (doesFileExist)
 import System.FilePath (normalise)
 import Control.Color
-import Text.Megaparsec.State (PosState(pstateSourcePos))
-import Text.Megaparsec.Error (ParseErrorBundle(bundlePosState))
+import Text.Megaparsec.Error
+import Data.Aeson
+import Text.Megaparsec hiding (parseError)
+import GHC.Show qualified as Show
 
 instance (D.HasHints Void String) where
   hints _ = mempty
@@ -78,7 +80,7 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
         (Just "May you have forgotten to define an interface for your actor?")
         ("Expected an actor, but got " <> show (toText ty), Nothing, pos)
         "Typechecking"
-    
+
     InvalidArgumentQuantity n k ->
       printErrorFromString
         Nothing
@@ -90,19 +92,19 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
         Nothing
         ("Environment variable " <> show name <> " not found", Just "check for typo issue with the variable name", pos)
         "Resolution"
-    
+
     InvalidConstructor name ->
       printErrorFromString
         Nothing
         ("Invalid constructor " <> show name, Just "check for typo issue with the constructor name", pos)
         "Resolution"
-    
+
     EmptyMatch ->
       printErrorFromString
         Nothing
         ("Empty match statement", Just "check for missing cases in the match statement", pos)
         "Resolution"
-    
+
     InvalidPatternUnion env1 env2 ->
       printErrorFromString
         Nothing
@@ -113,6 +115,13 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
 type ImportStack = [FilePath]
 
 type Error = (BonzaiError, HLIR.Position)
+
+annotateErrorBundle :: ParseErrorBundle Text Void -> NonEmpty (SourcePos, Text)
+annotateErrorBundle bundle
+  = fmap (\(err, pos) -> (pos, Text.pack . parseErrorTextPretty $ err)) . fst $
+    attachSourcePos errorOffset
+                       (bundleErrors bundle)
+                       (bundlePosState bundle)
 
 data BonzaiError
   = ParseError P.ParseError
@@ -130,8 +139,36 @@ data BonzaiError
   | InvalidConstructor Text
   | EmptyMatch
   | InvalidPatternUnion (Set Text) (Set Text)
-  deriving (Show, Eq)
+  deriving (Eq, Generic)
 
+instance Show BonzaiError where
+  show (ParseError e) = showError e
+  show (CyclicModuleDependency path stack) = "Cyclic module dependency detected with " <> show (normalise path) <> "\nImport stack:\n - "<> intercalate "\n - " (map normalise stack)
+  show (ModuleNotFound path stack) = "Module " <> show (normalise path) <> " not found\nImport stack:\n - "<> intercalate "\n - " (map normalise stack)
+  show (VariableNotFound name) = "Variable " <> show name <> " not found"
+  show (CompilerError msg) = "BONZAI INTERNAL ERROR: " <> show msg
+  show (UnificationFail t1 t2) = "Unification failed between " <> toString (toText t1) <> " and " <> toString (toText t2)
+  show (ActorNotFound name) = "Actor " <> show name <> " not found"
+  show (NotAnActor name ty) = "Variable " <> show name <> " is not an event, but a " <> show (toText ty)
+  show (EventNotFound name) = "Event " <> show name <> " not found"
+  show (ExpectedAnActor ty) = "Expected an actor, but got " <> show (toText ty)
+  show (InvalidArgumentQuantity n k) = "Invalid number of arguments, expected " <> show n <> ", received " <> show k
+  show (EnvironmentVariableNotFound name) = "Environment variable " <> show name <> " not found"
+  show (InvalidConstructor name) = "Invalid constructor " <> show name
+  show EmptyMatch = "Empty match statement"
+  show (InvalidPatternUnion env1 env2) = "Invalid pattern union between " <> show env1 <> " and " <> show env2
+
+instance ToJSON BonzaiError where
+  toJSON e = toJSON (show e :: String)
+
+instance ToJSON P.ParseError where
+  toJSON e = do
+    let res = annotateErrorBundle e
+    let res' = (\(pos, err) -> object ["error" .= err, "position" .= pos]) <$> res
+
+    toJSON res'
+
+ 
 showError :: P.ParseError -> String
 showError = P.errorBundlePretty
 

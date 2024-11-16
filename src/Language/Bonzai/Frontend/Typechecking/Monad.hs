@@ -21,11 +21,12 @@ import Control.Monad.Except
 import Control.Monad.Result as R
 import qualified GHC.IO as IO
 import qualified Language.Bonzai.Syntax.Internal.Type as HLIR
+import qualified Language.Bonzai.Syntax.HLIR as HLIR
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified Data.Set as Set
 
-type MonadChecker m = (MonadIO m, MonadError Error m, MonadFail m)
+type MonadChecker m = (MonadIO m, MonadError Error m)
 type Substitution = Map Text HLIR.Type
 
 {-# NOINLINE typeCounter #-}
@@ -39,6 +40,7 @@ currentLevel = IO.unsafePerformIO $ newIORef 0
 data CheckerState = MkCheckerState {
     variables :: Map Text HLIR.Scheme
   , interfaces :: Map (Text, [HLIR.Type]) (Map Text HLIR.Scheme)
+  , varPos :: [(Text, (HLIR.Scheme, HLIR.Position))]
 }
 
 with :: MonadIO m => IORef a -> (a -> a) -> m b -> m b
@@ -55,6 +57,7 @@ checkerState = IO.unsafePerformIO . newIORef $
   MkCheckerState
     Map.empty
     Map.empty
+    mempty
 
 enterLevel :: (MonadChecker m) => m ()
 enterLevel = modifyIORef' currentLevel (+ 1)

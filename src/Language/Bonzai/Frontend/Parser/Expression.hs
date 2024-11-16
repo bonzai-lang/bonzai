@@ -24,11 +24,11 @@ parseAnnotation' p = HLIR.MkAnnotation <$> Lex.identifier <*> (Lex.symbol ":" *>
 
 localize :: (MonadIO m, HLIR.Locate a) => P.Parser m a -> P.Parser m a
 localize p = do
-  start <- P.getSourcePos
+  startP <- P.getSourcePos
   x <- p
-  end <- P.getSourcePos
+  endP <- P.getSourcePos
 
-  pure $ HLIR.locate x (start, end)
+  pure $ HLIR.locate x (startP, endP)
 
 parseLiteral :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseLiteral = localize . Lex.lexeme $ P.choice [
@@ -58,6 +58,9 @@ parseInterpolatedString = do
 
     combineCharsIntoString :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
     combineCharsIntoString (HLIR.MkExprBinary "+" x (HLIR.MkExprLiteral (HLIR.MkLitString ""))) = combineCharsIntoString x 
+    combineCharsIntoString (HLIR.MkExprBinary "+" (HLIR.MkExprLiteral (HLIR.MkLitString "")) x) = combineCharsIntoString x
+    combineCharsIntoString (HLIR.MkExprBinary "+" (HLIR.MkExprLiteral (HLIR.MkLitString a)) (HLIR.MkExprLiteral (HLIR.MkLitString b))) =
+      HLIR.MkExprLiteral (HLIR.MkLitString (a <> b))
     combineCharsIntoString (HLIR.MkExprBinary "+" x y) = do
       let x' = combineCharsIntoString x
       let y' = combineCharsIntoString y
@@ -181,21 +184,24 @@ parseMatch = localize $ do
   pure $ HLIR.MkExprMatch expr cases
 
   where
-    parseCase :: MonadIO m => P.Parser m (HLIR.HLIR "pattern", HLIR.HLIR "expression")
+    parseCase :: MonadIO m => P.Parser m (HLIR.HLIR "pattern", HLIR.HLIR "expression", HLIR.Position)
     parseCase = do
+      start <- P.getSourcePos
       void $ Lex.reserved "case"
       pat <- parsePattern
 
       void $ Lex.symbol "=>"
       expr <- parseExpression
 
-      pure (pat, expr)
+      end <- P.getSourcePos
+
+      pure (pat, expr, (start, end))
 
     parsePatternTerm :: MonadIO m => P.Parser m (HLIR.HLIR "pattern")
-    parsePatternTerm = P.choice [
+    parsePatternTerm = localize $ P.choice [
         Lex.brackets $ do
           pats <- P.sepBy parsePattern Lex.comma
-          slice <- P.optional (Lex.symbol ".." *> parsePattern)
+          slice <- P.optional (localize $ Lex.symbol ".." *> parsePattern)
 
           pure (HLIR.MkPatList pats slice),
         P.try $ HLIR.MkPatConstructor <$> Lex.identifier <*> Lex.parens (P.sepBy1 parsePattern Lex.comma),
@@ -205,7 +211,7 @@ parseMatch = localize $ do
       ]
 
     parsePattern :: MonadIO m => P.Parser m (HLIR.HLIR "pattern")
-    parsePattern = P.makeExprParser parsePatternTerm table
+    parsePattern = localize $ P.makeExprParser parsePatternTerm table
       where
         table = [
             [
@@ -378,7 +384,7 @@ parseExpression = localize $ P.makeExprParser parseTerm table
             name <- Lex.identifier
             args <- Lex.parens (P.sepBy parseExpression Lex.comma)
 
-            pure $ \e -> HLIR.MkExprSend e name args
+            pure $ \e -> HLIR.MkExprSend e name args Nothing
         ],
         [
           P.InfixL $ do

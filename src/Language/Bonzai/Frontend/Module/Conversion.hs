@@ -72,6 +72,24 @@ getCorrectPath path = do
   let path' = cwd </> takeFileName path <.> "bzi"
   liftIO $ makeAbsolute path'
 
+resolveContent :: MonadResolution m => Text -> m ModuleUnit
+resolveContent content = do
+  let imports = mempty
+      variables = mempty
+      types = mempty
+      classes = mempty
+
+  let moduleUnit = MkModuleUnit "" "" False imports variables types classes
+
+  cst <- P.parseBonzaiFile "" content P.parseProgram
+
+  case cst of
+    Left err -> throw (ParseError err)
+    Right ast -> do
+      modUnit <- foldlM resolveImports moduleUnit ast
+      modifyIORef' resultState (<> ast)
+      pure modUnit
+
 resolve :: (MonadResolution m) => FilePath -> Bool -> m ModuleUnit
 resolve path isPublic = do
   st <- readIORef moduleState
@@ -196,7 +214,7 @@ resolveImports m (HLIR.MkExprUpdate u e) = do
     resolveUpdate m' (HLIR.MkUpdtIndex u' e') = do
       m1 <- resolveUpdate m' u'
       resolveImports m1 e'
-resolveImports m (HLIR.MkExprSend e _ e') = do
+resolveImports m (HLIR.MkExprSend e _ e' _) = do
   m1 <- resolveImports m e
   mapM_ (resolveImports m1) e'
   pure m
@@ -227,7 +245,7 @@ resolveImports m (HLIR.MkExprData ann cs) = do
   foldM' resolveImportsDataConstr m' cs
 resolveImports m (HLIR.MkExprMatch e cs) = do
   void $ resolveImports m e
-  mapM_ (\(p, b) -> do
+  mapM_ (\(p, b, _) -> do
       m' <- resolveImportsPattern m p
       resolveImports m' b
     ) cs
