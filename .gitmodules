@@ -1,3 +1,0 @@
-[submodule "packages/lsp/server/runtime/libraries/tgc"]
-	path = packages/lsp/server/runtime/libraries/tgc
-	url = https://github.com/thomasvergne/bonzai
