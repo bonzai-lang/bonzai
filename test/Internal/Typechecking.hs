@@ -355,27 +355,27 @@ testTypechecking = do
 
   describe "send typechecking" $ do
     it "typechecks a send" $ do
-      let send = HLIR.MkExprSend (var "actor") "event" [HLIR.MkExprLiteral (HLIR.MkLitInt 42)]
+      let send = HLIR.MkExprSend (var "actor") "event" [HLIR.MkExprLiteral (HLIR.MkLitInt 42)] Nothing
       res <- runTypechecking' send actorsEnv (Map.singleton "interface" interface)
       shouldBeRight' res
 
     it "does not typecheck a send with an unknown actor" $ do
-      let send = HLIR.MkExprSend (var "unknown") "event" [HLIR.MkExprLiteral (HLIR.MkLitInt 42)]
+      let send = HLIR.MkExprSend (var "unknown") "event" [HLIR.MkExprLiteral (HLIR.MkLitInt 42)] Nothing
       res <- runTypechecking' send actorsEnv (Map.singleton "interface" interface)
       shouldBeError' res (VariableNotFound "unknown")
     
     it "does not typecheck a send with an unknown event" $ do
-      let send = HLIR.MkExprSend (var "actor") "unknown-event" [HLIR.MkExprLiteral (HLIR.MkLitInt 42)]
+      let send = HLIR.MkExprSend (var "actor") "unknown-event" [HLIR.MkExprLiteral (HLIR.MkLitInt 42)] Nothing
       res <- runTypechecking' send actorsEnv (Map.singleton "interface" interface)
       shouldBeError' res (EventNotFound "unknown-event")
     
     it "does not typecheck a send with a type mismatch" $ do
-      let send = HLIR.MkExprSend (var "actor") "event" [HLIR.MkExprLiteral (HLIR.MkLitFloat 42.0)]
+      let send = HLIR.MkExprSend (var "actor") "event" [HLIR.MkExprLiteral (HLIR.MkLitFloat 42.0)] Nothing
       res <- runTypechecking' send actorsEnv (Map.singleton "interface" interface)
       shouldBeError res
     
     it "does not typecheck a send with a different number of arguments" $ do
-      let send = HLIR.MkExprSend (var "actor") "event" []
+      let send = HLIR.MkExprSend (var "actor") "event" [] Nothing
       res <- runTypechecking' send actorsEnv (Map.singleton "interface" interface)
       shouldBeError res
     

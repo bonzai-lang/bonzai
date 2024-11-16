@@ -93,7 +93,7 @@ runTypechecking'
   -> Map Text (Map Text HLIR.Scheme)
   -> IO (Either Error HLIR.Type)
 runTypechecking' ast vars interfaces = do
-  let st = MkCheckerState vars (Map.mapKeys (,[]) interfaces)
+  let st = MkCheckerState vars (Map.mapKeys (,[]) interfaces) mempty
   res <- M.with M.checkerState (const st) $ runExceptT $ traverse typecheck [ast]
   
   case res of
@@ -110,13 +110,13 @@ removeLocation (HLIR.MkExprTernary e1 e2 e3) = HLIR.MkExprTernary (removeLocatio
 removeLocation (HLIR.MkExprUpdate ann e) = HLIR.MkExprUpdate ann (removeLocation e)
 removeLocation (HLIR.MkExprActor ann es) = HLIR.MkExprActor ann (map removeLocation es)
 removeLocation (HLIR.MkExprOn n ann e) = HLIR.MkExprOn n ann (removeLocation e)
-removeLocation (HLIR.MkExprSend e n es) = HLIR.MkExprSend (removeLocation e) n (map removeLocation es)
+removeLocation (HLIR.MkExprSend e n es t) = HLIR.MkExprSend (removeLocation e) n (map removeLocation es) t
 removeLocation (HLIR.MkExprSpawn e) = HLIR.MkExprSpawn (removeLocation e)
 removeLocation (HLIR.MkExprList es) = HLIR.MkExprList $ map removeLocation es
 removeLocation (HLIR.MkExprMut ann e) = HLIR.MkExprMut ann (removeLocation e)
 removeLocation (HLIR.MkExprWhile e1 e2) = HLIR.MkExprWhile (removeLocation e1) (removeLocation e2)
 removeLocation (HLIR.MkExprIndex e1 e2) = HLIR.MkExprIndex (removeLocation e1) (removeLocation e2)
-removeLocation (HLIR.MkExprMatch e cs) = HLIR.MkExprMatch (removeLocation e) (map (fmap removeLocation) cs)
+removeLocation (HLIR.MkExprMatch e cs) = HLIR.MkExprMatch (removeLocation e) (map (\(p, b, pos) -> (p, removeLocation b, pos)) cs)
 removeLocation (HLIR.MkExprRequire _) = HLIR.MkExprLiteral $ HLIR.MkLitInt 0
 removeLocation (HLIR.MkExprApplication f args) = HLIR.MkExprApplication (removeLocation f) (map removeLocation args)
 removeLocation l@(HLIR.MkExprLiteral {}) = l

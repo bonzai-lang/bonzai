@@ -744,17 +744,17 @@ testExpression = do
     res `shouldBeRight` expected
 
     let input = "x->f()"
-    let expected = HLIR.MkExprSend (var "x") "f" []
+    let expected = HLIR.MkExprSend (var "x") "f" [] Nothing
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
     
     let input = "x->f(x)"
-    let expected = HLIR.MkExprSend (var "x") "f" [var "x"]
+    let expected = HLIR.MkExprSend (var "x") "f" [var "x"] Nothing
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "x->f(x, y)"
-    let expected = HLIR.MkExprSend (var "x") "f" [var "x", var "y"]
+    let expected = HLIR.MkExprSend (var "x") "f" [var "x", var "y"] Nothing
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
@@ -787,7 +787,7 @@ testExpression = do
     res `shouldBeRight` expected
 
     let input = "x->y(x)->z(y)"
-    let expected = HLIR.MkExprSend (HLIR.MkExprSend (var "x") "y" [var "x"]) "z" [var "y"]
+    let expected = HLIR.MkExprSend (HLIR.MkExprSend (var "x") "y" [var "x"] Nothing) "z" [var "y"] Nothing
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
