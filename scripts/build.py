@@ -13,7 +13,7 @@ if not which('cabal') or not which('xmake'):
   exit(1)
 
 # Build the compiler project
-system('cabal build')
+system('cabal build exe:bonzai')
 
 ext = '.exe' if platform.system() == 'Windows' else ''
 
