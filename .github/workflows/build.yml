@@ -92,7 +92,7 @@ jobs:
 
       - name: Create ZIP archive on UNIX
         if: startsWith(matrix.os, 'ubuntu') || startsWith(matrix.os, 'macos')
-        run: zip -r bonzai-${{matrix.os}}.zip bin standard README.md LICENSE
+        run: zip -r bonzai-${{matrix.os}}.zip bin standard bindings packages/bpm README.md LICENSE
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v3
