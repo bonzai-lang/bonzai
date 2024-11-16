@@ -18,7 +18,7 @@ jobs:
           # - windows-latest
           - ubuntu-latest
           - macos-latest
-        ghc-version: ['9.8.1']
+        ghc-version: ['9.4.8']
 
     steps:
       - uses: actions/checkout@v3
