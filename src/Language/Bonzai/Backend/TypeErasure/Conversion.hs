@@ -15,7 +15,7 @@ convert (HLIR.MkExprLet _ ann e) = MLIR.MkExprLet ann.name (convert e)
 convert (HLIR.MkExprBlock es) = MLIR.MkExprBlock (map convert es)
 convert (HLIR.MkExprActor _ es) = MLIR.MkExprEvent (map convert es)
 convert (HLIR.MkExprOn ev as e) = MLIR.MkExprOn ev (map (.name) as) (convert e)
-convert (HLIR.MkExprSend e ev es) = MLIR.MkExprSend (convert e) ev (map convert es)
+convert (HLIR.MkExprSend e ev es _) = MLIR.MkExprSend (convert e) ev (map convert es)
 convert (HLIR.MkExprRequire _) = compilerError "require is not supported in MLIR"
 convert (HLIR.MkExprLoc e p) = MLIR.MkExprLoc p (convert e)
 convert (HLIR.MkExprSpawn e) = MLIR.MkExprSpawn (convert e)
@@ -31,7 +31,7 @@ convert (HLIR.MkExprIndex e e') = MLIR.MkExprIndex (convert e) (convert e')
 convert (HLIR.MkExprMatch e cs) = do
   let e' = convert e
   let scrut = MLIR.MkExprVariable "scrut"
-  let cases' = map (bimap (createCondition scrut) convert) cs
+  let cases' = map (\(p, b, _) -> (createCondition scrut p, convert b)) cs
 
   MLIR.MkExprUnpack "scrut" e' (createIfs cases')
 convert (HLIR.MkExprUnwrapLive e) = MLIR.MkExprApplication (convert e) []

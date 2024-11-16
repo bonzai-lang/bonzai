@@ -72,7 +72,6 @@ void *actor_run(void *arg) {
     free(args);
 
     if ((new_module->is_terminated || actor->mod->is_terminated) && actor->queue->head == NULL) {
-      force_sweep(new_module);
       // Free the stack and the module
       free(new_module->stack->values);
       free(new_module->stack);
@@ -84,7 +83,6 @@ void *actor_run(void *arg) {
     }
   }
 
-  force_sweep(new_module);
   // Free the stack and the module
   free(new_module->stack->values);
   free(new_module->stack);

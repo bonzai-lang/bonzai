@@ -1,0 +1,37 @@
+require "std:http"
+require "std:natives"
+require "std:tuple"
+interface Oak {
+  fn listen(handler: fn(): unit)
+  fn get(path: string, handler: fn(Request): unit)
+  fn close()
+}
+
+
+fn OakServer(port: int) => {
+  mut handlers = Map::empty()
+  let http = spawn HTTPServer(port)
+  
+  actor < Oak {
+    on listen(handler) => {
+      handler()
+
+      http->listen(fn (req) => {
+        print("test")
+      })
+
+      http->listen(fn (req) => {
+        match Map::lookup(handlers.value, get_path(req)) {
+          case Ok(h) => h(req)
+          case Error(_) => req.respondText("text/plain", "404 Not Found")
+        }
+      })
+    }
+
+    on get(path, handler) => {
+      handlers = Map::insert(handlers.value, path, handler)
+      
+    }
+  }
+}
+

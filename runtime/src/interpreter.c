@@ -322,8 +322,10 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_make_mutable: {
+    module->gc_enabled = false;
     Value x = stack_pop(module);
     stack_push(module, MAKE_MUTABLE(module, x));
+    module->gc_enabled = true;
     INCREASE_IP(module);
     goto *jmp_table[op];
   }

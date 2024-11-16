@@ -13,6 +13,7 @@ extern fn close_server(server: HTTP)
 extern fn fetch(url: string): Throwable<(string, string)>
 extern fn fetch_with(url: string, headers: string): Throwable<(string, string)>
 extern fn redirect_to(req: Request, url: string): unit
+extern fn get_path(req: Request): string
 
 type Header {
   Header(code: int, reason: string)
@@ -45,8 +46,6 @@ fn Map::mapToHeaders(headers: Map<string>): string => {
 fn respondHeaders(req: Request, buffer: Map<string>, header_line: Header, content: string) => {
   let headers = Map::mapToHeaders(buffer)
 
-  print(Header::show(header_line) + "\r\n" + headers + "\r\n" + content)
-
   req.send_buffer_with(Header::show(header_line) + "\r\n" + headers + "\r\n" + content)
 }
 
@@ -69,7 +68,7 @@ fn fetchWithHeaders(url: string, headers: Map<string>): Throwable<(string, strin
 }
 
 interface HTTPWrapper {
-  fn listen(self: HTTPWrapper, handler: fn(Request): unit)
+  fn listen(handler: fn(Request): unit)
   fn close()
 }
 
@@ -77,13 +76,13 @@ fn HTTPServer(port: int) => {
   let http = start_http_server(port)
 
   actor < HTTPWrapper {
-    on listen(self, handler) => {
-      let req = accept_request(http)
+    on listen(handler) => {
+      while true {
+        let req = accept_request(http)
 
-      handler(req)
-      close_client(req)
-
-      self->listen(self, handler)
+        handler(req)
+        close_client(req)
+      }
     }
     
     on close() =>
@@ -103,16 +102,12 @@ fn createParallelHTTP(quantity: int, f: fn(Request, int): unit) => {
   let instances = range(0, quantity).map(fn(port) => {
     let newPort = 8001 + port
     let httpServer = spawn HTTPServer(newPort)
-
-    httpServer->listen(httpServer, fn(req) => f(req, port))
-
-    httpServer
   })
 
   // Creating the main dispatcher instance
   let initialInstance = spawn HTTPServer(8000)
 
-  initialInstance->listen(initialInstance, fn(req) => {
+  initialInstance->listen(fn(req) => {
     // Randomly dispatching the request to one of the instances
     let dispatcher = random() % quantity
     let dispatchedPort = 8001 + dispatcher
