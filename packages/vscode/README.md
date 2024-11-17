@@ -4,4 +4,12 @@ This VS Code extension provides syntax highlighting for the Bonzai programming l
 
 ## Features
 
-As for now, this extension only provides syntax highlighting for Bonzai files. More features may be added in the future, such as code snippets and language server support.
+That extension provides syntax highlighting for the Bonzai programming language, as well as some LSP features such as:
+- Parsing and type-checking diagnostics
+- Functions, and variables autocompletion
+- Events, and interfaces autocompletion
+- Require path autocompletion
+
+## Requirements
+
+This extension requires the Bonzai compiler to be installed on your machine. You can find more information about it [here](https://github.com/thomasvergne/bonzai).
