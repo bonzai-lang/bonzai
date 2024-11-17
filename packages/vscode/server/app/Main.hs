@@ -1,6 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module Main where
 
@@ -13,13 +14,16 @@ import qualified Language.Bonzai.Frontend.Parser.Lexer as Lex
 import qualified Language.Bonzai.Syntax.HLIR as HLIR
 import Language.Bonzai.Frontend.Typechecking.Checker (runTypechecking, decomposeHeader)
 import Data.Map qualified as Map
-import System.FilePath (takeDirectory, dropExtension, takeFileName)
+import System.FilePath (takeDirectory, dropExtension, takeFileName, (</>), isExtensionOf, makeRelative)
 import Language.Bonzai.Frontend.Module.Conversion (moduleState, ModuleState (MkModuleState), resolve, removeRequires, resultState, resolveContent)
 import Language.Bonzai.Frontend.Parser hiding (parse, Label)
 import qualified Data.Text as Text
 import Relude.Unsafe ((!!))
 import GHC.IO (unsafePerformIO)
 import Data.Row
+import System.Directory (doesFileExist, doesDirectoryExist, listDirectory)
+import qualified Data.Char as Char
+import System.Directory.Internal.Prelude (getEnv)
 
 {-# NOINLINE lastValidAST #-}
 lastValidAST :: IORef [HLIR.TLIR "expression"]
@@ -33,9 +37,9 @@ getVar (HLIR.MkExprNative ann ty) _ = Just (HLIR.name ann, ty)
 getVar (HLIR.MkExprVariable ann) _ = Just (HLIR.name ann, runIdentity $ HLIR.value ann)
 getVar (HLIR.MkExprLoc e (start, end)) ref = do
   let (Position line col, uri) = ref
-  let pos' = SourcePos 
+  let pos' = SourcePos
               (fromMaybe "" (uriToFilePath uri))
-              (mkPos $ fromIntegral line + 1) 
+              (mkPos $ fromIntegral line + 1)
               (mkPos $ fromIntegral col + 1)
 
   let cond = pos' >= start && pos' < end
@@ -46,13 +50,13 @@ getVar (HLIR.MkExprLoc e (start, end)) ref = do
 getVar (HLIR.MkExprLambda _ _ body) pos = getVar body pos
 getVar (HLIR.MkExprMatch e cs) pos = do
   let (Position line col, uri) = pos
-  let pos' = SourcePos 
+  let pos' = SourcePos
               (fromMaybe "" (uriToFilePath uri))
-              (mkPos $ fromIntegral line + 1) 
+              (mkPos $ fromIntegral line + 1)
               (mkPos $ fromIntegral col + 1)
 
   let vars = map (\(p, e', (start, end)) -> do
-        if pos' >= start && pos' < end 
+        if pos' >= start && pos' < end
           then case getVar e' pos of
             Just x -> Just x
             Nothing -> getVarInPattern p pos
@@ -119,18 +123,18 @@ getVarInPattern (HLIR.MkPatConstructor _ args) pos =
   foldr (\p acc -> getVarInPattern p pos <|> acc) Nothing args
 getVarInPattern _ _ = Nothing
 
-findLets 
-  :: HLIR.TLIR "expression" 
-  -> (Position, Uri) 
-  ->  Maybe HLIR.Position 
+findLets
+  :: HLIR.TLIR "expression"
+  -> (Position, Uri)
+  ->  Maybe HLIR.Position
   -> Map Text (HLIR.Type, Maybe CompletionItemKind)
 findLets (HLIR.MkExprLet _ ann e) (pos, uri) p@(Just (start, end)) = do
   let Position line col = pos
   let pos' = SourcePos (fromMaybe "" (uriToFilePath uri)) (mkPos $ fromIntegral line + 1) (mkPos $ fromIntegral col + 1)
 
-  let cond = pos' >= start 
-          && pos' < end 
-  
+  let cond = pos' >= start
+          && pos' < end
+
   let varDef = Map.singleton (HLIR.name ann) (runIdentity (HLIR.value ann), Nothing)
 
   if cond
@@ -138,16 +142,16 @@ findLets (HLIR.MkExprLet _ ann e) (pos, uri) p@(Just (start, end)) = do
     else if sourceName start /= fromMaybe "" (uriToFilePath uri)
       then varDef
       else mempty
-findLets (HLIR.MkExprLet _ ann _) _ _ = 
+findLets (HLIR.MkExprLet _ ann _) _ _ =
   Map.singleton (HLIR.name ann) (runIdentity $ HLIR.value ann, Nothing)
-findLets (HLIR.MkExprNative ann ty) _ _ = 
+findLets (HLIR.MkExprNative ann ty) _ _ =
   Map.singleton (HLIR.name ann) (ty, Nothing)
 findLets (HLIR.MkExprMut ann e) (pos, uri) p@(Just (start, end)) = do
   let Position line col = pos
   let pos' = SourcePos (fromMaybe "" (uriToFilePath uri)) (mkPos $ fromIntegral line + 1) (mkPos $ fromIntegral col + 1)
 
-  let cond = pos' >= start 
-          && pos' < end 
+  let cond = pos' >= start
+          && pos' < end
 
   let varDef = Map.singleton (HLIR.name ann) (runIdentity $ HLIR.value ann, Nothing)
 
@@ -156,7 +160,7 @@ findLets (HLIR.MkExprMut ann e) (pos, uri) p@(Just (start, end)) = do
     else if sourceName start /= fromMaybe "" (uriToFilePath uri)
       then varDef
       else mempty
-findLets (HLIR.MkExprMut ann _) _ _ = 
+findLets (HLIR.MkExprMut ann _) _ _ =
   Map.singleton (HLIR.name ann) (runIdentity $ HLIR.value ann, Nothing)
 findLets (HLIR.MkExprLoc (HLIR.MkExprBlock es) p) pos _ =
   foldr (\e acc -> findLets e pos (Just p) <> acc) mempty es
@@ -167,10 +171,10 @@ findLets (HLIR.MkExprLambda args _ body) p@(pos, uri) p'@(Just (start, end)) = d
   let Position line col = pos
   let pos' = SourcePos (fromMaybe "" (uriToFilePath uri)) (mkPos $ fromIntegral line + 1) (mkPos $ fromIntegral col + 1)
 
-  let cond = pos' >= start 
-          && pos' < end 
+  let cond = pos' >= start
+          && pos' < end
   let vars = Map.fromList $ map (\(HLIR.MkAnnotation name ty) -> (name, (runIdentity ty, Nothing))) args
-  
+
   if cond
     then vars <> findLets body p p'
     else mempty
@@ -203,13 +207,13 @@ findLets (HLIR.MkExprOn ev args body) p@(pos, uri) p'@(Just (start, end)) = do
   let Position line col = pos
   let pos' = SourcePos (fromMaybe "" (uriToFilePath uri)) (mkPos $ fromIntegral line + 1) (mkPos $ fromIntegral col + 1)
 
-  let cond = pos' >= start 
-          && pos' < end 
+  let cond = pos' >= start
+          && pos' < end
 
   let vars = Map.fromList $ map (\(HLIR.MkAnnotation name ty) -> (name, (runIdentity ty, Nothing))) args
   let event = map (runIdentity . HLIR.value) args HLIR.:->: HLIR.MkTyUnit
-  
-  if cond 
+
+  if cond
     then vars <> findLets body p p' <> Map.singleton ev (event, Just CompletionItemKind_Event)
     else if sourceName start /= fromMaybe "" (uriToFilePath uri)
       then Map.singleton ev (event, Just CompletionItemKind_Event)
@@ -276,6 +280,26 @@ parseURI uri = do
       case typed of
         Left _ -> pure Nothing
         Right tlir -> pure $ Just tlir
+
+getFiles :: MonadIO m => FilePath -> m [FilePath]
+getFiles path = do
+  isFile <- liftIO $ doesFileExist path
+  if isFile
+    then pure [path]
+    else do
+      isDir <- liftIO $ doesDirectoryExist path
+      if isDir
+        then do
+          contents <- liftIO $ listDirectory path
+          let paths = filter (".bzi" `isExtensionOf`)
+                    $ map (path </>) contents
+          concat <$> mapM getFiles paths
+        else pure []
+
+getStdFiles :: MonadIO m => FilePath -> m [FilePath]
+getStdFiles stdPath = do
+  let path = stdPath </> "standard"
+  getFiles path
 
 findInterface :: HLIR.TLIR "expression" -> Text -> Maybe [HLIR.Annotation HLIR.Type]
 findInterface (HLIR.MkExprInterface ann events) name | HLIR.name ann == name = Just events
@@ -372,14 +396,14 @@ handlers =
 
       , notificationHandler SMethod_TextDocumentDidChange $ \req -> do
           let TNotificationMessage _ _ (DidChangeTextDocumentParams (VersionedTextDocumentIdentifier uri _) updates) = req
-          
+
           -- Get updated text content
 
           let content = foldr (\(TextDocumentContentChangeEvent opt) acc -> case opt of
                   InR ((Label :: Label "text") :== text) -> acc <> text
                   InL (
-                    ((Label :: Label "range") :== _) 
-                      :+ ((Label :: Label "rangeLength") :== _) 
+                    ((Label :: Label "range") :== _)
+                      :+ ((Label :: Label "rangeLength") :== _)
                         :+ (Label :== text)) -> acc <> text
                 ) "" updates
           let path = fromJust $ uriToFilePath uri
@@ -425,10 +449,10 @@ handlers =
                 (x:_) -> case x of
                   (name, ty) -> do
                     ty' <- HLIR.simplify ty
-                    
-                    let md = mkMarkdown 
+
+                    let md = mkMarkdown
                             $  "```bonzai\n"
-                            <> name <> " : " <> toText ty' 
+                            <> name <> " : " <> toText ty'
                             <> "\n```"
 
                     let range = Range
@@ -449,7 +473,7 @@ handlers =
 
           ast <- parseURI uri
 
-          let completion label' kind detail =
+          let completion label' kind detail txt =
                 CompletionItem
                 { _label = label'
                 , _kind = Just kind
@@ -458,7 +482,7 @@ handlers =
                 , _documentation = Nothing
                 , _sortText = Nothing
                 , _filterText = Nothing
-                , _insertText = Nothing
+                , _insertText = txt
                 , _insertTextFormat = Nothing
                 , _textEdit = Nothing
                 , _additionalTextEdits = Nothing
@@ -471,7 +495,7 @@ handlers =
                 , _insertTextMode = Nothing
                 , _textEditText = Nothing
                 }
-        
+
           let filepath = fromJust $ uriToFilePath uri
           lines' <- Text.lines . decodeUtf8 <$> readFileLBS filepath
 
@@ -484,34 +508,58 @@ handlers =
           ast' <- case ast of
                 Nothing -> readIORef lastValidAST
                 Just tlir -> pure tlir
-            
-          if isArrow then do
-            let vars = mapMaybe (`getVar` (Position line colStart, uri)) ast'
 
-            case vars of
-              ((_, ty):_) -> do
-                let (header, _) = decomposeHeader ty
-                let interfaces = mapMaybe (`findInterface` header) ast'
+          let before' = Text.dropWhileEnd Char.isSpace before
+          let isRequire = Text.takeEnd 7 before' == "require"
 
-                case interfaces of
-                  (events:_) -> do
-                    let completions = map (\(HLIR.MkAnnotation name ty') -> completion name CompletionItemKind_Event (toText ty')) events
-                    responder $ Right $ InL completions
-                  [] -> responder $ Right $ InL []
+          if
+            | isArrow -> do
+                let vars = mapMaybe (`getVar` (Position line colStart, uri)) ast'
 
-              []-> responder $ Right $ InL []
-          else do
-            let vars = Map.unions $ map (\e -> findLets e (pos, uri) Nothing) ast'
-            vars' <- mapM (\(t, c) -> (,c) <$> HLIR.simplify t) vars
+                case vars of
+                  ((_, ty):_) -> do
+                    let (header, _) = decomposeHeader ty
+                    let interfaces = mapMaybe (`findInterface` header) ast'
 
-            let completions = Map.foldrWithKey (\k (v, c) acc -> completion k (case c of
-                  Just c' -> c'
-                  Nothing -> case v of
-                    _ HLIR.:->: _ -> CompletionItemKind_Function
-                    _ -> CompletionItemKind_Variable
-                  ) (toText v) : acc) [] vars'
+                    case interfaces of
+                      (events:_) -> do
+                        let completions = map (\(HLIR.MkAnnotation name ty') -> completion name CompletionItemKind_Event (toText ty') Nothing) events
+                        responder $ Right $ InL completions
+                      [] -> responder $ Right $ InL []
 
-            responder $ Right $ InL completions
+                  []-> responder $ Right $ InL []
+
+            | isRequire -> do
+                let filePath = fromMaybe "" $ uriToFilePath uri
+                let folder = takeDirectory filePath
+
+                files <- getFiles folder
+
+                stdPath <- liftIO $ getEnv "BONZAI_PATH"
+
+                stdFiles <- getStdFiles stdPath
+                
+                let stdRelFiles = map (("std:" <>) . makeRelative (stdPath </> "standard")) stdFiles
+                let relFiles = map (makeRelative folder) files
+
+                let completions = zipWith (\rf af -> completion (toText rf) CompletionItemKind_File (toText af) (Just . show . toText $ dropExtension rf)) relFiles files
+
+                let stdCompletions = zipWith (\rf af -> completion (toText rf) CompletionItemKind_Module (toText af) (Just . show . toText $ dropExtension rf)) stdRelFiles stdFiles
+
+                responder $ Right $ InL (completions <> stdCompletions)
+
+            | otherwise -> do
+                let vars = Map.unions $ map (\e -> findLets e (pos, uri) Nothing) ast'
+                vars' <- mapM (\(t, c) -> (,c) <$> HLIR.simplify t) vars
+
+                let completions = Map.foldrWithKey (\k (v, c) acc -> completion k (case c of
+                      Just c' -> c'
+                      Nothing -> case v of
+                        _ HLIR.:->: _ -> CompletionItemKind_Function
+                        _ -> CompletionItemKind_Variable
+                      ) (toText v) Nothing : acc) [] vars'
+
+                responder $ Right $ InL completions
 
       , notificationHandler SMethod_TextDocumentDidSave $ \req -> do
           let TNotificationMessage _ _ (DidSaveTextDocumentParams (TextDocumentIdentifier uri) _) = req
