@@ -18,7 +18,6 @@ import System.FilePath (takeDirectory, dropExtension, takeFileName, (</>), isExt
 import Language.Bonzai.Frontend.Module.Conversion (moduleState, ModuleState (MkModuleState), resolve, removeRequires, resultState, resolveContent)
 import Language.Bonzai.Frontend.Parser hiding (parse, Label)
 import qualified Data.Text as Text
-import Relude.Unsafe ((!!))
 import GHC.IO (unsafePerformIO)
 import Data.Row
 import System.Directory (doesFileExist, doesDirectoryExist, listDirectory)
@@ -272,13 +271,13 @@ parseURI uri = do
   moduleResult <- runExceptT $ resolve fileNameWithoutDir True
 
   case moduleResult of
-    Left _ -> pure Nothing
+    Left _ -> Just <$> readIORef lastValidAST
     Right _ -> do
       preHLIR <- removeRequires <$> readIORef resultState
 
       typed <- runTypechecking preHLIR
       case typed of
-        Left _ -> pure Nothing
+        Left _ -> Just <$> readIORef lastValidAST
         Right tlir -> pure $ Just tlir
 
 getFiles :: MonadIO m => FilePath -> m [FilePath]
@@ -320,7 +319,7 @@ parseContentAndTypecheck path contents = do
       mempty
       mempty
   moduleResult <- runExceptT $ resolveContent contents
-  
+
   case moduleResult of
     Left (err, pos) -> pure $ Left (show err, pos)
     Right _ -> do
@@ -471,7 +470,7 @@ handlers =
 
           -- Get current text content with all unsaved modifications
 
-          ast <- parseURI uri
+          ast' <- readIORef lastValidAST
 
           let completion label' kind detail txt =
                 CompletionItem
@@ -499,68 +498,79 @@ handlers =
           let filepath = fromJust $ uriToFilePath uri
           lines' <- Text.lines . decodeUtf8 <$> readFileLBS filepath
 
-          let currentLine = lines' !! fromIntegral line
-          let before = Text.take (fromIntegral col) currentLine
-          let isArrow = Text.takeEnd 2 before == "->"
-          let var = Text.takeWhileEnd Lex.isIdentChar (Text.dropEnd 2 before)
-          let colStart = col - fromIntegral (Text.length var)
+          let currentLine = fromIntegral line `maybeAt` lines'
 
-          ast' <- case ast of
-                Nothing -> readIORef lastValidAST
-                Just tlir -> pure tlir
+          case currentLine of
+            Just currentLine' -> do
+              let before = Text.take (fromIntegral col) currentLine'
+              let isArrow = (Text.length before >= 2) && (Text.takeEnd 2 before == "->")
 
-          let before' = Text.dropWhileEnd Char.isSpace before
-          let isRequire = Text.takeEnd 7 before' == "require"
+              let before' = Text.dropWhileEnd Char.isSpace before
+              let isRequire = Text.length before' >= 7 && Text.take 7 before' == "require"
 
-          if
-            | isArrow -> do
-                let vars = mapMaybe (`getVar` (Position line colStart, uri)) ast'
+              if
+                | isArrow -> do
+                    let var = Text.takeWhileEnd Lex.isIdentChar (Text.dropEnd 2 before)
+                    let colStart = col - fromIntegral (Text.length var)
+                    let vars = mapMaybe (`getVar` (Position line colStart, uri)) ast'
 
-                case vars of
-                  ((_, ty):_) -> do
-                    let (header, _) = decomposeHeader ty
-                    let interfaces = mapMaybe (`findInterface` header) ast'
+                    case vars of
+                      ((_, ty):_) -> do
+                        let (header, _) = decomposeHeader ty
+                        let interfaces = mapMaybe (`findInterface` header) ast'
 
-                    case interfaces of
-                      (events:_) -> do
-                        let completions = map (\(HLIR.MkAnnotation name ty') -> completion name CompletionItemKind_Event (toText ty') Nothing) events
-                        responder $ Right $ InL completions
-                      [] -> responder $ Right $ InL []
+                        case interfaces of
+                          (events:_) -> do
+                            let completions = map (\(HLIR.MkAnnotation name ty') -> completion name CompletionItemKind_Event (toText ty') Nothing) events
+                            responder $ Right $ InL completions
+                          [] -> responder $ Right $ InL []
 
-                  []-> responder $ Right $ InL []
+                      []-> responder $ Right $ InL []
 
-            | isRequire -> do
-                let filePath = fromMaybe "" $ uriToFilePath uri
-                let folder = takeDirectory filePath
+                | isRequire -> do
+                    let filePath = fromMaybe "" $ uriToFilePath uri
+                    let folder = takeDirectory filePath
 
-                files <- getFiles folder
+                    files <- getFiles folder
 
-                stdPath <- liftIO $ getEnv "BONZAI_PATH"
+                    stdPath <- liftIO $ getEnv "BONZAI_PATH"
 
-                stdFiles <- getStdFiles stdPath
-                
-                let stdRelFiles = map (("std:" <>) . makeRelative (stdPath </> "standard")) stdFiles
-                let relFiles = map (makeRelative folder) files
+                    stdFiles <- getStdFiles stdPath
 
-                let completions = zipWith (\rf af -> completion (toText rf) CompletionItemKind_File (toText af) (Just . show . toText $ dropExtension rf)) relFiles files
+                    let stdRelFiles = map (("std:" <>) . makeRelative (stdPath </> "standard")) stdFiles
+                    let relFiles = map (makeRelative folder) files
 
-                let stdCompletions = zipWith (\rf af -> completion (toText rf) CompletionItemKind_Module (toText af) (Just . show . toText $ dropExtension rf)) stdRelFiles stdFiles
+                    let completions = zipWith (\rf af -> completion (toText rf) CompletionItemKind_File (toText af) (Just . show . toText $ dropExtension rf)) relFiles files
 
-                responder $ Right $ InL (completions <> stdCompletions)
+                    let stdCompletions = zipWith (\rf af -> completion (toText rf) CompletionItemKind_Module (toText af) (Just . show . toText $ dropExtension rf)) stdRelFiles stdFiles
 
-            | otherwise -> do
-                let vars = Map.unions $ map (\e -> findLets e (pos, uri) Nothing) ast'
-                vars' <- mapM (\(t, c) -> (,c) <$> HLIR.simplify t) vars
+                    responder $ Right $ InL (completions <> stdCompletions)
 
-                let completions = Map.foldrWithKey (\k (v, c) acc -> completion k (case c of
-                      Just c' -> c'
-                      Nothing -> case v of
-                        _ HLIR.:->: _ -> CompletionItemKind_Function
-                        _ -> CompletionItemKind_Variable
-                      ) (toText v) Nothing : acc) [] vars'
+                | otherwise -> do
+                  let vars = Map.unions $ map (\e -> findLets e (pos, uri) Nothing) ast'
+                  vars' <- mapM (\(t, c) -> (,c) <$> HLIR.simplify t) vars
 
-                responder $ Right $ InL completions
+                  let completions = Map.foldrWithKey (\k (v, c) acc -> completion k (case c of
+                        Just c' -> c'
+                        Nothing -> case v of
+                          _ HLIR.:->: _ -> CompletionItemKind_Function
+                          _ -> CompletionItemKind_Variable
+                        ) (toText v) Nothing : acc) [] vars'
 
+                  responder $ Right $ InL completions
+            
+            Nothing -> do
+              let vars = Map.unions $ map (\e -> findLets e (pos, uri) Nothing) ast'
+              vars' <- mapM (\(t, c) -> (,c) <$> HLIR.simplify t) vars
+
+              let completions = Map.foldrWithKey (\k (v, c) acc -> completion k (case c of
+                    Just c' -> c'
+                    Nothing -> case v of
+                      _ HLIR.:->: _ -> CompletionItemKind_Function
+                      _ -> CompletionItemKind_Variable
+                    ) (toText v) Nothing : acc) [] vars'
+
+              responder $ Right $ InL completions
       , notificationHandler SMethod_TextDocumentDidSave $ \req -> do
           let TNotificationMessage _ _ (DidSaveTextDocumentParams (TextDocumentIdentifier uri) _) = req
 
