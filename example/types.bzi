@@ -27,6 +27,6 @@ type Result<A, B> {
 let test = Ok(8)
 
 print(match test {
-  case Ok(x) if x > 5 => "ok"
+  case Ok(x) => "ok"
   case Ok(x) => "not ok"
 })

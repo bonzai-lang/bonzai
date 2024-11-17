@@ -4,7 +4,7 @@ require "std:natives"
 let port = 8000
 let server = spawn HTTPServer(port)
 
-server->listen(server, fn(req) => {
+server->listen(fn(req) => {
   req.respondText("text/html", "<h1>Hello, world!</h1>")
 })
 
