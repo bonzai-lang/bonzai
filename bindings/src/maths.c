@@ -2,6 +2,7 @@
 #include <module.h>
 #include <maths.h>
 #include <error.h>
+#include <math.h>
 
 Value add_value(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "+", argc, 2);
@@ -55,6 +56,25 @@ Value sub_value(Module* mod, Value* args, int argc) {
 
     default: 
       THROW(mod, "Unsupported type for -");
+  }
+}
+
+Value mod_value(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "%%", argc, 2);
+  ValueType ty = get_type(args[1]);
+  ASSERT_TYPE(mod, "%%", args[0], ty);
+
+  switch (ty) {
+    case TYPE_INTEGER: 
+      return MAKE_INTEGER(GET_INT(args[0]) % GET_INT(args[1]));
+    
+    case TYPE_FLOAT: {
+      float f = fmod(GET_FLOAT(args[0]), GET_FLOAT(args[1]));
+      return MAKE_FLOAT(f);
+    }
+    
+    default: 
+      THROW(mod, "Unsupported type for %");
   }
 }
 

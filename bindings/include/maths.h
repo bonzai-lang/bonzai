@@ -8,6 +8,7 @@ Value add_value(Module* mod, Value* args, int argc);
 Value sub_value(Module* mod, Value* args, int argc);
 Value mul_value(Module* mod, Value* args, int argc);
 Value div_value(Module* mod, Value* args, int argc);
+Value mod_value(Module* mod, Value* args, int argc);
 
 Value eq_value(Module* mod, Value* args, int argc);
 Value lt_value(Module* mod, Value* args, int argc);

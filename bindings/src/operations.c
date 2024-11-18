@@ -284,7 +284,7 @@ Value execute_command_silent(Module* mod, Value* args, int argc) {
   return MAKE_INTEGER(ret);
 }
 
-Value panic(Module* mod, Value* args, int argc) {
+Value panic_(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "panic", argc, 1);
   ASSERT_TYPE(mod, "panic", args[0], TYPE_STRING);
 
