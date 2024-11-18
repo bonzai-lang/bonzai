@@ -168,7 +168,8 @@ typecheck (HLIR.MkExprUpdate u e) = do
 typecheck (HLIR.MkExprActor i es) = do
   checkSt <- readIORef M.checkerState
 
-  methodsTys <- case Map.lookup (decomposeHeader i) checkSt.interfaces of
+  header <- decomposeHeader i
+  methodsTys <- case Map.lookup header checkSt.interfaces of
     Just tys -> mapM M.instantiate tys
     Nothing -> throw (M.ActorNotFound i)
 
@@ -223,7 +224,8 @@ typecheck (HLIR.MkExprSend e ev a _) = do
 
   checkSt <- readIORef M.checkerState
 
-  case Map.lookup (decomposeHeader ty) checkSt.interfaces of
+  header <- decomposeHeader ty
+  case Map.lookup header checkSt.interfaces of
     Just tys -> do
       methodsTys <- mapM M.instantiate tys
 
@@ -497,7 +499,7 @@ containsLive _ = False
 snd3 :: (a, b, c) -> b
 snd3 (_, x, _) = x
 
-decomposeHeader :: HLIR.Type -> (Text, [HLIR.Type])
-decomposeHeader (HLIR.MkTyApp (HLIR.MkTyId name) tys) = (name, tys)
-decomposeHeader (HLIR.MkTyId name) = (name, [])
-decomposeHeader t = compilerError $ "decomposeHeader: invalid type, got " <> show t
+decomposeHeader :: M.MonadChecker m => HLIR.Type -> m (Text, [HLIR.Type])
+decomposeHeader (HLIR.MkTyApp (HLIR.MkTyId name) tys) = pure (name, tys)
+decomposeHeader (HLIR.MkTyId name) = pure (name, [])
+decomposeHeader t = M.throw $ M.InvalidHeader t

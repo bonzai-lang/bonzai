@@ -110,6 +110,12 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
         Nothing
         ("Invalid pattern union between " <> show env1 <> " and " <> show env2, Nothing, pos)
         "Resolution"
+    
+    InvalidHeader ty ->
+      printErrorFromString
+        Nothing
+        ("Invalid header " <> show (toText ty), Just "try adding explicit annotations", pos)
+        "Resolution"
 
 
 type ImportStack = [FilePath]
@@ -139,6 +145,7 @@ data BonzaiError
   | InvalidConstructor Text
   | EmptyMatch
   | InvalidPatternUnion (Set Text) (Set Text)
+  | InvalidHeader HLIR.Type
   deriving (Eq, Generic)
 
 instance Show BonzaiError where
@@ -157,6 +164,7 @@ instance Show BonzaiError where
   show (InvalidConstructor name) = "Invalid constructor " <> show name
   show EmptyMatch = "Empty match statement"
   show (InvalidPatternUnion env1 env2) = "Invalid pattern union between " <> show env1 <> " and " <> show env2
+  show (InvalidHeader ty) = "Invalid header " <> show (toText ty)
 
 instance ToJSON BonzaiError where
   toJSON e = toJSON (show e :: String)
