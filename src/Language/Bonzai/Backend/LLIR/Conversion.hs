@@ -52,6 +52,10 @@ natives = IO.unsafePerformIO $ newIORef Set.empty
 eventPool :: IORef (Map Text Int)
 eventPool = IO.unsafePerformIO $ newIORef mempty
 
+{-# NOINLINE includeLocations #-}
+includeLocations :: IORef Bool
+includeLocations = IO.unsafePerformIO $ newIORef False
+
 fetchEvent :: MonadIO m => Text -> m Int
 fetchEvent name = do
   events <- readIORef eventPool
@@ -326,8 +330,13 @@ instance Assemble MLIR.Expression where
 
   assemble (MLIR.MkExprLoc (p1, _) e) = do
     e' <- assemble e
-    file <- fetchConstant (MLIR.MkLitString . toText $ p1.sourceName)
-    pure $ LLIR.instr (LLIR.Loc (MP.unPos p1.sourceLine) (MP.unPos p1.sourceColumn) file) <> e'
+    
+    include <- readIORef includeLocations
+
+    if include then do
+      file <- fetchConstant (MLIR.MkLitString . toText $ p1.sourceName)
+      pure $ LLIR.instr (LLIR.Loc (MP.unPos p1.sourceLine) (MP.unPos p1.sourceColumn) file) <> e'
+    else pure e'
 
   assemble (MLIR.MkExprWhile c e) = do
     c' <- assemble c
