@@ -370,9 +370,13 @@ handlers =
       , notificationHandler SMethod_TextDocumentDidOpen $ \req -> do
           let TNotificationMessage _ _ (DidOpenTextDocumentParams (TextDocumentItem uri _ _ _)) = req
 
+          sendNotification SMethod_WindowLogMessage $ LogMessageParams MessageType_Info (toText . fromMaybe "" $ uriToFilePath uri)
+
           let path = fromJust $ uriToFilePath uri
 
           ast <- parseAndTypecheck path
+
+          sendNotification SMethod_WindowLogMessage $ LogMessageParams MessageType_Info (toText path)
 
           case ast of
             Left (err, (p1, p2)) -> do
@@ -513,10 +517,11 @@ handlers =
                     let var = Text.takeWhileEnd Lex.isIdentChar (Text.dropEnd 2 before)
                     let colStart = col - fromIntegral (Text.length var)
                     let vars = mapMaybe (`getVar` (Position line colStart, uri)) ast'
-
+                    
                     case vars of
                       ((_, ty):_) -> do
-                        let (header, _) = decomposeHeader ty
+                        res <- runExceptT $ decomposeHeader ty
+                        let (header, _) = fromRight ("", mempty) res
                         let interfaces = mapMaybe (`findInterface` header) ast'
 
                         case interfaces of
@@ -525,7 +530,7 @@ handlers =
                             responder $ Right $ InL completions
                           [] -> responder $ Right $ InL []
 
-                      []-> responder $ Right $ InL []
+                      [] -> responder $ Right $ InL []
 
                 | isRequire -> do
                     let filePath = fromMaybe "" $ uriToFilePath uri
