@@ -1,9 +1,9 @@
-require "std:parser"
+require "std:language/parser"
 require "std:natives"
-require "std:optional"
-require "std:tuple"
-require "std:list"
-require "std:string"
+require "std:datatypes/optional"
+require "std:datatypes/tuple"
+require "std:datatypes/list"
+require "std:datatypes/string"
 
 type JSON {
   Object(fields: list<(string, JSON)>),
