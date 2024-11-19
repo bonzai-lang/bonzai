@@ -4,6 +4,7 @@ extern fn mul_value<A>(x: A, y: A): A
 extern fn add_value<A>(x: A, y: A): A
 extern fn sub_value<A>(x: A, y: A): A
 extern fn div_value<A>(x: A, y: A): A
+extern fn mod_value<A>(x: A, y: A): A
 extern fn exit_with<A>(code: int): A
 extern fn mutable_value<A>(x: mutable<A>): A
 
@@ -14,7 +15,7 @@ extern fn and_value(x: bool, y: bool): bool
 extern fn or_value(x: bool, y: bool): bool
 extern fn not_value(x: bool): bool
 
-extern fn panic<A>(msg: string): A
+extern fn panic_<A>(msg: string): A
 extern fn wait_time(time: int)
 
 extern fn eq_value<A>(x: A, y: A): bool
@@ -31,7 +32,8 @@ extern fn ftoi(f: float): int
 // Defining basic functions
 
 let value = mutable_value
-fn exit() => exit_with(0)
+fn exit<A>(): A => exit_with(0)
+fn panic<A>(msg: string): A => panic_(msg)
 
 let (==) = eq_value
 let (!=) = neq_value
@@ -44,7 +46,7 @@ let (+) = add_value
 let (-) = sub_value
 let (*) = mul_value
 let (/) = div_value
-let (%) = fn (x: int, y: int): int => x - (x / y) * y
+let (%) = mod_value
 
 fn (&&) (x: bool, y: bool): bool => if x then y else false
 fn (||) (x: bool, y: bool): bool => if x then true else y
