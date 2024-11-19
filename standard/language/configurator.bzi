@@ -1,4 +1,4 @@
-require "natives"
+require "std:natives"
 
 extern fn execute_command(command: string)
 
