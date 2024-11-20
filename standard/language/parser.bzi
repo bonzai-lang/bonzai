@@ -28,6 +28,14 @@ fn runParser<A>(parser: Parser<A>, input: string): Result<A> =>
 fn parseError<A>(msg: string): Parser<A> =>
   Parser(fn(inp) => ParseError(msg, inp))
 
+fn try<A>(parser: Parser<A>): Parser<A> =>
+  Parser(fn(input) => {
+    match runParser(parser, input) {
+      case ParseResult(x, rest) => ParseResult(x, rest)
+      case ParseError(msg, rest) => ParseError("Error: $msg", rest)
+    }
+  })
+
 fn Parser::map<A, B>(self, f: fn(A): B): Parser<B> =>
   Parser(fn(input) =>
     match runParser(self, input) {
