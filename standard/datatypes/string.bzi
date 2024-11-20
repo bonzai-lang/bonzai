@@ -1,4 +1,4 @@
-require "std:list"
+require "std:datatypes/list"
 require "std:natives"
 
 extern fn explode(s: string): list<char>

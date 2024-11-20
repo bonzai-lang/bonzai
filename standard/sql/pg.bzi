@@ -1,4 +1,4 @@
-require "std:error"
+require "std:datatypes/error"
 
 extern fn psql_connect(info: string): Throwable<SQL>
 extern fn psql_close_connection(conn: SQL)

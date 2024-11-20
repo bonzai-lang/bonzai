@@ -1,6 +1,7 @@
 require "std:http"
 require "std:natives"
-require "std:tuple"
+require "std:datatypes/tuple"
+
 interface Oak {
   fn listen(handler: fn(): unit)
   fn get(path: string, handler: fn(Request): unit)
