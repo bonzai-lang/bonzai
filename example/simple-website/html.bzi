@@ -1,0 +1,14 @@
+require "std:web/ui"
+require "std:natives"
+
+extern fn read_file(path: string): string
+
+let content = read_file("example/simple-website/index.html")
+let parsed = parseHTML(content)
+
+match parsed {
+  case Ok(html) => {
+    print(renderHTML(html))
+  }
+  case Error(e) => print(e)
+}
