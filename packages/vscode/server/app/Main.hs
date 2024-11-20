@@ -24,9 +24,13 @@ import System.Directory (doesFileExist, doesDirectoryExist, listDirectory)
 import qualified Data.Char as Char
 import System.Directory.Internal.Prelude (getEnv)
 
+{-# NOINLINE lastContent #-}
+lastContent :: IORef (Map Text Text)
+lastContent = unsafePerformIO $ newIORef mempty
+
 {-# NOINLINE lastValidAST #-}
-lastValidAST :: IORef [HLIR.TLIR "expression"]
-lastValidAST = unsafePerformIO $ newIORef []
+lastValidAST :: IORef (Map Text [HLIR.TLIR "expression"])
+lastValidAST = unsafePerformIO $ newIORef mempty
 
 getVar :: HLIR.TLIR "expression" -> (Position, Uri) -> Maybe (Text, HLIR.Type)
 getVar (HLIR.MkExprLet _ ann e) p = case getVar e p of
@@ -271,13 +275,17 @@ parseURI uri = do
   moduleResult <- runExceptT $ resolve fileNameWithoutDir True
 
   case moduleResult of
-    Left _ -> Just <$> readIORef lastValidAST
+    Left _ -> do
+      asts <- readIORef lastValidAST
+      pure $ Map.lookup (toText path) asts
     Right _ -> do
       preHLIR <- removeRequires <$> readIORef resultState
 
       typed <- runTypechecking preHLIR
       case typed of
-        Left _ -> Just <$> readIORef lastValidAST
+        Left _ -> do
+          asts <- readIORef lastValidAST
+          pure $ Map.lookup (toText path) asts
         Right tlir -> pure $ Just tlir
 
 getFiles :: MonadIO m => FilePath -> m [FilePath]
@@ -329,7 +337,7 @@ parseContentAndTypecheck path contents = do
       case typed of
         Left (err, pos) -> pure $ Left (show err, pos)
         Right tlir -> do
-          writeIORef lastValidAST tlir
+          modifyIORef lastValidAST (Map.insert (toText path) tlir)
           pure $ Right tlir
 
 parseAndTypecheck :: MonadIO m => FilePath -> m (Either (Text, HLIR.Position) [HLIR.TLIR "expression"])
@@ -356,7 +364,8 @@ parseAndTypecheck path = do
       case typed of
         Left (err, pos) -> pure $ Left (show err, pos)
         Right tlir -> do
-          writeIORef lastValidAST tlir
+          modifyIORef lastValidAST (Map.insert (toText path) tlir)
+          
           pure $ Right tlir
 
 handlers :: Handlers (LspM ())
@@ -365,7 +374,17 @@ handlers =
     [
         notificationHandler SMethod_Initialized $ \_not -> pure ()
 
+      , notificationHandler SMethod_SetTrace $ \_not -> pure ()
+
       , notificationHandler SMethod_WorkspaceDidChangeConfiguration $ \_not -> pure ()
+
+      , notificationHandler SMethod_TextDocumentDidClose $ \_req -> do
+          let TNotificationMessage _ _ (DidCloseTextDocumentParams (TextDocumentIdentifier uri)) = _req
+
+          let path = toText . fromJust $ uriToFilePath uri
+
+          modifyIORef lastContent (Map.delete path)
+          modifyIORef lastValidAST (Map.delete path)
 
       , notificationHandler SMethod_TextDocumentDidOpen $ \req -> do
           let TNotificationMessage _ _ (DidOpenTextDocumentParams (TextDocumentItem uri _ _ _)) = req
@@ -373,7 +392,11 @@ handlers =
           sendNotification SMethod_WindowLogMessage $ LogMessageParams MessageType_Info (toText . fromMaybe "" $ uriToFilePath uri)
 
           let path = fromJust $ uriToFilePath uri
-
+          
+          content <- decodeUtf8 <$> readFileLBS path
+          
+          modifyIORef lastContent (Map.insert (toText path) content)
+          
           ast <- parseAndTypecheck path
 
           sendNotification SMethod_WindowLogMessage $ LogMessageParams MessageType_Info (toText path)
@@ -411,6 +434,8 @@ handlers =
                 ) "" updates
           let path = fromJust $ uriToFilePath uri
 
+          modifyIORef lastContent (Map.insert (toText path) content)
+
           ast <- parseContentAndTypecheck path content
 
           case ast of
@@ -440,14 +465,15 @@ handlers =
                 (HoverParams (TextDocumentIdentifier uri) pos _workDone) = req
           let Position line col = pos
 
-          tlir <- parseURI uri
-
+          asts <- readIORef lastValidAST
+          let tlir = Map.lookup (toText . fromJust $ uriToFilePath uri) asts
+          
           case tlir of
             Nothing -> responder (Right $ InR Null)
             Just tlir' -> do
-              let vars = map (\e -> getVar e (pos, uri)) tlir'
+              let vars = mapMaybe (\e -> getVar e (pos, uri)) tlir'
 
-              case catMaybes vars of
+              case vars of
                 [] -> responder (Right $ InR Null)
                 (x:_) -> case x of
                   (name, ty) -> do
@@ -474,7 +500,11 @@ handlers =
 
           -- Get current text content with all unsaved modifications
 
-          ast' <- readIORef lastValidAST
+          tlirs <- readIORef lastContent
+          let content = fromMaybe "" $ Map.lookup (toText . fromJust $ uriToFilePath uri) tlirs
+
+          asts <- readIORef lastValidAST
+          let ast' = fromMaybe [] $ Map.lookup (toText . fromJust $ uriToFilePath uri) asts
 
           let completion label' kind detail txt =
                 CompletionItem
@@ -499,9 +529,8 @@ handlers =
                 , _textEditText = Nothing
                 }
 
-          let filepath = fromJust $ uriToFilePath uri
-          lines' <- Text.lines . decodeUtf8 <$> readFileLBS filepath
-
+          let lines' = lines content
+          
           let currentLine = fromIntegral line `maybeAt` lines'
 
           case currentLine of
@@ -515,9 +544,9 @@ handlers =
               if
                 | isArrow -> do
                     let var = Text.takeWhileEnd Lex.isIdentChar (Text.dropEnd 2 before)
-                    let colStart = col - fromIntegral (Text.length var)
-                    let vars = mapMaybe (`getVar` (Position line colStart, uri)) ast'
-                    
+                    let colStart = col - fromIntegral (Text.length var) - 2
+                    let vars = mapMaybe (`getVar` (Position line (colStart + 1), uri)) ast'
+
                     case vars of
                       ((_, ty):_) -> do
                         res <- runExceptT $ decomposeHeader ty
@@ -576,6 +605,7 @@ handlers =
                     ) (toText v) Nothing : acc) [] vars'
 
               responder $ Right $ InL completions
+      
       , notificationHandler SMethod_TextDocumentDidSave $ \req -> do
           let TNotificationMessage _ _ (DidSaveTextDocumentParams (TextDocumentIdentifier uri) _) = req
 
