@@ -1,0 +1,92 @@
+require "std:language/parser"
+require "std:natives"
+require "std:datatypes/tuple"
+require "std:datatypes/error"
+require "std:datatypes/list"
+
+type HTML {
+  Tag(tag: string, attributes: Map<string>, children: list<HTML>),
+  SelfClosingTag(tag: string, attributes: Map<string>),
+  Text(text: string)
+}
+
+let charLiteral = choice([
+    char('\\') :right: char('\\'),
+    char('\\') :right: char('"'),
+    char('\\') :right: char('/'),
+    char('\\') :right: char('b')  :Parser::bind: fn(_) => Parser::pure('\b'),
+    char('\\') :right: char('f')  :Parser::bind: fn(_) => Parser::pure('\f'),
+    char('\\') :right: char('n')  :Parser::bind: fn(_) => Parser::pure('\n'),
+    char('\\') :right: char('r')  :Parser::bind: fn(_) => Parser::pure('\r'),
+    char('\\') :right: char('t')  :Parser::bind: fn(_) => Parser::pure('\t')
+  ])
+
+let stringLiteral = char('"') 
+            :right: (many(or(charLiteral, satisfy(fn (x) => x != '"')))
+              :Parser::map: fn(xs) => xs.implode())
+            :left: char('"')
+
+let ws = satisfy(is_whitespace).many()
+
+let attribute = (satisfy(fn (c) => is_alphanumeric(c) || c == '-').many1() :Parser::map: fn(xs) => xs.implode())
+            :Parser::bind: fn(name) => 
+              ws 
+                :right: char('=') 
+                :right: ws 
+                :right: stringLiteral
+                :Parser::map: fn(value) => (name, value)
+
+fn HTMLParser(): Parser<HTML> => {
+  let tag = satisfy(is_alphanumeric).many1() :Parser::map: fn(xs) => xs.implode()
+
+  let block = char('<') 
+              :right: tag 
+              :Parser::bind: fn(tagName) => 
+                ws 
+                  :right: (attribute.many() :Parser::map: fn(xs) => Map::fromList(xs))
+                  :Parser::bind: fn(attrs) => 
+                    ws 
+                      :right: char('>')
+                      :right: ws
+                      :right: many(ws :right: HTMLParser.lazy() :left: ws)
+                      :Parser::map: (fn(children) => Tag(tagName, attrs, children))
+                      :left: ws
+                      :left: string("</" + tagName + ">")
+  
+  let selfClosingTag = char('<') 
+                      :right: tag 
+                      :Parser::bind: fn(tagName) => 
+                        ws 
+                          :right: (attribute.many() :Parser::map: fn(xs) => Map::fromList(xs))
+                          :Parser::map: (fn(attrs) => SelfClosingTag(tagName, attrs))
+                          :left: string("/>")
+
+  let text = many1(satisfy(fn (c) => c != '<')) :Parser::map: fn(xs) => Text(xs.implode())
+
+  choice([selfClosingTag.try(), block, text])
+}
+
+fn renderHTML(html: HTML): string => 
+  match html {
+    case Tag(tag, attrs, children) => {
+      let attrStr = Map::foldl(attrs, fn (acc, k, v) => acc + " " + k + "=\"" + v + "\"", "")
+      
+      let childrenStr = List::foldl(fn (child, acc) => acc + renderHTML(child), "", children)
+      
+      "<" + tag + attrStr + ">" + childrenStr + "</" + tag + ">"
+    }
+
+    case SelfClosingTag(tag, attrs) => {
+      let attrStr = Map::foldl(attrs, fn (acc, k, v) => acc + " " + k + "=\"" + v + "\"", "")
+      
+      "<" + tag + attrStr + "/>"
+    }
+
+    case Text(text) => text
+  }
+
+fn parseHTML(input: string): Throwable<HTML> =>
+  match runParser(HTMLParser(), input) {
+    case ParseResult(html, _) => Ok(html)
+    case ParseError(err, _) => Error("Parse error: " + err)
+  }
