@@ -1,5 +1,5 @@
 require "std:web/ui"
-require "std:natives"
+require "std:io"
 
 extern fn read_file(path: string): string
 

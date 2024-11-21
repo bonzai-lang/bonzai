@@ -1,6 +1,9 @@
+require "std:http/parallel"
 require "std:http"
-require "std:natives"
-require "std:tuple"
+require "std:math"
+require "std:datatypes/string"
+require "std:io"
+require "std:datatypes/tuple"
 
 createParallelHTTP(10, fn(req, id) => {
   print("Received request on $id")

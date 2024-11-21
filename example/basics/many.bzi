@@ -1,4 +1,4 @@
-require "std:natives"
+require "std:io"
 
 print("many lines")
 print("many lines")

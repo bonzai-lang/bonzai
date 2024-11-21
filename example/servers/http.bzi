@@ -1,5 +1,7 @@
 require "std:http"
-require "std:natives"
+require "std:io"
+require "std:datatypes/string"
+require "std:math"
 
 let port = 8000
 let server = spawn HTTPServer(port)

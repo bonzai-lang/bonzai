@@ -1,6 +1,0 @@
-require "std:json"
-require "std:natives"
-
-let json = getJSON("{\"a\": 1, \"b\": {\"c\": 2}, \"d\": [1, 2, 3]}")
-
-print(json.getKeys(["d"]))

@@ -1,12 +1,11 @@
 require "std:http"
-require "std:natives"
-require "std:json"
-require "std:parser"
+require "std:io"
+require "std:datatypes/json"
 
 let url = "https://jsonplaceholder.typicode.com/todos/1"
 let res = fetch(url)
 
 match res {
-  case Ok(response) => print(response.getJSON)
+  case Ok(Tuple(response, _)) => print(response.getJSON)
   case Error(err) => print(err)
 }

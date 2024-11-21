@@ -1,6 +1,6 @@
-require "std:oak/server"
+require "std:http/oak"
 require "std:http"
-require "std:natives"
+require "std:io"
 
 let server = spawn OakServer(8000)
 

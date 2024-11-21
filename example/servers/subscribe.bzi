@@ -1,4 +1,6 @@
-require "std:natives"
+require "std:io"
+require "std:datatypes/mutable"
+require "std:math"
 require "std:reactive"
 
 let r = spawn Reactive("Hello", fn(var) => {

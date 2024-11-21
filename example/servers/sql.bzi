@@ -1,5 +1,5 @@
 require "std:sql/pg"
-require "std:natives"
+require "std:io"
 
 let conn = PGSQL::connect("user=postgres dbname=postgres password=root hostaddr=127.0.0.1 port=5432")
 

@@ -1,4 +1,4 @@
-require "std:configurator"
+require "std:language/configurator"
 
 let config = spawn Config()
 
