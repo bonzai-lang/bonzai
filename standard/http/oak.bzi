@@ -1,6 +1,7 @@
 require "std:http"
-require "std:natives"
 require "std:datatypes/tuple"
+require "std:math"
+require "std:datatypes/mutable"
 
 interface Oak {
   fn listen(handler: fn(): unit)
@@ -16,10 +17,6 @@ fn OakServer(port: int) => {
   actor < Oak {
     on listen(handler) => {
       handler()
-
-      http->listen(fn (req) => {
-        print("test")
-      })
 
       http->listen(fn (req) => {
         match Map::lookup(handlers.value, get_path(req)) {

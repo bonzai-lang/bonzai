@@ -1,7 +1,9 @@
 require "std:datatypes/error"
-require "std:natives"
 require "std:datatypes/tuple"
 require "std:datatypes/string"
+require "math"
+require "std:datatypes/mutable"
+require "std:datatypes/list"
 
 extern fn start_http_server(port: int): HTTP
 extern fn accept_request(server: HTTP): Request

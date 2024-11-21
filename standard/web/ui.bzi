@@ -1,8 +1,8 @@
 require "std:language/parser"
-require "std:natives"
 require "std:datatypes/tuple"
 require "std:datatypes/error"
 require "std:datatypes/list"
+require "std:math"
 
 type HTML {
   Tag(tag: string, attributes: Map<string>, children: list<HTML>),

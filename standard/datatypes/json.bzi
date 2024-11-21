@@ -1,9 +1,9 @@
 require "std:language/parser"
-require "std:natives"
 require "std:datatypes/optional"
 require "std:datatypes/tuple"
 require "std:datatypes/list"
 require "std:datatypes/string"
+require "std:math"
 
 type JSON {
   Object(fields: list<(string, JSON)>),
