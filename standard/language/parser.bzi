@@ -1,5 +1,6 @@
-require "std:natives"
 require "std:datatypes/list"
+require "std:math"
+require "std:datatypes/string"
 
 extern fn is_whitespace(c: char): bool
 extern fn is_digit(c: char): bool

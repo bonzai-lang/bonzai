@@ -1,6 +1,6 @@
-require "std:natives"
 require "std:datatypes/error"
 require "std:datatypes/list"
+require "std:math"
 
 type Tuple<A, B> {
   Tuple(x: A, y: B)

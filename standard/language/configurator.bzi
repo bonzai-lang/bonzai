@@ -1,4 +1,5 @@
-require "std:natives"
+require "std:math"
+require "std:datatypes/mutable"
 
 extern fn execute_command(command: string)
 

@@ -1,22 +1,12 @@
-extern fn print<A>(x: A)
-extern fn toString<A>(x: A): string
 extern fn mul_value<A>(x: A, y: A): A
 extern fn add_value<A>(x: A, y: A): A
 extern fn sub_value<A>(x: A, y: A): A
 extern fn div_value<A>(x: A, y: A): A
 extern fn mod_value<A>(x: A, y: A): A
-extern fn exit_with<A>(code: int): A
-extern fn mutable_value<A>(x: mutable<A>): A
-
-extern fn length<A>(xs: list<A>): int
-extern fn sliceFrom<A>(xs: list<A>, i: int): list<A>
 
 extern fn and_value(x: bool, y: bool): bool
 extern fn or_value(x: bool, y: bool): bool
 extern fn not_value(x: bool): bool
-
-extern fn panic_<A>(msg: string): A
-extern fn wait_time(time: int)
 
 extern fn eq_value<A>(x: A, y: A): bool
 extern fn neq_value<A>(x: A, y: A): bool
@@ -24,16 +14,6 @@ extern fn lt_value<A>(x: A, y: A): bool
 extern fn gt_value<A>(x: A, y: A): bool
 extern fn lte_value<A>(x: A, y: A): bool
 extern fn gte_value<A>(x: A, y: A): bool
-
-extern fn randomValue(): int
-extern fn itof(i: int): float
-extern fn ftoi(f: float): int
-
-// Defining basic functions
-
-let value = mutable_value
-fn exit<A>(): A => exit_with(0)
-fn panic<A>(msg: string): A => panic_(msg)
 
 let (==) = eq_value
 let (!=) = neq_value
@@ -52,10 +32,8 @@ fn (&&) (x: bool, y: bool): bool => if x then y else false
 fn (||) (x: bool, y: bool): bool => if x then true else y
 fn (!) (x: bool): bool => if x then false else true
 
-let random = randomValue
+extern fn randomValue(): int
+extern fn itof(i: int): float
+extern fn ftoi(f: float): int
 
-fn map<A, B>(xs: list<A>, f: fn(A): B): list<B> =>
-  match xs {
-    case [] => []
-    case [y .. ys] => [f(y)] + map(ys, f)
-  }
+let random = randomValue

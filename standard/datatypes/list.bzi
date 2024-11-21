@@ -1,4 +1,7 @@
-require "std:natives"
+require "std:math"
+
+extern fn length<A>(xs: list<A>): int
+extern fn sliceFrom<A>(xs: list<A>, i: int): list<A>
 
 fn List::elem<A>(x: A, xs: list<A>): bool =>
   match xs {
@@ -11,6 +14,8 @@ fn List::map<A, B>(xs: list<A>, f: fn(A): B): list<B> =>
     case [] => []
     case [y .. ys] => [f(y)] + List::map(ys, f)
   }
+
+let map = List::map
 
 fn List::foldl<A, B>(f: fn(A, B): B, acc: B, xs: list<A>): B =>
   match xs {

@@ -1,5 +1,7 @@
-require "std:natives"
 require "std:http"
+require "std:math"
+require "std:datatypes/list"
+require "std:datatypes/string"
 
 fn range(start: int, end: int): list<int> => {
   match start < end {

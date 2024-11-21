@@ -1,5 +1,7 @@
 require "std:datatypes/list"
-require "std:natives"
+require "std:math"
+
+extern fn toString<A>(x: A): string
 
 extern fn explode(s: string): list<char>
 
