@@ -58,6 +58,7 @@ reservedWords =
       "on",
       "require",
       "extern",
+      "pub",
       "if",
       "then",
       "else",

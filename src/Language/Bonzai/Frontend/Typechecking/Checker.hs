@@ -335,7 +335,8 @@ typecheck (HLIR.MkExprLive ann e) = do
   modifyIORef' M.checkerState $ \st -> st { M.variables = Map.insert ann.name newScheme st.variables }
 
   pure (HLIR.MkExprLet mempty ann { HLIR.value = Identity (HLIR.MkTyLive ty) } (HLIR.MkExprWrapLive expr'), HLIR.MkTyUnit)
-typecheck (HLIR.MkExprRequire _) = compilerError "typecheck: require should not appear in typechecking"
+typecheck (HLIR.MkExprPublic e) = typecheck e
+typecheck (HLIR.MkExprRequire _ _) = compilerError "typecheck: require should not appear in typechecking"
 typecheck (HLIR.MkExprUnwrapLive _) = compilerError "typecheck: unwrap should not appear in typechecking"
 typecheck (HLIR.MkExprWrapLive _) = compilerError "typecheck: wrap should not appear in typechecking"
 
@@ -491,7 +492,7 @@ containsLive (HLIR.MkExprWhile c e) = containsLive c || containsLive e
 containsLive (HLIR.MkExprIndex e e') = containsLive e || containsLive e'
 containsLive (HLIR.MkExprData _ _) = False
 containsLive (HLIR.MkExprMatch e cs) = containsLive e || any (containsLive . snd3) cs
-containsLive (HLIR.MkExprRequire _) = False
+containsLive (HLIR.MkExprRequire _ _) = False
 containsLive (HLIR.MkExprUnwrapLive _) = True
 containsLive (HLIR.MkExprWrapLive e) = containsLive e
 containsLive _ = False

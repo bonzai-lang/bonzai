@@ -105,6 +105,11 @@ parseExtern = localize $ do
 
   pure $ HLIR.MkExprNative (HLIR.MkAnnotation name gens) funTy
 
+parsePublic :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parsePublic = localize $ do
+  void $ Lex.reserved "pub"
+  HLIR.MkExprPublic <$> parseToplevel
+
 parseVariable :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseVariable = localize $ do
   name <- Lex.lexeme Lex.identifier
@@ -328,7 +333,11 @@ parseRequire :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseRequire = localize $ do
   void $ Lex.reserved "require"
 
-  HLIR.MkExprRequire <$> Lex.lexeme Lit.parseString
+  path <- Lex.lexeme Lit.parseString
+
+  vars <- P.option [] $ Lex.symbol ":" *> P.sepBy1 Lex.identifier Lex.comma
+
+  pure $ HLIR.MkExprRequire path (fromList vars)
 
 parseTerm :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseTerm =
@@ -457,6 +466,7 @@ parseExpression = localize $ P.makeExprParser parseTerm table
 parseToplevel :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseToplevel =
   localize $ P.choice [
+    parsePublic,
     parseInterface,
     parseDatatype,
     parseRequire,
