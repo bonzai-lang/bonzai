@@ -1,4 +1,7 @@
-require "std:natives"
+require "std:datatypes/mutable"
+require "std:math"
+require "std:io"
+
 interface Loopable {
   fn loop(self: Loopable, i: int)
 }

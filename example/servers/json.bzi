@@ -1,5 +1,5 @@
-require "std:websocket"
-require "std:natives"
+require "std:http/websocket"
+require "std:io"
 
 let ws = spawn Websocket("echo.websocket.org", 80, "/", false)
 

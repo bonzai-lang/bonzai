@@ -1,4 +1,5 @@
-require "std:natives"
+require "std:io"
+require "std:math"
 
 type Option<A> {
   Some(x: A),

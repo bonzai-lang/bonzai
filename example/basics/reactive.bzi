@@ -1,4 +1,6 @@
-require "std:natives"
+require "std:io"
+require "std:datatypes/mutable"
+require "std:math"
 
 live test = "Hello"
 

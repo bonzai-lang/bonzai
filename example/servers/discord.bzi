@@ -1,8 +1,10 @@
-require "std:websocket"
-require "std:tuple"
-require "std:natives"
+require "std:http/websocket"
+require "std:datatypes/tuple"
 require "std:http"
-require "std:json"
+require "std:datatypes/json"
+require "std:io"
+require "std:math"
+require "std:datatypes/string"
 
 let TOKEN = "TOKEN"
 

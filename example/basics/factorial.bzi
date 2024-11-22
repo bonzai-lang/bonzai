@@ -2,7 +2,9 @@ interface Factorial {
   fn factorial(self: Factorial, n: int)
 }
 
-require "std:natives"
+require "std:io"
+require "std:datatypes/mutable"
+require "std:math"
 
 fn Factorial() => {
   mut acc = 1
