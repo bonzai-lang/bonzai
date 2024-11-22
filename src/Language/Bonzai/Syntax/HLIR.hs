@@ -56,7 +56,7 @@ data Expression f t
   | MkExprActor t [Expression f t]
   | MkExprOn Text [Annotation (f t)] (Expression f t)
   | MkExprSend (Expression f t) Text [Expression f t] (f t)
-  | MkExprRequire Text
+  | MkExprRequire Text (Set Text)
   | MkExprLoc (Expression f t) Position
   | MkExprSpawn (Expression f t)
   | MkExprList [Expression f t]
@@ -69,6 +69,7 @@ data Expression f t
   | MkExprLive (Annotation (f t)) (Expression f t)
   | MkExprUnwrapLive (Expression f t)
   | MkExprWrapLive (Expression f t)
+  | MkExprPublic (Expression f t)
   deriving Generic
 
 data DataConstructor t
@@ -145,7 +146,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprActor i e) = T.concat ["event ", toText i , " ", toText e]
   toText (MkExprOn n as e) = T.concat ["on ", n, "(", T.intercalate ", " (map toText as), ") { ", toText e, " }"]
   toText (MkExprSend e n e' _) = T.concat ["(", toText e, ") -> ", n, "(", toText e', ")"]
-  toText (MkExprRequire n) = T.concat ["require ", n]
+  toText (MkExprRequire n vars) = T.concat ["require ", n, ": ", T.intercalate ", " (toList vars)]
   toText (MkExprLoc e _) = toText e
   toText (MkExprSpawn e) = T.concat ["spawn ", toText e]
   toText (MkExprList es) = T.concat ["[", T.intercalate ", " (map toText es), "]"]
@@ -159,6 +160,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprLive a e) = T.concat ["live ", toText a, " = ", toText e]
   toText (MkExprUnwrapLive e) = T.concat ["unwrap ", toText e]
   toText (MkExprWrapLive e) = T.concat ["wrap ", toText e]
+  toText (MkExprPublic e) = T.concat ["pub ", toText e]
 
 instance ToText t => ToText (DataConstructor t) where
   toText (MkDataVariable v) = v
@@ -205,7 +207,7 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprActor i e == MkExprActor i' e' = i == i' && e == e'
   MkExprOn n as e == MkExprOn n' as' e' = n == n' && as == as' && e == e'
   MkExprSend e n es t == MkExprSend e' n' es' t' = e == e' && n == n' && es == es' && t == t'
-  MkExprRequire n == MkExprRequire n' = n == n'
+  MkExprRequire n v == MkExprRequire n' v' = n == n' && v == v'
   MkExprLoc e _ == MkExprLoc e' _ = e == e'
   MkExprLoc e _ == e' = e == e'
   e == MkExprLoc e' _ = e == e'
@@ -220,6 +222,7 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprLive a e == MkExprLive a' e' = a == a' && e == e'
   MkExprUnwrapLive e == MkExprUnwrapLive e' = e == e'
   MkExprWrapLive e == MkExprWrapLive e' = e == e'
+  MkExprPublic e == MkExprPublic e' = e == e'
   _ == _ = False
 
 instance (Eq t) => Eq (DataConstructor t) where
