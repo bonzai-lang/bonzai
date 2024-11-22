@@ -15,22 +15,22 @@ extern fn gt_value<A>(x: A, y: A): bool
 extern fn lte_value<A>(x: A, y: A): bool
 extern fn gte_value<A>(x: A, y: A): bool
 
-let (==) = eq_value
-let (!=) = neq_value
-let (<) = lt_value
-let (>) = gt_value
-let (<=) = lte_value
-let (>=) = gte_value
+pub let (==) = eq_value
+pub let (!=) = neq_value
+pub let (<) = lt_value
+pub let (>) = gt_value
+pub let (<=) = lte_value
+pub let (>=) = gte_value
 
-let (+) = add_value
-let (-) = sub_value
-let (*) = mul_value
-let (/) = div_value
-let (%) = mod_value
+pub let (+) = add_value
+pub let (-) = sub_value
+pub let (*) = mul_value
+pub let (/) = div_value
+pub let (%) = mod_value
 
-fn (&&) (x: bool, y: bool): bool => if x then y else false
-fn (||) (x: bool, y: bool): bool => if x then true else y
-fn (!) (x: bool): bool => if x then false else true
+pub fn (&&) (x: bool, y: bool): bool => if x then y else false
+pub fn (||) (x: bool, y: bool): bool => if x then true else y
+pub fn (!) (x: bool): bool => if x then false else true
 
 extern fn randomValue(): int
 extern fn itof(i: int): float

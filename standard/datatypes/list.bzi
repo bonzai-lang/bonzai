@@ -1,41 +1,41 @@
 require "std:math"
 
-extern fn length<A>(xs: list<A>): int
+pub extern fn length<A>(xs: list<A>): int
 extern fn sliceFrom<A>(xs: list<A>, i: int): list<A>
 
-fn List::elem<A>(x: A, xs: list<A>): bool =>
+pub fn List::elem<A>(x: A, xs: list<A>): bool =>
   match xs {
     case [] => false
     case [y .. ys] => if x == y then true else List::elem(x, ys)
   }
 
-fn List::map<A, B>(xs: list<A>, f: fn(A): B): list<B> =>
+pub fn List::map<A, B>(xs: list<A>, f: fn(A): B): list<B> =>
   match xs {
     case [] => []
     case [y .. ys] => [f(y)] + List::map(ys, f)
   }
 
-let map = List::map
+pub let map = List::map
 
-fn List::foldl<A, B>(f: fn(A, B): B, acc: B, xs: list<A>): B =>
+pub fn List::foldl<A, B>(f: fn(A, B): B, acc: B, xs: list<A>): B =>
   match xs {
     case [] => acc
     case [y .. ys] => List::foldl(f, f(y, acc), ys)
   }
 
-fn List::foldr<A, B>(f: fn(A, B): B, acc: B, xs: list<A>): B =>
+pub fn List::foldr<A, B>(f: fn(A, B): B, acc: B, xs: list<A>): B =>
   match xs {
     case [] => acc
     case [y .. ys] => f(y, List::foldr(f, acc, ys))
   }
 
-fn List::length<A>(xs: list<A>): int =>
+pub fn List::length<A>(xs: list<A>): int =>
   match xs {
     case [] => 0
     case [x .. xs] => 1 + List::length(xs)
   }
 
-fn List::join<A>(xs: list<A>, sep: A): list<A> =>
+pub fn List::join<A>(xs: list<A>, sep: A): list<A> =>
   match xs {
     case [] => []
     case [x] => [x]

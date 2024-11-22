@@ -1,2 +1,2 @@
 extern fn mutable_value<A>(x: mutable<A>): A
-let value = mutable_value
+pub let value = mutable_value
