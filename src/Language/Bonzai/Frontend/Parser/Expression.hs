@@ -54,7 +54,11 @@ parseInterpolatedString = do
       let var' = toString' $ HLIR.MkExprVariable (HLIR.MkAnnotation (Text.pack (x:var)) Nothing)
 
       HLIR.MkExprBinary "+" var' (buildString rest)
-    buildString (x:xs) = HLIR.MkExprBinary "+" (HLIR.MkExprString (Text.singleton x)) (buildString xs)
+    buildString (x:xs) = do
+      let (str, rest) = span (/= '$') xs
+      let str' = HLIR.MkExprLiteral (HLIR.MkLitString (Text.pack (x:str)))
+
+      HLIR.MkExprBinary "+" str' (buildString rest)
 
     combineCharsIntoString :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
     combineCharsIntoString (HLIR.MkExprBinary "+" x (HLIR.MkExprLiteral (HLIR.MkLitString ""))) = combineCharsIntoString x 
