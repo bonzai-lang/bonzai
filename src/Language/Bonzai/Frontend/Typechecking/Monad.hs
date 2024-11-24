@@ -41,7 +41,7 @@ data CheckerState = MkCheckerState {
     variables :: Map Text HLIR.Scheme
   , interfaces :: Map (Text, [HLIR.Type]) (Map Text HLIR.Scheme)
   , varPos :: [(Text, (HLIR.Scheme, HLIR.Position))]
-}
+} deriving (Eq, Show)
 
 with :: MonadIO m => IORef a -> (a -> a) -> m b -> m b
 with ref f m = do

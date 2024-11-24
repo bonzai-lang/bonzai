@@ -166,18 +166,20 @@ typecheck (HLIR.MkExprUpdate u e) = do
 
   pure (HLIR.MkExprUpdate u' modifier, HLIR.MkTyUnit)
 typecheck (HLIR.MkExprActor i es) = do
-  checkSt <- readIORef M.checkerState
 
-  header <- decomposeHeader i
-  methodsTys <- case Map.lookup header checkSt.interfaces of
-    Just tys -> mapM M.instantiate tys
+  (header, tys) <- decomposeHeader i
+
+  interface <- U.findInterface header tys
+
+  methodsTys <- case interface of
+    Just methods -> mapM M.instantiate methods
     Nothing -> throw (M.ActorNotFound i)
 
-  (es', tys) <- unzip <$> traverse (`typecheckEvent` methodsTys) es
+  (es', tys') <- unzip <$> traverse (`typecheckEvent` methodsTys) es
 
   let names = map getName es
 
-  forM_ (zip names tys) $ \(name, ty) -> do
+  forM_ (zip names tys') $ \(name, ty) -> do
     case Map.lookup name methodsTys of
       Just ty' -> ty `U.unifiesWith` ty'
       Nothing -> throw (M.EventNotFound name)
@@ -221,13 +223,13 @@ typecheck (HLIR.MkExprOn {}) = compilerError "typecheck: event block should only
 typecheck (HLIR.MkExprSend e ev a _) = do
   (e', ty) <- typecheck e
   (a', elTys) <- mapAndUnzipM typecheck a
+  
+  (header, tys) <- decomposeHeader ty
 
-  checkSt <- readIORef M.checkerState
-
-  header <- decomposeHeader ty
-  case Map.lookup header checkSt.interfaces of
-    Just tys -> do
-      methodsTys <- mapM M.instantiate tys
+  interface <- U.findInterface header tys
+  case interface of
+    Just methods -> do
+      methodsTys <- mapM M.instantiate methods
 
       case Map.lookup ev methodsTys of
         Just (argsTy HLIR.:->: _) -> do
@@ -241,6 +243,13 @@ typecheck (HLIR.MkExprSend e ev a _) = do
   pure (HLIR.MkExprSend e' ev a' (Identity $ elTys HLIR.:->: HLIR.MkTyUnit), HLIR.MkTyId "unit")
 typecheck (HLIR.MkExprSpawn e) = do
   (e', ty) <- typecheck e
+
+  (header, tys) <- decomposeHeader ty
+
+  interface <- U.findInterface header tys
+
+  when (null interface) $ throw (M.NotAnActor ty)
+
   pure (HLIR.MkExprSpawn e', ty)
 typecheck (HLIR.MkExprList es) = do
   (es', tys) <- unzip <$> traverse typecheck es
@@ -503,4 +512,9 @@ snd3 (_, x, _) = x
 decomposeHeader :: M.MonadChecker m => HLIR.Type -> m (Text, [HLIR.Type])
 decomposeHeader (HLIR.MkTyApp (HLIR.MkTyId name) tys) = pure (name, tys)
 decomposeHeader (HLIR.MkTyId name) = pure (name, [])
+decomposeHeader (HLIR.MkTyVar tv) = do
+  tv' <- readIORef tv
+  case tv' of
+    HLIR.Link t -> decomposeHeader t
+    HLIR.Unbound _ _ -> throw (M.InvalidHeader (HLIR.MkTyVar tv))
 decomposeHeader t = M.throw $ M.InvalidHeader t

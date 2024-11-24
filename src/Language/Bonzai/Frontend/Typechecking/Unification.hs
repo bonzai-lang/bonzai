@@ -80,3 +80,26 @@ doesUnifyWith :: M.MonadChecker m => HLIR.Type -> HLIR.Type -> m Bool
 doesUnifyWith t t' = runExceptT (unifiesWith t t') >>= \case
   Left _ -> pure False
   Right _ -> pure True
+
+findM :: (Monad m) => (a -> m (Maybe b)) -> [a] -> m (Maybe b)
+findM f (x : xs) = do
+  res <- f x
+  case res of
+    Just _ -> pure res
+    Nothing -> findM f xs
+findM _ [] = pure Nothing
+
+findInterface :: (M.MonadChecker m) => Text -> [HLIR.Type] -> m (Maybe (Map Text HLIR.Scheme))
+findInterface name args = do
+  interfaces <- Map.toList . M.interfaces <$> readIORef M.checkerState
+
+  findM (\((name', args'), m) -> do
+    if name == name' && length args == length args'
+      then do
+        b <- and <$> zipWithM doesUnifyWith args args'
+        
+        pure $ if b then Just m else Nothing
+      else pure Nothing
+    ) interfaces
+
+  
