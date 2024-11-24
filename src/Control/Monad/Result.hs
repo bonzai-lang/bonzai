@@ -63,10 +63,10 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
         ("Actor " <> show name <> " not found", Just "check for typo issue with the event name, or missing types in actor header", pos)
         "Resolution"
 
-    NotAnActor name ty ->
+    NotAnActor ty ->
       printErrorFromString
         Nothing
-        ("Variable " <> show name <> " is not an event, but a " <> show (toText ty), Nothing, pos)
+        ("Expected an actor, but received a " <> show (toText ty), Nothing, pos)
         "Typechecking"
 
     EventNotFound name ->
@@ -137,7 +137,7 @@ data BonzaiError
   | CompilerError Text
   | UnificationFail HLIR.Type HLIR.Type
   | ActorNotFound HLIR.Type
-  | NotAnActor Text HLIR.Type
+  | NotAnActor HLIR.Type
   | EventNotFound Text
   | ExpectedAnActor HLIR.Type
   | InvalidArgumentQuantity Int Int
@@ -150,13 +150,14 @@ data BonzaiError
 
 instance Show BonzaiError where
   show (ParseError e) = showError e
+  show (CyclicModuleDependency path []) = "Cyclic module dependency detected with " <> show (normalise path)
   show (CyclicModuleDependency path stack) = "Cyclic module dependency detected with " <> show (normalise path) <> "\nImport stack:\n - "<> intercalate "\n - " (map normalise stack)
   show (ModuleNotFound path stack) = "Module " <> show (normalise path) <> " not found\nImport stack:\n - "<> intercalate "\n - " (map normalise stack)
   show (VariableNotFound name) = "Variable " <> show name <> " not found"
   show (CompilerError msg) = "BONZAI INTERNAL ERROR: " <> show msg
   show (UnificationFail t1 t2) = "Unification failed between " <> toString (toText t1) <> " and " <> toString (toText t2)
   show (ActorNotFound name) = "Actor " <> show name <> " not found"
-  show (NotAnActor name ty) = "Variable " <> show name <> " is not an event, but a " <> show (toText ty)
+  show (NotAnActor ty) = "Expected an actor, but received a " <> show (toText ty)
   show (EventNotFound name) = "Event " <> show name <> " not found"
   show (ExpectedAnActor ty) = "Expected an actor, but got " <> show (toText ty)
   show (InvalidArgumentQuantity n k) = "Invalid number of arguments, expected " <> show n <> ", received " <> show k
