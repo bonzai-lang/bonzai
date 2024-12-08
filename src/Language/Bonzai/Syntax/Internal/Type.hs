@@ -68,6 +68,9 @@ pattern MkTyList a = MkTyApp (MkTyId "list") [a]
 pattern MkTyMutable :: Type -> Type
 pattern MkTyMutable a = MkTyApp (MkTyId "mutable") [a]
 
+pattern MkTyActor :: Type -> Type
+pattern MkTyActor a = MkTyApp (MkTyId "actor") [a]
+
 pattern MkTyTuple :: Type -> Type -> Type
 pattern MkTyTuple a b = MkTyApp (MkTyId "Tuple") [a, b]
 
@@ -94,7 +97,7 @@ simplify (MkTyApp a b) = do
 simplify a = pure a
 
 instance ToText TyVar where
-  toText (Link a) = toText a
+  toText (Link a) = "#" <> toText a
   toText (Unbound a l) = a <> "@" <> T.pack (show l)
 
 instance ToText (Maybe Type) where

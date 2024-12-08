@@ -46,13 +46,13 @@ data Update f t
 data Expression f t
   = MkExprLiteral Literal
   | MkExprVariable (Annotation (f t))
-  | MkExprApplication (Expression f t) [Expression f t]
+  | MkExprApplication (Expression f t) [Expression f t] (f t)
   | MkExprLambda [Annotation (f t)] (f t) (Expression f t)
-  | MkExprTernary (Expression f t) (Expression f t) (Expression f t)
+  | MkExprTernary (Expression f t) (Expression f t) (Expression f t) (f t)
   | MkExprUpdate (Update f t) (Expression f t)
   | MkExprLet (Set Text) (Annotation (f t)) (Expression f t)
-  | MkExprMut (Annotation (f t)) (Expression f t)
-  | MkExprBlock [Expression f t]
+  | MkExprMut (Expression f t) (f t)
+  | MkExprBlock [Expression f t] (f t)
   | MkExprActor t [Expression f t]
   | MkExprOn Text [Annotation (f t)] (Expression f t)
   | MkExprSend (Expression f t) Text [Expression f t] (f t)
@@ -65,10 +65,10 @@ data Expression f t
   | MkExprWhile (Expression f t) (Expression f t)
   | MkExprIndex (Expression f t) (Expression f t)
   | MkExprData (Annotation [Text]) [DataConstructor t]
-  | MkExprMatch (Expression f t) [(Pattern f t, Expression f t, Position)]
+  | MkExprMatch (Expression f t) (f t) [(Pattern f t, Expression f t, Position)] (f t)
   | MkExprLive (Annotation (f t)) (Expression f t)
-  | MkExprUnwrapLive (Expression f t)
-  | MkExprWrapLive (Expression f t)
+  | MkExprUnwrapLive (Expression f t) (f t)
+  | MkExprWrapLive (Expression f t) (f t)
   | MkExprPublic (Expression f t)
   deriving Generic
 
@@ -86,7 +86,7 @@ data Pattern f t
   | MkPatLocated (Pattern f t) Position
   | MkPatOr (Pattern f t) (Pattern f t)
   | MkPatCondition (Expression f t) (Pattern f t)
-  | MkPatList [Pattern f t] (Maybe (Pattern f t))
+  | MkPatList [Pattern f t] (Maybe (Pattern f t)) (f t)
   deriving (Show, Generic)
 
 instance (ToJSON (f t), ToJSON t) => ToJSON (Expression f t)
@@ -109,13 +109,13 @@ instance (ToText t, ToText (f t)) => Show (Expression f t) where
   show = T.unpack . toText
 
 pattern MkExprBinary :: Text -> Expression Maybe t -> Expression Maybe t -> Expression Maybe t
-pattern MkExprBinary op a b = MkExprApplication (MkExprVariable (MkAnnotation op Nothing)) [a, b]
+pattern MkExprBinary op a b = MkExprApplication (MkExprVariable (MkAnnotation op Nothing)) [a, b] Nothing
 
 pattern MkExprString :: Text -> Expression f t
 pattern MkExprString s = MkExprLiteral (MkLitString s)
 
 pattern MkExprTuple :: Expression Maybe t -> Expression Maybe t -> Expression Maybe t
-pattern MkExprTuple a b = MkExprApplication (MkExprVariable (MkAnnotation "Tuple" Nothing)) [a, b]
+pattern MkExprTuple a b = MkExprApplication (MkExprVariable (MkAnnotation "Tuple" Nothing)) [a, b] Nothing
 
 type family HLIR (s :: Symbol) where
   HLIR "update" = Update Maybe Type
@@ -137,12 +137,12 @@ instance (ToText t, ToText (f t)) => ToText (Update f t) where
 instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprLiteral l) = toText l
   toText (MkExprVariable a) = toText a
-  toText (MkExprApplication e es) = T.concat ["(", toText e, ")(", T.intercalate ", " (map toText es), ")"]
+  toText (MkExprApplication e es _) = T.concat ["(", toText e, ")(", T.intercalate ", " (map toText es), ")"]
   toText (MkExprLambda as ret e) = T.concat ["(", T.intercalate ", " (map toText as), "): ", toText ret, " => ", toText e]
-  toText (MkExprTernary c t e) = T.concat [toText c, " ? ", toText t, " : ", toText e]
+  toText (MkExprTernary c t e _) = T.concat [toText c, " ? ", toText t, " : ", toText e]
   toText (MkExprUpdate u e) = T.concat [toText u, " = ", toText e]
   toText (MkExprLet _ a e) = T.concat ["let ", toText a, " = ", toText e]
-  toText (MkExprBlock es) = T.concat [T.intercalate "; " (map toText es)]
+  toText (MkExprBlock es _) = T.concat [T.intercalate "; " (map toText es)]
   toText (MkExprActor i e) = T.concat ["event ", toText i , " ", toText e]
   toText (MkExprOn n as e) = T.concat ["on ", n, "(", T.intercalate ", " (map toText as), ") { ", toText e, " }"]
   toText (MkExprSend e n e' _) = T.concat ["(", toText e, ") -> ", n, "(", toText e', ")"]
@@ -151,15 +151,15 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprSpawn e) = T.concat ["spawn ", toText e]
   toText (MkExprList es) = T.concat ["[", T.intercalate ", " (map toText es), "]"]
   toText (MkExprNative ann ty) = T.concat ["native ", toText ann.name, "<", T.intercalate ", " ann.value, "> ", toText ty]
-  toText (MkExprMut a e) = T.concat ["mut ", toText a, " = ", toText e]
+  toText (MkExprMut e _) = T.concat ["mut ", toText e]
   toText (MkExprInterface ann as) = T.concat ["interface ", toText ann.name, "<", T.intercalate ", " (map toText as), ">"]
   toText (MkExprWhile c e) = T.concat ["while ", toText c, " { ", toText e, " }"]
   toText (MkExprIndex e e') = T.concat [toText e, "[", toText e', "]"]
   toText (MkExprData ann cs) = T.concat ["data ", toText ann.name, "<", T.intercalate ", " (map toText cs), ">"]
-  toText (MkExprMatch e cs) = T.concat ["match ", toText e, " { ", T.intercalate ", " (map (\(c, b, _) -> T.concat [toText c, " => ", toText b]) cs), " }"]
+  toText (MkExprMatch e _ cs _) = T.concat ["match ", toText e, " { ", T.intercalate ", " (map (\(c, b, _) -> T.concat [toText c, " => ", toText b]) cs), " }"]
   toText (MkExprLive a e) = T.concat ["live ", toText a, " = ", toText e]
-  toText (MkExprUnwrapLive e) = T.concat ["unwrap ", toText e]
-  toText (MkExprWrapLive e) = T.concat ["wrap ", toText e]
+  toText (MkExprUnwrapLive e _) = T.concat ["unwrap ", toText e]
+  toText (MkExprWrapLive e _) = T.concat ["wrap ", toText e]
   toText (MkExprPublic e) = T.concat ["pub ", toText e]
 
 instance ToText t => ToText (DataConstructor t) where
@@ -175,8 +175,8 @@ instance (ToText (f t), ToText t) => ToText (Pattern f t) where
   toText (MkPatLocated p _) = toText p
   toText (MkPatOr p p') = T.concat [toText p, " | ", toText p']
   toText (MkPatCondition e p) = T.concat [toText p, " if ", toText e]
-  toText (MkPatList ps Nothing) = T.concat ["[", T.intercalate ", " (map toText ps), "]"]
-  toText (MkPatList ps (Just p)) = T.concat ["[", T.intercalate ", " (map toText ps), " ..", toText p, "]"]
+  toText (MkPatList ps Nothing _) = T.concat ["[", T.intercalate ", " (map toText ps), "]"]
+  toText (MkPatList ps (Just p) _) = T.concat ["[", T.intercalate ", " (map toText ps), " ..", toText p, "]"]
 
 instance (ToText t, ToText (f t)) => ToText [Expression f t] where
   toText = T.intercalate "\n" . map toText
@@ -197,13 +197,13 @@ instance (Eq (f t), Eq t) => Eq (Update f t) where
 instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprLiteral l == MkExprLiteral l' = l == l'
   MkExprVariable a == MkExprVariable b = a == b
-  MkExprApplication e es == MkExprApplication e' es' = e == e' && es == es'
+  MkExprApplication e es t == MkExprApplication e' es' t' = e == e' && es == es' && t == t'
   MkExprLambda as ret e == MkExprLambda as' ret' e' = as == as' && ret == ret' && e == e'
-  MkExprTernary c t e == MkExprTernary c' t' e' = c == c' && t == t' && e == e'
+  MkExprTernary c t e ty == MkExprTernary c' t' e' ty' = c == c' && t == t' && e == e' && ty == ty'
   MkExprUpdate u e == MkExprUpdate u' e' = u == u' && e == e'
   MkExprLet g a e == MkExprLet g' a' e' = a == a' && e == e' && g == g'
-  MkExprMut a e == MkExprMut a' e' = a == a' && e == e' 
-  MkExprBlock es == MkExprBlock es' = es == es'
+  MkExprMut e t == MkExprMut e' t' = e == e'  && t == t'
+  MkExprBlock es t == MkExprBlock es' t' = es == es' && t == t'
   MkExprActor i e == MkExprActor i' e' = i == i' && e == e'
   MkExprOn n as e == MkExprOn n' as' e' = n == n' && as == as' && e == e'
   MkExprSend e n es t == MkExprSend e' n' es' t' = e == e' && n == n' && es == es' && t == t'
@@ -218,10 +218,10 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprWhile c e == MkExprWhile c' e' = c == c' && e == e'
   MkExprIndex e e' == MkExprIndex e'' e''' = e == e'' && e' == e'''
   MkExprData ann cs == MkExprData ann' cs' = ann == ann' && cs == cs'
-  MkExprMatch e cs == MkExprMatch e' cs' = e == e' && cs == cs'
+  MkExprMatch e t cs t2 == MkExprMatch e' t' cs' t2' = e == e' && cs == cs' && t == t' && t2 == t2'
   MkExprLive a e == MkExprLive a' e' = a == a' && e == e'
-  MkExprUnwrapLive e == MkExprUnwrapLive e' = e == e'
-  MkExprWrapLive e == MkExprWrapLive e' = e == e'
+  MkExprUnwrapLive e t == MkExprUnwrapLive e' t' = e == e' && t == t'
+  MkExprWrapLive e t == MkExprWrapLive e' t' = e == e' && t == t'
   MkExprPublic e == MkExprPublic e' = e == e'
   _ == _ = False
 
