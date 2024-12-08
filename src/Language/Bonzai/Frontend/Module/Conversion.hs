@@ -161,7 +161,6 @@ getPublicVariables = foldl' getPublicVariables' mempty
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLoc e _)) = getPublicVariables' s (HLIR.MkExprPublic e)
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLet _ name _)) = Set.insert name.name s
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLive ann _)) = Set.insert ann.name s
-  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprMut name _)) = Set.insert name.name s
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprNative ann _)) = Set.insert ann.name s
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprData _ cs)) = foldl' getPublicVariablesDataConstr s cs
   getPublicVariables' s _ = s
@@ -187,7 +186,7 @@ foldM' f z (x:xs) = do
 
 -- | Main conversion function
 resolveImports :: (MonadResolution m) => ModuleUnit -> HLIR.HLIR "expression" -> m ModuleUnit
-resolveImports m (HLIR.MkExprApplication f args) = do
+resolveImports m (HLIR.MkExprApplication f args _) = do
   m1 <- resolveImports m f
   foldM' resolveImports m1 args
 resolveImports m (HLIR.MkExprLambda args _ body) = do
@@ -206,10 +205,10 @@ resolveImports m (HLIR.MkExprLive ann expr) = do
   let m' = m {variables = Set.singleton ann.name <> variables m}
   void $ resolveImports m' expr
   pure m'
-resolveImports m (HLIR.MkExprBlock exprs) = do
+resolveImports m (HLIR.MkExprBlock exprs _) = do
   void $ foldlM resolveImports m exprs
   pure m
-resolveImports m (HLIR.MkExprTernary cond then' else') = do
+resolveImports m (HLIR.MkExprTernary cond then' else' _) = do
   m1 <- resolveImports m cond
   m2 <- resolveImports m1 then'
   resolveImports m2 else'
@@ -263,9 +262,7 @@ resolveImports m (HLIR.MkExprOn _ args e) = do
 resolveImports m (HLIR.MkExprSpawn e) = resolveImports m e
 resolveImports m (HLIR.MkExprList es) = foldlM resolveImports m es
 resolveImports m (HLIR.MkExprNative ann _) = pure m {variables = Set.singleton ann.name <> variables m}
-resolveImports m (HLIR.MkExprMut name e) = do
-  let m' = m {variables = Set.singleton name.name <> variables m}
-  resolveImports m' e
+resolveImports m (HLIR.MkExprMut e _) = resolveImports m e
 resolveImports m (HLIR.MkExprWhile c e) = do
   m1 <- resolveImports m c
   resolveImports m1 e
@@ -276,7 +273,7 @@ resolveImports m (HLIR.MkExprIndex e e') = do
 resolveImports m (HLIR.MkExprData ann cs) = do
   let m' = m {types = Set.singleton ann.name <> types m}
   foldM' resolveImportsDataConstr m' cs
-resolveImports m (HLIR.MkExprMatch e cs) = do
+resolveImports m (HLIR.MkExprMatch e _ cs _) = do
   void $ resolveImports m e
   mapM_ (\(p, b, _) -> do
       m' <- resolveImportsPattern m p
@@ -301,7 +298,7 @@ resolveImportsPattern m (HLIR.MkPatOr p p') = do
 resolveImportsPattern m (HLIR.MkPatCondition e p) = do
   m1 <- resolveImportsPattern m p
   resolveImports m1 e
-resolveImportsPattern m (HLIR.MkPatList ps slice) = do
+resolveImportsPattern m (HLIR.MkPatList ps slice _) = do
   m1 <- foldM' resolveImportsPattern m ps
   case slice of
     Just p -> resolveImportsPattern m1 p
