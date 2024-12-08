@@ -2,17 +2,19 @@ module Main where
 import Language.Bonzai.Frontend.Module.Conversion
 import Control.Monad.Result
 import Language.Bonzai.Frontend.Typechecking.Checker (runTypechecking)
-import Language.Bonzai.Backend.TypeErasure.Conversion (eraseTypes)
-import Language.Bonzai.Backend.Closure.Conversion (runClosureConversion)
-import Language.Bonzai.Backend.LLIR.Conversion (runLLIRConversion, includeLocations)
-import Language.Bonzai.Backend.Closure.Hoisting (runClosureHoisting)
-import Language.Bonzai.Backend.ANF.Conversion (runANFConversion)
-import Language.Bonzai.Backend.Bytecode.Conversion (runBytecodeConversion)
-import Language.Bonzai.Backend.Bytecode.Serialize (runSerializer)
+import Language.Bonzai.Backend.TypeConversion.Conversion (runTypeConversion)
+import Language.Bonzai.Backend.TypeConversion.Actor (runActorConversion)
 
 import System.FilePath
 import System.Directory
 import Options.Applicative
+import Language.Bonzai.Backend.Closure.Typed (runTypedClosureConversion)
+import Control.Color (printText)
+import Language.Bonzai.Backend.Monomorphization.Conversion (runMonomorphization)
+import Language.Bonzai.Backend.ANF.Typed (runANFConversion)
+import Language.Bonzai.Backend.Closure.HoistTyped (runTypedClosureHoisting)
+import Language.Bonzai.Backend.CLang.Generation (runCLangGeneration, order)
+import Language.Bonzai.Backend.CLang.CFG (runCFGConversion)
 
 type Typecheck = Bool
 type IncludeLocations = Bool
@@ -61,23 +63,47 @@ buildProgram fp = do
 
     handle typedAST $ \tlir -> do
       ppBuild ("Compiling the program" :: String)
-      let mlir = eraseTypes tlir
+      tmlir <- runTypeConversion tlir
+      tmlir' <- runActorConversion tmlir
 
-      closureConverted <- runClosureConversion mlir
-      hoistedAST <- runClosureHoisting closureConverted
+      -- mapM_ printText tmlir'
 
+      monormophized <- runMonomorphization tmlir'
+      closureConverted <- runTypedClosureConversion monormophized
+      hoistedAST <- runTypedClosureHoisting closureConverted
       anfAST <- runANFConversion hoistedAST
 
-      (llir, cs, gs) <- runLLIRConversion anfAST
-      bytecode <- runBytecodeConversion gs llir
+      mapM_ printText tmlir'
 
-      let serialized = runSerializer bytecode cs
+      clang <- runCLangGeneration anfAST
+      cfgd <- order <$> runCFGConversion clang
 
-      let outputFile = fp <.> "bin"
+      unlessM (doesDirectoryExist (folder </> "output")) $ 
+        createDirectory (folder </> "output")
 
-      writeFileLBS outputFile serialized
+      copyFile "output/actor.c" (folder </> "output" </> "actor.c")
+      copyFile "output/actor.h" (folder </> "output" </> "actor.h")
 
-      void . ppSuccess $ "Compiled successfully to " <> outputFile
+      let content = "#include \"output/actor.h\"\n" <> toText cfgd
+
+      -- mapM_ printText cfgd
+      writeFileText (fp -<.> "c") content
+
+      -- closureConverted <- runClosureConversion tmlir
+      -- hoistedAST <- runClosureHoisting closureConverted
+
+      -- anfAST <- runANFConversion hoistedAST
+
+      -- (llir, cs, gs) <- runLLIRConversion anfAST
+      -- bytecode <- runBytecodeConversion gs llir
+
+      -- let serialized = runSerializer bytecode cs
+
+      -- let outputFile = fp <.> "bin"
+
+      -- writeFileLBS outputFile serialized
+
+      -- void . ppSuccess $ "Compiled successfully to " <> outputFile
 
 buildProgramFromContent :: String -> IO ()
 buildProgramFromContent content = do
@@ -110,9 +136,9 @@ main = do
   cli <- execParser $ info (parseCLI <**> helper) fullDesc
 
   case cli of
-    Build fp False loc -> do
-      writeIORef includeLocations loc
+    Build fp False _ -> do
+      -- writeIORef includeLocations loc
       buildProgram fp
-    Build content True loc -> do
-      writeIORef includeLocations loc
+    Build content True _ -> do
+      -- writeIORef includeLocations loc
       buildProgramFromContent content
