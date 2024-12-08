@@ -64,7 +64,9 @@ library
         Language.Bonzai.Syntax.HLIR
         Language.Bonzai.Syntax.MLIR
         Language.Bonzai.Syntax.LLIR
+        Language.Bonzai.Syntax.TMLIR
         Language.Bonzai.Syntax.Bytecode
+        Language.Bonzai.Syntax.CLang
 
         Control.Monad.Parser
         Control.Monad.Result
@@ -82,13 +84,26 @@ library
         Language.Bonzai.Frontend.Typechecking.Monad
         Language.Bonzai.Frontend.Typechecking.Unification
 
+        -- Untyped conversion
         Language.Bonzai.Backend.TypeErasure.Conversion
+
+        -- Typed conversion
+        Language.Bonzai.Backend.TypeConversion.Conversion
+        Language.Bonzai.Backend.TypeConversion.Actor
 
         Language.Bonzai.Backend.Closure.Conversion
         Language.Bonzai.Backend.Closure.Hoisting
         Language.Bonzai.Backend.Closure.Free
+        Language.Bonzai.Backend.Closure.Typed
+        Language.Bonzai.Backend.Closure.HoistTyped
+
+        Language.Bonzai.Backend.Monomorphization.Conversion
 
         Language.Bonzai.Backend.ANF.Conversion
+        Language.Bonzai.Backend.ANF.Typed
+
+        Language.Bonzai.Backend.CLang.Generation
+        Language.Bonzai.Backend.CLang.CFG
 
         Language.Bonzai.Backend.LLIR.Conversion
         Language.Bonzai.Backend.LLIR.Free
