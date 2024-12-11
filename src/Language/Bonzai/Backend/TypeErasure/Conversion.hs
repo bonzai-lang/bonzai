@@ -35,7 +35,8 @@ convert (HLIR.MkExprMatch e _ cs _) = do
   MLIR.MkExprUnpack "scrut" e' (createIfs cases')
 convert (HLIR.MkExprUnwrapLive e _) = MLIR.MkExprApplication (convert e) []
 convert (HLIR.MkExprWrapLive e _) = MLIR.MkExprLambda [] (convert e)
-convert _ = compilerError "unimplemented"
+convert (HLIR.MkExprMut e _) = MLIR.MkExprMut (convert e)
+convert _ = compilerError "impossible"
 
 createFunction :: Text -> HLIR.TLIR "data" -> MLIR.MLIR "expression"
 createFunction typeName (HLIR.MkDataConstructor name args) = do

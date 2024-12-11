@@ -109,10 +109,8 @@ convert (MLIR.MkExprApplication f args) = do
       pure $ MLIR.MkExprUnpack name f' call
 convert (MLIR.MkExprLet n e) | isVariable e = do
   pure $ MLIR.MkExprLet n e
-convert (MLIR.MkExprMut n e) | isVariable e = do
-  pure $ MLIR.MkExprMut n e
 convert (MLIR.MkExprLet x e) = MLIR.MkExprLet x <$> convert e
-convert (MLIR.MkExprMut x e) = MLIR.MkExprMut x <$> convert e
+convert (MLIR.MkExprMut e) = MLIR.MkExprMut <$> convert e
 convert (MLIR.MkExprList xs) = MLIR.MkExprList <$> mapM convert xs
 convert (MLIR.MkExprTernary c t e) = MLIR.MkExprTernary <$> convert c <*> convert t <*> convert e
 convert (MLIR.MkExprUpdate u e) = MLIR.MkExprUpdate <$> convertUpdate u <*> convert e
@@ -245,23 +243,11 @@ convertToplevel (MLIR.MkExprUpdate u e) | isLambda e = do
       body' <- convert body
       pure $ MLIR.MkExprUpdate u (MLIR.MkExprLambda args body')
     _ -> compilerError "expected lambda"
-convertToplevel (MLIR.MkExprMut x e) = do
-  modifyIORef' globals (Map.insert x (getArity e))
-
-  MLIR.MkExprMut x <$> if isLambda e
-    then case getLambda e of
-      MLIR.MkExprLambda args body -> do
-        body' <- convert body
-        pure $ MLIR.MkExprLambda args body'
-      _ -> compilerError "expected lambda"
-    else convert e
 convertToplevel (MLIR.MkExprLoc p e) = MLIR.MkExprLoc p <$> convertToplevel e
 convertToplevel e = convert e
 
 analyzeProgram :: MonadIO m => MLIR.Expression -> m ()
 analyzeProgram (MLIR.MkExprLet x e) = do
-  modifyIORef' globals (Map.insert x (getArity e))
-analyzeProgram (MLIR.MkExprMut x e) = do
   modifyIORef' globals (Map.insert x (getArity e))
 analyzeProgram (MLIR.MkExprLoc _ e) = analyzeProgram e
 analyzeProgram (MLIR.MkExprNative ann ty) = do

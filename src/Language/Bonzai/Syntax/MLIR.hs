@@ -47,7 +47,7 @@ data Expression
   | MkExprNative (Annotation [Text]) Ty.Type
   | MkExprIndex Expression Expression
   | MkExprUnpack Text Expression Expression
-  | MkExprMut Text Expression
+  | MkExprMut Expression
   | MkExprLoc Position Expression
   | MkExprWhile Expression Expression
   | MkExprSpecial
@@ -85,7 +85,7 @@ instance ToText Expression where
   toText (MkExprNative ann ty) = T.concat ["native ", toText ann.name, "<", T.intercalate ", " ann.value, "> ", toText ty]
   toText (MkExprIndex e e') = T.concat [toText e, "[", toText e', "]"]
   toText (MkExprUnpack a e e') = T.concat ["let ", a, " = ", toText e, " in ", toText e']
-  toText (MkExprMut a e) = T.concat ["mut ", a, " = ", toText e]
+  toText (MkExprMut e) = T.concat ["mut ", toText e]
   toText (MkExprLoc _ e) = toText e
   toText (MkExprWhile c e) = T.concat ["while ", toText c, " { ", toText e, " }"]
   toText MkExprSpecial = "<special>"

@@ -66,7 +66,7 @@ instance Free MLIR.Expression where
   free (MLIR.MkExprTernary c t e) = free c <> free t <> free e
   free (MLIR.MkExprUpdate u e) = free u <> free e
   free (MLIR.MkExprLet a e) = free e Set.\\ Set.singleton a
-  free (MLIR.MkExprMut a e) = free e Set.\\ Set.singleton a
+  free (MLIR.MkExprMut e) = free e
   free (MLIR.MkExprBlock es) = freeBlock es
     where
       freeBlock :: [MLIR.Expression] -> Set Text
@@ -102,7 +102,7 @@ instance Substitutable MLIR.Expression MLIR.Expression where
   substitute (a, e) (MLIR.MkExprTernary c t e') = MLIR.MkExprTernary (substitute (a, e) c) (substitute (a, e) t) (substitute (a, e) e')
   substitute (a, e) (MLIR.MkExprUpdate u e') = MLIR.MkExprUpdate (substitute (a, e) u) (substitute (a, e) e')
   substitute (a, e) (MLIR.MkExprLet a' e') = MLIR.MkExprLet a' $ if a == a' then e' else substitute (a, e) e'
-  substitute (a, e) (MLIR.MkExprMut a' e') = MLIR.MkExprMut a' $ if a == a' then e' else substitute (a, e) e'
+  substitute (a, e) (MLIR.MkExprMut e') = MLIR.MkExprMut $ substitute (a, e) e'
   substitute (a, e) (MLIR.MkExprBlock es) = MLIR.MkExprBlock $ map (substitute (a, e)) es
   substitute (a, e) (MLIR.MkExprEvent es) = MLIR.MkExprEvent $ map (substitute (a, e)) es
   substitute (a, e) (MLIR.MkExprOn ev as e') = MLIR.MkExprOn ev as $ if a `elem` as then e' else substitute (a, e) e'
