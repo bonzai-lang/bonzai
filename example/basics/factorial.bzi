@@ -1,5 +1,5 @@
 interface Factorial {
-  fn factorial(self: Factorial, n: int)
+  fn factorial(self: actor Factorial, n: int)
 }
 
 require "std:io"

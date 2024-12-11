@@ -3,7 +3,7 @@ require "std:math"
 require "std:io"
 
 interface Loopable {
-  fn loop(self: Loopable, i: int)
+  fn loop(self: actor Loopable, i: int)
 }
 
 fn Loop(msg: string) => actor < Loopable {
