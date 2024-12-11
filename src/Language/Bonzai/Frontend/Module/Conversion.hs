@@ -110,7 +110,7 @@ resolve path isPublic = do
     Just Visiting -> throw (CyclicModuleDependency newPath [])
     Just Visited -> do
       case Map.lookup newModuleName st.resolved of
-        Just m -> pure m
+        Just m -> pure m { public = isPublic }
         Nothing -> throw (ModuleNotFound newPath [])
     _ -> do
       -- Mark the module as being visited
@@ -151,7 +151,7 @@ resolve path isPublic = do
               }
           modifyIORef' resultState (<> ast)
 
-          pure moduleUnit { imports = Set.insert m' imports }
+          pure moduleUnit { imports = m'.imports }
 
 getPublicVariables :: [HLIR.HLIR "expression"] -> Set Text
 getPublicVariables = foldl' getPublicVariables' mempty
@@ -323,5 +323,6 @@ removeRequires = filter (not . isRequire)
  where
   isRequire :: HLIR.HLIR "expression" -> Bool
   isRequire (HLIR.MkExprRequire _ _) = True
+  isRequire (HLIR.MkExprPublic e) = isRequire e
   isRequire (HLIR.MkExprLoc e _) = isRequire e
   isRequire _ = False
