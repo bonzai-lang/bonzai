@@ -1,20 +1,18 @@
 module Main where
-import Language.Bonzai.Frontend.Module.Conversion
 import Control.Monad.Result
-import Language.Bonzai.Frontend.Typechecking.Checker (runTypechecking)
-import Language.Bonzai.Backend.TypeConversion.Conversion (runTypeConversion)
-import Language.Bonzai.Backend.TypeConversion.Actor (runActorConversion)
-
 import System.FilePath
 import System.Directory
 import Options.Applicative
-import Language.Bonzai.Backend.Closure.Typed (runTypedClosureConversion)
-import Control.Color (printText)
-import Language.Bonzai.Backend.Monomorphization.Conversion (runMonomorphization)
-import Language.Bonzai.Backend.ANF.Typed (runANFConversion)
-import Language.Bonzai.Backend.Closure.HoistTyped (runTypedClosureHoisting)
-import Language.Bonzai.Backend.CLang.Generation (runCLangGeneration, order)
-import Language.Bonzai.Backend.CLang.CFG (runCFGConversion)
+
+import Language.Bonzai.Frontend.Module.Conversion
+import Language.Bonzai.Frontend.Typechecking.Checker (runTypechecking)
+import Language.Bonzai.Backend.Closure.Conversion (runClosureConversion)
+import Language.Bonzai.Backend.Closure.Hoisting (runClosureHoisting)
+import Language.Bonzai.Backend.LLIR.Conversion (runLLIRConversion)
+import Language.Bonzai.Backend.Bytecode.Conversion (runBytecodeConversion)
+import Language.Bonzai.Backend.Bytecode.Serialize (runSerializer)
+import Language.Bonzai.Backend.TypeErasure.Conversion (eraseTypes)
+import Language.Bonzai.Backend.ANF.Conversion (runANFConversion)
 
 type Typecheck = Bool
 type IncludeLocations = Bool
@@ -63,47 +61,23 @@ buildProgram fp = do
 
     handle typedAST $ \tlir -> do
       ppBuild ("Compiling the program" :: String)
-      tmlir <- runTypeConversion tlir
-      tmlir' <- runActorConversion tmlir
+      let mlir = eraseTypes tlir
 
-      -- mapM_ printText tmlir'
+      closureConverted <- runClosureConversion mlir
+      hoistedAST <- runClosureHoisting closureConverted
 
-      monormophized <- runMonomorphization tmlir'
-      closureConverted <- runTypedClosureConversion monormophized
-      hoistedAST <- runTypedClosureHoisting closureConverted
       anfAST <- runANFConversion hoistedAST
 
-      mapM_ printText tmlir'
+      (llir, cs, gs) <- runLLIRConversion anfAST
+      bytecode <- runBytecodeConversion gs llir
 
-      clang <- runCLangGeneration anfAST
-      cfgd <- order <$> runCFGConversion clang
+      let serialized = runSerializer bytecode cs
 
-      unlessM (doesDirectoryExist (folder </> "output")) $ 
-        createDirectory (folder </> "output")
+      let outputFile = fp <.> "bin"
 
-      copyFile "output/actor.c" (folder </> "output" </> "actor.c")
-      copyFile "output/actor.h" (folder </> "output" </> "actor.h")
+      writeFileLBS outputFile serialized
 
-      let content = "#include \"output/actor.h\"\n" <> toText cfgd
-
-      -- mapM_ printText cfgd
-      writeFileText (fp -<.> "c") content
-
-      -- closureConverted <- runClosureConversion tmlir
-      -- hoistedAST <- runClosureHoisting closureConverted
-
-      -- anfAST <- runANFConversion hoistedAST
-
-      -- (llir, cs, gs) <- runLLIRConversion anfAST
-      -- bytecode <- runBytecodeConversion gs llir
-
-      -- let serialized = runSerializer bytecode cs
-
-      -- let outputFile = fp <.> "bin"
-
-      -- writeFileLBS outputFile serialized
-
-      -- void . ppSuccess $ "Compiled successfully to " <> outputFile
+      void . ppSuccess $ "Compiled successfully to " <> outputFile
 
 buildProgramFromContent :: String -> IO ()
 buildProgramFromContent content = do
