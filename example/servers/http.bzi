@@ -1,4 +1,4 @@
-require "std:http"
+require "std:http": HTTPServer, send_buffer
 require "std:io"
 require "std:datatypes/string"
 require "std:math"
@@ -7,7 +7,8 @@ let port = 8000
 let server = spawn HTTPServer(port)
 
 server->listen(fn(req) => {
-  req.respondText("text/html", "<h1>Hello, world!</h1>")
+  req.send_buffer("Hello, world!")
 })
+
 
 print("Server running on port $port")
