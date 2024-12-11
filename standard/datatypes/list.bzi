@@ -1,7 +1,7 @@
 require "std:math"
 
 pub extern fn length<A>(xs: list<A>): int
-extern fn sliceFrom<A>(xs: list<A>, i: int): list<A>
+pub extern fn sliceFrom<A>(xs: list<A>, i: int): list<A>
 
 pub fn List::elem<A>(x: A, xs: list<A>): bool =>
   match xs {
