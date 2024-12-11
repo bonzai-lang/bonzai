@@ -67,6 +67,7 @@ typedef enum {
   TYPE_EVENT,
   TYPE_FRAME,
   TYPE_EVENT_ON,
+  TYPE_NATIVE
 } ValueType;
 
 #define GET_PTR(x) ((HeapValue*)((x) & MASK_PAYLOAD_PTR))
@@ -77,7 +78,7 @@ typedef enum {
 #define GET_INT(x) ((x) & MASK_PAYLOAD_INT)
 #define GET_FLOAT(x) (*(double*)(&(x)))
 #define GET_ADDRESS(x) GET_INT(x)
-#define GET_NATIVE(x) GET_STRING(x)
+#define GET_NATIVE(x) GET_PTR(x)->as_native
 #define GET_NTH_ELEMENT(x, n) ((x >> (n * 16)) & MASK_PAYLOAD_INT)
 
 typedef struct Message {
@@ -132,6 +133,11 @@ struct EventOn {
   Value func;
 };
 
+struct Native {
+  char* name;
+  int addr;
+};
+
 // Container type for values
 typedef struct HeapValue {
   ValueType type;
@@ -146,6 +152,7 @@ typedef struct HeapValue {
     struct Event as_event;
     struct EventOn as_event_on;
     Frame as_frame;
+    struct Native as_native;
   };
 } HeapValue;
 
@@ -165,6 +172,7 @@ Value MAKE_LIST(struct Module* mod, Value* x, uint32_t len);
 Value MAKE_EVENT(struct Module* mod, uint32_t ons_count, uint32_t ipc);
 Value MAKE_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp);
 Value MAKE_EVENT_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int function_ipc);
+Value MAKE_NATIVE(struct Module* mod, char* name, int addr);
 Value MAKE_EVENT_ON(struct Module* mod, int id, Value func);
 Value MAKE_STRING_NON_GC(struct Module* mod, char* x);
 void gc(struct Module* vm);
@@ -173,7 +181,6 @@ HeapValue* allocate(struct Module* mod, ValueType type);
 
 #define MAKE_SPECIAL() kNull
 #define MAKE_ADDRESS(x) MAKE_INTEGER(x)
-#define MAKE_NATIVE(x) MAKE_STRING(x, strlen(x))
 
 ValueType get_type(Value value);
 char* type_of(Value value);

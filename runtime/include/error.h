@@ -18,7 +18,8 @@
         module->latest_position[0],  \
         module->latest_position[1]); \
     } \
-    printf("   %sin %s:%d", BLK, __func__, __LINE__); \
+    printf("   %sin %s:%d\n", BLK, __func__, __LINE__); \
+    printf("   %sat IPC %d", BLK, module->pc); \
     printf("\n");                            \
     exit(EXIT_FAILURE);                      \
   } while (0);
@@ -35,7 +36,8 @@
         module->latest_position[0],  \
         module->latest_position[1]); \
     } \
-    printf("  %s- in %s:%d", BLK, __func__, __LINE__); \
+    printf("  %s- in %s:%d\n", BLK, __func__, __LINE__); \
+    printf("  %s- at IPC %d", BLK, module->pc); \
     printf("\n");        \
     exit(EXIT_FAILURE);  \
   } while (0);

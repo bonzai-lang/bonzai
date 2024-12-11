@@ -47,9 +47,11 @@ typedef struct Module {
   
   Position latest_position;
   const char* file;
+
+  void** native_handles;
 } Module;
 
-typedef Value (*Native)(struct Module *m, Value *args, int argc);
+typedef Value (*NativeFunction)(struct Module *m, Value *args, int argc);
 
 Frame pop_frame(Module *mod);
 Frame pop_event_frame(Module* mod);

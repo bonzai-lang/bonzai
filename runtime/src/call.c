@@ -8,6 +8,8 @@
 void op_call(Module *module, Value callee, int32_t argc) {
   ASSERT_FMT(module, module->callstack < MAX_FRAMES, "Call stack overflow, reached %d", module->callstack);
 
+  ASSERT_TYPE(module, "op_call", callee, TYPE_FUNCTION);
+
   int16_t ipc = (int16_t) (callee & MASK_PAYLOAD_INT);
   int16_t local_space = (int16_t) ((callee >> 16) & MASK_PAYLOAD_INT);
   int32_t old_sp = module->stack->stack_pointer - argc;
@@ -16,23 +18,28 @@ void op_call(Module *module, Value callee, int32_t argc) {
 
   int32_t new_pc = module->pc + 5;
 
-  module->gc_enabled = false;
-  Value frame = MAKE_FRAME(module, new_pc, old_sp, module->base_pointer);
-  module->gc_enabled = true;
-  stack_push(module, frame);
+  stack_push(module, MAKE_INTEGER(new_pc));
+  stack_push(module, MAKE_INTEGER(old_sp));
+  stack_push(module, MAKE_INTEGER(module->base_pointer));
 
-  module->base_pointer = module->stack->stack_pointer - 1;
+  module->base_pointer = module->stack->stack_pointer - 3;
   module->callstack++;
 
   module->pc = ipc;
 }
 
-void* find_function(Module* module, char* callee) {
+void* find_function(Module* module, struct Native callee) {
+  if (module->native_handles != NULL && module->native_handles[callee.addr] != NULL) {
+    return module->native_handles[callee.addr];
+  }
+
   for (size_t i = 0; i < module->num_handles; i++) {
     DLL lib = module->handles[i];
-    void* addr = get_proc_address(lib, callee);
+    void* addr = get_proc_address(lib, callee.name);
     
     if (addr == NULL) continue;
+
+    module->native_handles[callee.addr] = addr;
 
     return addr;
   }
@@ -41,8 +48,9 @@ void* find_function(Module* module, char* callee) {
 }
 
 void op_native_call(Module *module, Value callee, int32_t argc) {
-  ASSERT_TYPE(module, "op_native_call", callee, TYPE_STRING);
-  char* fun = GET_NATIVE(callee);
+  ASSERT_TYPE(module, "op_native_call", callee, TYPE_NATIVE);
+  struct Native fun = GET_NATIVE(callee);
+
 
   Value* args = malloc(sizeof(Value) * argc);
 
@@ -52,10 +60,10 @@ void op_native_call(Module *module, Value callee, int32_t argc) {
     args[i] = stack_pop(module);
   }
 
-  Native handler = find_function(module, fun);
+  NativeFunction handler = find_function(module, fun);
 
   if (handler == NULL) {
-    THROW_FMT(module, "Function %s not found", fun);
+    THROW_FMT(module, "Function %s not found", fun.name);
   }
 
   Value ret = handler(module, args, argc);
