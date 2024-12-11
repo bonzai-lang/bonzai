@@ -13,6 +13,14 @@ parseType =
 
       pure $ tys HLIR.:->: ret,
 
+    do
+      void $ Lex.reserved "actor"
+      HLIR.MkTyActor <$> parseType,
+
+    do
+      void $ Lex.reserved "mut"
+      HLIR.MkTyMutable <$> parseType,
+
     Lex.parens $ do
       x <- parseType
       void $ Lex.reserved ","

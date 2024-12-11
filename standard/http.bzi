@@ -74,7 +74,7 @@ interface HTTPWrapper {
   fn close()
 }
 
-fn HTTPServer(port: int) => {
+pub fn HTTPServer(port: int) => {
   let http = start_http_server(port)
 
   actor < HTTPWrapper {

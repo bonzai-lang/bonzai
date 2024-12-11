@@ -54,6 +54,7 @@ void *actor_run(void *arg) {
   new_module->argv = module->argv;
   new_module->handles = module->handles;
   new_module->num_handles = module->num_handles;
+  new_module->native_handles = module->native_handles;
   pthread_mutex_unlock(&module->module_mutex);
   new_module->callstack = 1;
 

@@ -43,7 +43,7 @@ parseInterpolatedString = do
   pure $ combineCharsIntoString parts
   where
     toString' :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
-    toString' x = HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "toString" Nothing)) [x]
+    toString' x = HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "toString" Nothing)) [x] Nothing
 
     buildString :: [Char] -> HLIR.HLIR "expression"
     buildString [] = HLIR.MkExprLiteral (HLIR.MkLitString "")
@@ -54,10 +54,14 @@ parseInterpolatedString = do
       let var' = toString' $ HLIR.MkExprVariable (HLIR.MkAnnotation (Text.pack (x:var)) Nothing)
 
       HLIR.MkExprBinary "+" var' (buildString rest)
-    buildString (x:xs) = HLIR.MkExprBinary "+" (HLIR.MkExprString (Text.singleton x)) (buildString xs)
+    buildString (x:xs) = do
+      let (str, rest) = span (/= '$') xs
+      let str' = HLIR.MkExprLiteral (HLIR.MkLitString (Text.pack (x:str)))
+
+      HLIR.MkExprBinary "+" str' (buildString rest)
 
     combineCharsIntoString :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
-    combineCharsIntoString (HLIR.MkExprBinary "+" x (HLIR.MkExprLiteral (HLIR.MkLitString ""))) = combineCharsIntoString x 
+    combineCharsIntoString (HLIR.MkExprBinary "+" x (HLIR.MkExprLiteral (HLIR.MkLitString ""))) = combineCharsIntoString x
     combineCharsIntoString (HLIR.MkExprBinary "+" (HLIR.MkExprLiteral (HLIR.MkLitString "")) x) = combineCharsIntoString x
     combineCharsIntoString (HLIR.MkExprBinary "+" (HLIR.MkExprLiteral (HLIR.MkLitString a)) (HLIR.MkExprLiteral (HLIR.MkLitString b))) =
       HLIR.MkExprLiteral (HLIR.MkLitString (a <> b))
@@ -81,7 +85,7 @@ parseTernary = localize $ do
 
   void $ Lex.reserved "else"
 
-  HLIR.MkExprTernary cond then' <$> parseExpression
+  HLIR.MkExprTernary cond then' <$> parseExpression <*> pure Nothing
 
 parseList :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseList = localize $ do
@@ -104,6 +108,11 @@ parseExtern = localize $ do
   let funTy = map (.value) args HLIR.:->: ret
 
   pure $ HLIR.MkExprNative (HLIR.MkAnnotation name gens) funTy
+
+parsePublic :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parsePublic = localize $ do
+  void $ Lex.reserved "pub"
+  HLIR.MkExprPublic <$> parseToplevel
 
 parseVariable :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseVariable = localize $ do
@@ -133,7 +142,25 @@ parseMut = localize $ do
   name <- Lex.identifier <|> Lex.parens Lex.operator
   void $ Lex.reserved "="
 
-  HLIR.MkExprMut (HLIR.MkAnnotation name Nothing) <$> parseExpression
+  HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing) . (`HLIR.MkExprMut` Nothing) <$> parseExpression
+
+parseMutExpr :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseMutExpr = localize $ do
+  void $ Lex.reserved "mut"
+
+  HLIR.MkExprMut <$> parseExpression <*> pure Nothing
+
+parseDirectData :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseDirectData = localize $ do
+  void $ Lex.reserved "type"
+  name <- Lex.identifier
+  gens <- P.option [] $ Lex.angles (P.sepBy Lex.identifier Lex.comma)
+
+  params <- P.option [] $ Lex.parens (P.sepBy (parseAnnotation' Typ.parseType) Lex.comma)
+
+  pure $ HLIR.MkExprData
+    (HLIR.MkAnnotation name gens)
+    [HLIR.MkDataConstructor name (map (.value) params)]
 
 parseDatatype :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseDatatype = localize $ do
@@ -181,7 +208,7 @@ parseMatch = localize $ do
   cases <- P.some parseCase
   void $ Lex.symbol "}"
 
-  pure $ HLIR.MkExprMatch expr cases
+  pure $ HLIR.MkExprMatch expr Nothing cases Nothing
 
   where
     parseCase :: MonadIO m => P.Parser m (HLIR.HLIR "pattern", HLIR.HLIR "expression", HLIR.Position)
@@ -203,7 +230,7 @@ parseMatch = localize $ do
           pats <- P.sepBy parsePattern Lex.comma
           slice <- P.optional (localize $ Lex.symbol ".." *> parsePattern)
 
-          pure (HLIR.MkPatList pats slice),
+          pure (HLIR.MkPatList pats slice Nothing),
         P.try $ HLIR.MkPatConstructor <$> Lex.identifier <*> Lex.parens (P.sepBy1 parsePattern Lex.comma),
         HLIR.MkPatLiteral <$> Lex.lexeme (P.choice [Lit.parseLiteral, HLIR.MkLitString <$> Lit.parseString]),
         HLIR.MkPatWildcard <$ Lex.symbol "_",
@@ -236,7 +263,7 @@ parseWhile = localize $ do
   body <- P.many parseExpression
   void $ Lex.symbol "}"
 
-  pure $ HLIR.MkExprWhile cond (HLIR.MkExprBlock body)
+  pure $ HLIR.MkExprWhile cond (HLIR.MkExprBlock body Nothing)
 
 parseBlock :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseBlock = localize $ do
@@ -244,7 +271,7 @@ parseBlock = localize $ do
   exprs <- P.many parseExpression
   void $ Lex.symbol "}"
 
-  pure $ HLIR.MkExprBlock exprs
+  pure $ HLIR.MkExprBlock exprs Nothing
 
 parseFunction :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseFunction = localize $ do
@@ -311,7 +338,7 @@ parseMap = do
   xs <- P.string "#{" *> Lex.scn *> P.sepBy parseMapPair Lex.comma <* Lex.symbol "}"
 
   let mapVar = HLIR.MkExprVariable (HLIR.MkAnnotation "Map" Nothing)
-  pure $ HLIR.MkExprApplication mapVar [HLIR.MkExprList xs]
+  pure $ HLIR.MkExprApplication mapVar [HLIR.MkExprList xs] Nothing
 
   where
     parseMapPair :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
@@ -321,14 +348,18 @@ parseMap = do
           parseInterpolatedString
         ]
       void $ Lex.symbol ":"
-      
+
       HLIR.MkExprTuple key <$> parseExpression
 
 parseRequire :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseRequire = localize $ do
   void $ Lex.reserved "require"
 
-  HLIR.MkExprRequire <$> Lex.lexeme Lit.parseString
+  path <- Lex.lexeme Lit.parseString
+
+  vars <- P.option [] $ Lex.symbol ":" *> P.sepBy1 Lex.identifier Lex.comma
+
+  pure $ HLIR.MkExprRequire path (fromList vars)
 
 parseTerm :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseTerm =
@@ -341,7 +372,8 @@ parseTerm =
     parseLambda,
     parseLet,
     parseLive,
-    parseMut,
+    P.try parseMut,
+    parseMutExpr,
     parseMatch,
     parseTernary,
     parseLiteral,
@@ -361,14 +393,14 @@ parseExpression = localize $ P.makeExprParser parseTerm table
         [
           P.Postfix . Lex.makeUnaryOp $ do
             args <- Lex.parens (P.sepBy parseExpression Lex.comma)
-            pure $ \e -> HLIR.MkExprApplication e args
+            pure $ \e -> HLIR.MkExprApplication e args Nothing
         ],
         [
             P.Postfix . Lex.makeUnaryOp $ do
               field <- P.char '.' *> Lex.nonLexedID <* Lex.scn
               args <- P.option [] $ Lex.parens (P.sepBy parseExpression Lex.comma)
               let var = HLIR.MkExprVariable (HLIR.MkAnnotation field Nothing)
-              pure $ \e -> HLIR.MkExprApplication var (e:args)
+              pure $ \e -> HLIR.MkExprApplication var (e:args) Nothing
         ],
         [
           P.Postfix . Lex.makeUnaryOp $ do
@@ -435,7 +467,7 @@ parseExpression = localize $ P.makeExprParser parseTerm table
         [
           P.Prefix . Lex.makeUnaryOp $ do
             void $ Lex.symbol "!"
-            pure $ \a -> HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "!" Nothing)) [a]
+            pure $ \a -> HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "!" Nothing)) [a] Nothing
         ],
         [
           P.InfixL $ do
@@ -457,8 +489,10 @@ parseExpression = localize $ P.makeExprParser parseTerm table
 parseToplevel :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseToplevel =
   localize $ P.choice [
+    parsePublic,
     parseInterface,
-    parseDatatype,
+    P.try parseDatatype,
+    parseDirectData,
     parseRequire,
     parseExtern,
     parseExpression

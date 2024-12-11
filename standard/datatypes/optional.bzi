@@ -1,4 +1,4 @@
-type Optional<A> {
+pub type Optional<A> {
   Some(value: A),
   None
 }

@@ -47,10 +47,10 @@ convert (MLIR.MkExprLet a e) = do
   (e', stmts) <- convert e
   
   pure (MLIR.MkExprLet a e', stmts)
-convert (MLIR.MkExprMut a e) = do
+convert (MLIR.MkExprMut e) = do
   (e', stmts) <- convert e
   
-  pure (MLIR.MkExprMut a e', stmts)
+  pure (MLIR.MkExprMut e', stmts)
 convert (MLIR.MkExprBlock es) = do
   es' <- mapM convert es
   let exprs = createBlock es'

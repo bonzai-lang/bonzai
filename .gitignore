@@ -19,3 +19,9 @@ bin
 cmake-build-debug
 cmmake-build-release
 CMakeLists.txt
+
+*.out
+
+example/output
+example/*.c
+example/*.h

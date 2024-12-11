@@ -2,7 +2,7 @@ require "std:datatypes/error"
 require "std:datatypes/list"
 require "std:math"
 
-type Tuple<A, B> {
+pub type Tuple<A, B> {
   Tuple(x: A, y: B)
 }
 
@@ -36,7 +36,7 @@ fn Tuple::swap<A, B>(self) =>
     case Tuple(x, y) => Tuple(y, x)
   }
 
-type Map<V> {
+pub type Map<V> {
   Map(entries: list<Tuple<string, V>>)
 }
 

@@ -51,7 +51,7 @@ getVar (HLIR.MkExprLoc e (start, end)) ref = do
     then getVar e ref
     else Nothing
 getVar (HLIR.MkExprLambda _ _ body) pos = getVar body pos
-getVar (HLIR.MkExprMatch e cs) pos = do
+getVar (HLIR.MkExprMatch e _ cs _) pos = do
   let (Position line col, uri) = pos
   let pos' = SourcePos
               (fromMaybe "" (uriToFilePath uri))
@@ -70,9 +70,9 @@ getVar (HLIR.MkExprMatch e cs) pos = do
     Nothing -> case catMaybes vars of
       (x:_) -> Just x
       [] -> Nothing
-getVar (HLIR.MkExprTernary c t e) pos = getVar c pos <|> getVar t pos <|> getVar e pos
-getVar (HLIR.MkExprBlock es) pos = foldr (\e acc -> getVar e pos <|> acc) Nothing es
-getVar (HLIR.MkExprApplication f args) pos =
+getVar (HLIR.MkExprTernary c t e _) pos = getVar c pos <|> getVar t pos <|> getVar e pos
+getVar (HLIR.MkExprBlock es _) pos = foldr (\e acc -> getVar e pos <|> acc) Nothing es
+getVar (HLIR.MkExprApplication f args _) pos =
   case foldr (\e acc -> getVar e pos <|> acc) Nothing args of
     Just x -> Just x
     Nothing -> getVar f pos
@@ -116,7 +116,7 @@ getVarInPattern (HLIR.MkPatLocated p (start, end)) ref = do
   if cond
     then getVarInPattern p ref
     else Nothing
-getVarInPattern (HLIR.MkPatList l sl) pos = do
+getVarInPattern (HLIR.MkPatList l sl _) pos = do
   case foldr (\p acc -> getVarInPattern p pos <|> acc) Nothing l of
     Just x -> Just x
     Nothing -> case sl of
@@ -149,23 +149,8 @@ findLets (HLIR.MkExprLet _ ann _) _ _ =
   Map.singleton (HLIR.name ann) (runIdentity $ HLIR.value ann, Nothing)
 findLets (HLIR.MkExprNative ann ty) _ _ =
   Map.singleton (HLIR.name ann) (ty, Nothing)
-findLets (HLIR.MkExprMut ann e) (pos, uri) p@(Just (start, end)) = do
-  let Position line col = pos
-  let pos' = SourcePos (fromMaybe "" (uriToFilePath uri)) (mkPos $ fromIntegral line + 1) (mkPos $ fromIntegral col + 1)
-
-  let cond = pos' >= start
-          && pos' < end
-
-  let varDef = Map.singleton (HLIR.name ann) (runIdentity $ HLIR.value ann, Nothing)
-
-  if cond
-    then findLets e (pos, uri) p <> varDef
-    else if sourceName start /= fromMaybe "" (uriToFilePath uri)
-      then varDef
-      else mempty
-findLets (HLIR.MkExprMut ann _) _ _ =
-  Map.singleton (HLIR.name ann) (runIdentity $ HLIR.value ann, Nothing)
-findLets (HLIR.MkExprLoc (HLIR.MkExprBlock es) p) pos _ =
+findLets (HLIR.MkExprMut e _) pos p = findLets e pos p 
+findLets (HLIR.MkExprLoc (HLIR.MkExprBlock es _) p) pos _ =
   foldr (\e acc -> findLets e pos (Just p) <> acc) mempty es
 findLets (HLIR.MkExprLoc e p'@(start, _)) pos p = case p of
   Just (_, end') -> findLets e pos (Just (start, end'))
@@ -185,17 +170,17 @@ findLets (HLIR.MkExprLambda args _ body) p p' = do
   let vars = Map.fromList $ map (\(HLIR.MkAnnotation name ty) -> (name, (runIdentity ty, Nothing))) args
 
   vars <> findLets body p p'
-findLets (HLIR.MkExprMatch e cs) pos p = do
+findLets (HLIR.MkExprMatch e _ cs _) pos p = do
   let vars = findLets e pos p
   let vars' = foldr (\(pat, expr, _) acc -> Map.map (, Nothing) (findLetsInPattern pat pos p) <> findLets expr pos p <> acc) mempty cs
   vars <> vars'
-findLets (HLIR.MkExprTernary c t e) pos p = do
+findLets (HLIR.MkExprTernary c t e _) pos p = do
   let vars = findLets c pos p
   let vars' = findLets t pos p
   let vars'' = findLets e pos p
   vars <> vars' <> vars''
-findLets (HLIR.MkExprBlock _) _ _ = error "Block not supported"
-findLets (HLIR.MkExprApplication f args) pos p = do
+findLets (HLIR.MkExprBlock _ _) _ _ = error "Block not supported"
+findLets (HLIR.MkExprApplication f args _) pos p = do
   let vars = findLets f pos p
   let vars' = foldr (\e acc -> findLets e pos p <> acc) mempty args
   vars <> vars'
@@ -250,7 +235,7 @@ findLetsInPattern (HLIR.MkPatLocated p (start, _)) ref (Just (_, end)) = do
   findLetsInPattern p ref (Just (start, end))
 findLetsInPattern (HLIR.MkPatVariable name ty) _ _ = Map.singleton name (runIdentity ty)
 findLetsInPattern (HLIR.MkPatLocated p _) ref p' = findLetsInPattern p ref p'
-findLetsInPattern (HLIR.MkPatList l sl) pos p' = do
+findLetsInPattern (HLIR.MkPatList l sl _) pos p' = do
   let vars = foldr (\p acc -> findLetsInPattern p pos p' <> acc) mempty l
   case sl of
     Just p -> vars <> findLetsInPattern p pos p'

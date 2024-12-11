@@ -80,10 +80,10 @@ hoist (MLIR.MkExprLet x e) = do
   (e', hoisted) <- hoist e
 
   pure (MLIR.MkExprLet x e', hoisted)
-hoist (MLIR.MkExprMut x e) = do
+hoist (MLIR.MkExprMut e) = do
   (e', hoisted) <- hoist e
 
-  pure (MLIR.MkExprMut x e', hoisted)
+  pure (MLIR.MkExprMut e', hoisted)
 hoist (MLIR.MkExprTernary c t e) = do
   (c', hoisted) <- hoist c
   (t', hoisted') <- hoist t

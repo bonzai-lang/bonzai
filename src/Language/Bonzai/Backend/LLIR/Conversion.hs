@@ -228,17 +228,10 @@ instance Assemble MLIR.Expression where
     e' <- assemble e
     pure $ e' <> u' <> LLIR.instr LLIR.Update
 
-  assemble (MLIR.MkExprMut n e) = do
+  assemble (MLIR.MkExprMut e) = do
     e' <- assemble e
 
-    gs <- readIORef globals
-    locals <- ask
-
-    if Set.member n locals then
-      pure $ e' <> LLIR.instr LLIR.MakeMutable <> LLIR.storeLocal n
-    else if Set.member n gs then
-      pure $ e' <> LLIR.instr LLIR.MakeMutable <> LLIR.storeGlobal n
-    else compilerError $ "Variable " <> n <> " not found in globals, locals or natives"
+    pure $ e' <> LLIR.instr LLIR.MakeMutable
 
   assemble (MLIR.MkExprBlock es) = assemble es
 
@@ -405,7 +398,7 @@ getOns [] = []
 getGlobals :: [MLIR.Expression] -> Set Text
 getGlobals (MLIR.MkExprFunction name _ _ : es) = Set.insert name (getGlobals es)
 getGlobals (MLIR.MkExprLet name e : xs) = Set.insert name (getGlobals (e:xs))
-getGlobals (MLIR.MkExprMut name e : xs) = Set.insert name (getGlobals (e:xs))
+getGlobals (MLIR.MkExprMut e : xs) = getGlobals (e:xs)
 getGlobals (MLIR.MkExprLoc _ e : xs) = getGlobals (e : xs)
 getGlobals (MLIR.MkExprTernary c t e : xs) = getGlobals (c : t : e : xs)
 getGlobals (MLIR.MkExprBlock es : xs) = getGlobals (es <> xs)

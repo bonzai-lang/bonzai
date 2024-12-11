@@ -1,7 +1,7 @@
 extern fn exit_with<A>(code: int): A
-extern fn print<A>(x: A)
+pub extern fn print<A>(x: A)
 extern fn panic_<A>(msg: string): A
-extern fn wait_time(time: int)
+pub extern fn wait_time(time: int)
 
-fn exit<A>(): A => exit_with(0)
-fn panic<A>(msg: string): A => panic_(msg)
+pub fn exit<A>(): A => exit_with(0)
+pub fn panic<A>(msg: string): A => panic_(msg)

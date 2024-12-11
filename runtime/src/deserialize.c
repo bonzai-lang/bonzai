@@ -101,4 +101,6 @@ void deserialize(Module *mod, FILE* file) {
   mod->instr_count = instr_count;
   mod->instrs = instrs;
   mod->constants = constants_;
+
+  mod->native_handles = calloc(constants_.size, sizeof(void*));
 }

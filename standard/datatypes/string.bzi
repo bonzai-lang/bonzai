@@ -1,12 +1,12 @@
 require "std:datatypes/list"
 require "std:math"
 
-extern fn toString<A>(x: A): string
+pub extern fn toString<A>(x: A): string
 
 extern fn explode(s: string): list<char>
 
-fn String::join(xs: list<string>, sep: string): string =>
+pub fn String::join(xs: list<string>, sep: string): string =>
   List::foldl(fn(x, acc) => if acc == "" then x else acc + sep + x, "", xs)
 
-fn String::length(s: string): int =>
+pub fn String::length(s: string): int =>
   List::length(s.explode())

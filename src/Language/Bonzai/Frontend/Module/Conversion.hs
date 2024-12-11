@@ -110,7 +110,7 @@ resolve path isPublic = do
     Just Visiting -> throw (CyclicModuleDependency newPath [])
     Just Visited -> do
       case Map.lookup newModuleName st.resolved of
-        Just m -> pure m
+        Just m -> pure m { public = isPublic }
         Nothing -> throw (ModuleNotFound newPath [])
     _ -> do
       -- Mark the module as being visited
@@ -126,24 +126,23 @@ resolve path isPublic = do
       content <- liftIO $ readFileBS newPath
       let contentAsText :: Text = decodeUtf8 content
 
-      let imports = mempty
-          variables = mempty
-          types = mempty
-          classes = mempty
-  
-      let moduleUnit = MkModuleUnit newModuleName newPath isPublic imports variables types classes
-
       cst <- P.parseBonzaiFile newPath contentAsText P.parseProgram
 
       case cst of
         Left err -> throw (ParseError err)
         Right ast -> do
+          let imports = mempty
+              variables = getPublicVariables ast
+              types = getPublicTypes ast
+              classes = mempty
 
-          modUnit <- foldlM resolveImports moduleUnit ast
+          let moduleUnit = MkModuleUnit newModuleName newPath isPublic imports variables types classes
+
+          m' <- foldlM resolveImports moduleUnit ast
 
           modifyIORef moduleState $ \st' ->
             st
-              { resolved = Map.insert newModuleName modUnit st'.resolved
+              { resolved = Map.insert newModuleName moduleUnit st'.resolved
               , visitStateModules = 
                   Map.insert 
                     (fromString newModuleName)
@@ -152,7 +151,32 @@ resolve path isPublic = do
               }
           modifyIORef' resultState (<> ast)
 
-          pure modUnit
+          pure moduleUnit { imports = m'.imports }
+
+getPublicVariables :: [HLIR.HLIR "expression"] -> Set Text
+getPublicVariables = foldl' getPublicVariables' mempty
+ where
+  getPublicVariables' :: Set Text -> HLIR.HLIR "expression" -> Set Text
+  getPublicVariables' s (HLIR.MkExprLoc e _) = getPublicVariables' s e
+  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLoc e _)) = getPublicVariables' s (HLIR.MkExprPublic e)
+  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLet _ name _)) = Set.insert name.name s
+  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLive ann _)) = Set.insert ann.name s
+  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprNative ann _)) = Set.insert ann.name s
+  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprData _ cs)) = foldl' getPublicVariablesDataConstr s cs
+  getPublicVariables' s _ = s
+
+  getPublicVariablesDataConstr :: Set Text -> HLIR.DataConstructor HLIR.Type -> Set Text
+  getPublicVariablesDataConstr s (HLIR.MkDataVariable n) = Set.insert n s
+  getPublicVariablesDataConstr s (HLIR.MkDataConstructor n _) = Set.insert n s
+
+getPublicTypes :: [HLIR.HLIR "expression"] -> Set Text
+getPublicTypes = foldl' getPublicTypes' mempty
+ where
+  getPublicTypes' :: Set Text -> HLIR.HLIR "expression" -> Set Text
+  getPublicTypes' s (HLIR.MkExprLoc e _) = getPublicTypes' s e
+  getPublicTypes' s (HLIR.MkExprPublic (HLIR.MkExprLoc e _)) = getPublicTypes' s (HLIR.MkExprPublic e)
+  getPublicTypes' s (HLIR.MkExprPublic (HLIR.MkExprData ann _)) = Set.insert ann.name s
+  getPublicTypes' s _ = s
 
 foldM' :: (Monad m) => (a -> b -> m a) -> a -> [b] -> m a
 foldM' _ z [] = return z
@@ -162,7 +186,7 @@ foldM' f z (x:xs) = do
 
 -- | Main conversion function
 resolveImports :: (MonadResolution m) => ModuleUnit -> HLIR.HLIR "expression" -> m ModuleUnit
-resolveImports m (HLIR.MkExprApplication f args) = do
+resolveImports m (HLIR.MkExprApplication f args _) = do
   m1 <- resolveImports m f
   foldM' resolveImports m1 args
 resolveImports m (HLIR.MkExprLambda args _ body) = do
@@ -181,10 +205,10 @@ resolveImports m (HLIR.MkExprLive ann expr) = do
   let m' = m {variables = Set.singleton ann.name <> variables m}
   void $ resolveImports m' expr
   pure m'
-resolveImports m (HLIR.MkExprBlock exprs) = do
+resolveImports m (HLIR.MkExprBlock exprs _) = do
   void $ foldlM resolveImports m exprs
   pure m
-resolveImports m (HLIR.MkExprTernary cond then' else') = do
+resolveImports m (HLIR.MkExprTernary cond then' else' _) = do
   m1 <- resolveImports m cond
   m2 <- resolveImports m1 then'
   resolveImports m2 else'
@@ -201,9 +225,17 @@ resolveImports m (HLIR.MkExprVariable name) = do
 resolveImports m (HLIR.MkExprInterface name _) = do
   let m' = m {types = Set.singleton name.name <> types m}
   pure m'
-resolveImports m (HLIR.MkExprRequire path) = do
+resolveImports m (HLIR.MkExprPublic (HLIR.MkExprLoc e _)) = resolveImports m (HLIR.MkExprPublic e)
+resolveImports m (HLIR.MkExprPublic (HLIR.MkExprRequire path vars)) = do
+  m' <- resolve (toString path) True
+  let m'' = if null vars then m' else m' { variables = vars }
+  pure $ m {imports = Set.insert m'' m.imports}
+resolveImports m (HLIR.MkExprRequire path vars) = do
   m' <- resolve (toString path) False
-  pure $ m {imports = Set.insert m' m.imports}
+
+  let m'' = if null vars then m' else m' { variables = vars }
+
+  pure $ m {imports = Set.insert m'' m.imports}
 resolveImports m (HLIR.MkExprUpdate u e) = do
   m1 <- resolveUpdate m u
   resolveImports m1 e
@@ -230,9 +262,7 @@ resolveImports m (HLIR.MkExprOn _ args e) = do
 resolveImports m (HLIR.MkExprSpawn e) = resolveImports m e
 resolveImports m (HLIR.MkExprList es) = foldlM resolveImports m es
 resolveImports m (HLIR.MkExprNative ann _) = pure m {variables = Set.singleton ann.name <> variables m}
-resolveImports m (HLIR.MkExprMut name e) = do
-  let m' = m {variables = Set.singleton name.name <> variables m}
-  resolveImports m' e
+resolveImports m (HLIR.MkExprMut e _) = resolveImports m e
 resolveImports m (HLIR.MkExprWhile c e) = do
   m1 <- resolveImports m c
   resolveImports m1 e
@@ -243,7 +273,7 @@ resolveImports m (HLIR.MkExprIndex e e') = do
 resolveImports m (HLIR.MkExprData ann cs) = do
   let m' = m {types = Set.singleton ann.name <> types m}
   foldM' resolveImportsDataConstr m' cs
-resolveImports m (HLIR.MkExprMatch e cs) = do
+resolveImports m (HLIR.MkExprMatch e _ cs _) = do
   void $ resolveImports m e
   mapM_ (\(p, b, _) -> do
       m' <- resolveImportsPattern m p
@@ -251,6 +281,7 @@ resolveImports m (HLIR.MkExprMatch e cs) = do
     ) cs
 
   pure m
+resolveImports m (HLIR.MkExprPublic e) = resolveImports m e
 resolveImports _ (HLIR.MkExprUnwrapLive {}) = compilerError "UnwrapLive not implemented"
 resolveImports _ (HLIR.MkExprWrapLive {}) = compilerError "WrapLive not implemented"
 
@@ -267,7 +298,7 @@ resolveImportsPattern m (HLIR.MkPatOr p p') = do
 resolveImportsPattern m (HLIR.MkPatCondition e p) = do
   m1 <- resolveImportsPattern m p
   resolveImports m1 e
-resolveImportsPattern m (HLIR.MkPatList ps slice) = do
+resolveImportsPattern m (HLIR.MkPatList ps slice _) = do
   m1 <- foldM' resolveImportsPattern m ps
   case slice of
     Just p -> resolveImportsPattern m1 p
@@ -282,15 +313,16 @@ type Depth = Int
 isVariableDefined :: Depth -> Text -> ModuleUnit -> Bool
 isVariableDefined depth v m =
   Set.member v m.variables
-    || any (isVariableDefined (depth + 1) v) getPublicImports
+    || any (isVariableDefined (depth + 1) v) getPublicImports'
  where
-  getPublicImports :: Set ModuleUnit
-  getPublicImports = Set.filter (\m' -> public m' || depth == 0) m.imports
+  getPublicImports' :: Set ModuleUnit
+  getPublicImports' = Set.filter (\m' -> public m' || depth == 0) m.imports
 
 removeRequires :: [HLIR.HLIR "expression"] -> [HLIR.HLIR "expression"]
 removeRequires = filter (not . isRequire)
  where
   isRequire :: HLIR.HLIR "expression" -> Bool
-  isRequire (HLIR.MkExprRequire _) = True
+  isRequire (HLIR.MkExprRequire _ _) = True
+  isRequire (HLIR.MkExprPublic e) = isRequire e
   isRequire (HLIR.MkExprLoc e _) = isRequire e
   isRequire _ = False

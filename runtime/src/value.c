@@ -79,7 +79,7 @@ void gc(struct Module* vm) {
   sweep(vm);
 
   vm->max_objects = vm->num_objects < INIT_OBJECTS ? INIT_OBJECTS : vm->num_objects * 2;
-  
+
   // printf("Collected %d objects, %d remaining.\n", numObjects - vm->num_objects,
   //        vm->num_objects);
 }
@@ -147,6 +147,14 @@ Value MAKE_STRING_NON_GC(struct Module* mod, char* x) {
   v->as_string = x;
   v->length = strlen(x);
   v->is_constant = true;
+
+  return MAKE_PTR(v);
+}
+
+Value MAKE_NATIVE(struct Module* mod, char* name, int addr) {
+  HeapValue* v = allocate(mod, TYPE_NATIVE);
+  v->as_native.name = name;
+  v->as_native.addr = addr;
 
   return MAKE_PTR(v);
 }
@@ -265,6 +273,8 @@ char* type_of(Value value) {
       return "frame";
     case TYPE_EVENT_ON:
       return "event_on";
+    case TYPE_NATIVE:
+      return "native";
   }
 }
 
@@ -277,6 +287,7 @@ Stack* stack_new() {
 }
 
 void stack_push(Module* mod, Value value) {
+  // printf("Pushing value %llu\n", value);
   Stack* stack = mod->stack;
   if (stack->stack_pointer >= stack->stack_capacity) {
     stack->stack_capacity *= 2;

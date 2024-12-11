@@ -132,8 +132,6 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     Value list = stack_pop(module);
     uint32_t index = i1;
 
-    // native_print(list); printf("\n");
-
     ASSERT_TYPE(module, "list_get", list, TYPE_LIST);
 
     Value* list_ptr = GET_LIST(list);
@@ -214,19 +212,13 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     ASSERT_TYPE(module, "spawn", event, TYPE_EVENT);
 
     HeapValue* ev = GET_PTR(event);
-  
-    stack_push(module, MAKE_EVENT_FRAME(
-      module, 
-      module->pc + 5, 
-      module->stack->stack_pointer, 
-      module->base_pointer, 
-      ev->as_event.ons_count, 
-      ev->as_event.ipc
-    ));
 
-    // printf("%d\n", module->spawn_pointer);
+    stack_push(module, event);
+    stack_push(module, MAKE_INTEGER(module->pc + 5));
+    stack_push(module, MAKE_INTEGER(module->stack->stack_pointer));
+    stack_push(module, MAKE_INTEGER(module->base_pointer));
 
-    module->base_pointer = module->stack->stack_pointer - 1;
+    module->base_pointer = module->stack->stack_pointer - 4;
     module->callstack++;
     module->pc = ev->as_event.ipc + 5;
     
@@ -278,7 +270,12 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
   case_load_native: {
     Value native = module->constants.values[i1];
-    stack_push(module, native);
+
+    ASSERT_TYPE(module, "load_native", native, TYPE_STRING);
+    
+    char* name = GET_STRING(native);
+    
+    stack_push(module, MAKE_NATIVE(module, name, i1));
     INCREASE_IP(module);
     goto *jmp_table[op];
   }
@@ -291,7 +288,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_return_event: {
-    Frame fr = pop_frame(module);
+    Frame fr = pop_event_frame(module);
     
     HeapValue* hp = allocate(module, TYPE_EVENT);
   
@@ -315,8 +312,6 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     stack_push(module, MAKE_PTR(hp));
     
     module->pc = fr.instruction_pointer;
-
-    // printf("Returning event, %d\n", module->pc / 5);
 
     goto *jmp_table[op];
   }

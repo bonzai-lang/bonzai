@@ -1,18 +1,18 @@
 module Main where
-import Language.Bonzai.Frontend.Module.Conversion
 import Control.Monad.Result
-import Language.Bonzai.Frontend.Typechecking.Checker (runTypechecking)
-import Language.Bonzai.Backend.TypeErasure.Conversion (eraseTypes)
-import Language.Bonzai.Backend.Closure.Conversion (runClosureConversion)
-import Language.Bonzai.Backend.LLIR.Conversion (runLLIRConversion, includeLocations)
-import Language.Bonzai.Backend.Closure.Hoisting (runClosureHoisting)
-import Language.Bonzai.Backend.ANF.Conversion (runANFConversion)
-import Language.Bonzai.Backend.Bytecode.Conversion (runBytecodeConversion)
-import Language.Bonzai.Backend.Bytecode.Serialize (runSerializer)
-
 import System.FilePath
 import System.Directory
 import Options.Applicative
+
+import Language.Bonzai.Frontend.Module.Conversion
+import Language.Bonzai.Frontend.Typechecking.Checker (runTypechecking)
+import Language.Bonzai.Backend.Closure.Conversion (runClosureConversion)
+import Language.Bonzai.Backend.Closure.Hoisting (runClosureHoisting)
+import Language.Bonzai.Backend.LLIR.Conversion (runLLIRConversion)
+import Language.Bonzai.Backend.Bytecode.Conversion (runBytecodeConversion)
+import Language.Bonzai.Backend.Bytecode.Serialize (runSerializer)
+import Language.Bonzai.Backend.TypeErasure.Conversion (eraseTypes)
+import Language.Bonzai.Backend.ANF.Conversion (runANFConversion)
 
 type Typecheck = Bool
 type IncludeLocations = Bool
@@ -110,9 +110,9 @@ main = do
   cli <- execParser $ info (parseCLI <**> helper) fullDesc
 
   case cli of
-    Build fp False loc -> do
-      writeIORef includeLocations loc
+    Build fp False _ -> do
+      -- writeIORef includeLocations loc
       buildProgram fp
-    Build content True loc -> do
-      writeIORef includeLocations loc
+    Build content True _ -> do
+      -- writeIORef includeLocations loc
       buildProgramFromContent content

@@ -21,13 +21,13 @@ instance Free MLIR.Expression where
   free res (MLIR.MkExprTernary c t e) = free res c <> free res t <> free res e
   free res (MLIR.MkExprUpdate u e) = free res u <> free res e
   free res (MLIR.MkExprLet a e) = free res e <> Set.singleton a
-  free res (MLIR.MkExprMut a e) = free res e <> Set.singleton a
+  free res (MLIR.MkExprMut e) = free res e 
   free res (MLIR.MkExprBlock es) = freeBlock res es
     where
       freeBlock :: Reserved -> [MLIR.Expression] -> Set Text
       freeBlock _ [] = mempty
       freeBlock r (MLIR.MkExprLet a e:es') = free r e <> freeBlock r es' <> Set.singleton a
-      freeBlock r (MLIR.MkExprMut a e:es') = free r e <> freeBlock r es' <> Set.singleton a
+      freeBlock r (MLIR.MkExprMut e:es') = free r e <> freeBlock r es'
       freeBlock r (MLIR.MkExprLoc _ e:es') = free r e <> freeBlock r es'
       freeBlock r (e:es') = free r e <> freeBlock r es'
   free res (MLIR.MkExprEvent es) = free res es
@@ -55,7 +55,6 @@ instance Name MLIR.Expression where
   getNames (MLIR.MkExprNative n _) = Set.singleton n.name
   getNames (MLIR.MkExprFunction {}) = mempty
   getNames (MLIR.MkExprLet n _) = Set.singleton n
-  getNames (MLIR.MkExprMut n _) = Set.singleton n
   getNames (MLIR.MkExprLoc _ e) = getNames e
   getNames _ = mempty
   

@@ -15,7 +15,7 @@
 		"postinstall": "cd client && npm install && cd ../server && npm install && cd ..",
 		"test": "sh ./scripts/e2e.sh"
 	},
-  "version": "0.0.7",
+  "version": "0.0.8",
   "engines": {
     "vscode": "^1.89.0"
   },

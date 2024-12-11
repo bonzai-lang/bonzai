@@ -11,8 +11,8 @@ extern fn performHandshake(ws: Websocket, path: string, host: string, port: int)
 
 interface Websocket {
   fn sendText(data: string)
-  fn receive(self: Websocket, callback: fn(string): unit)
-  fn receiveOnce(self: Websocket, callback: fn(string): unit)
+  fn receive(callback: fn(string): unit)
+  fn receiveOnce(callback: fn(string): unit)
   fn close()
 }
 
@@ -23,16 +23,16 @@ fn Websocket(host: string, port: int, path: string, isSecure: bool) => {
   actor < Websocket {
     on sendText(data) => sendTextFrame(ws, data)
     
-    on receive(self, callback) => {
-      let frame = receiveFrame(ws)
-      callback(frame)
-
-      self->receive(self, callback)
+    on receive(callback) => {
+      while true {
+        let frame = receiveFrame(ws)
+        callback(frame)
+      }
     }
 
     on close() => closeWebsocket(ws)
 
-    on receiveOnce(self, callback) => {
+    on receiveOnce(callback) => {
       let frame = receiveFrame(ws)
       callback(frame)
     }
