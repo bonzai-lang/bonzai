@@ -44,21 +44,24 @@ data ModuleState = MkModuleState
   }
   deriving (Show, Eq)
 
-{-# NOINLINE importStack #-}
-importStack :: IORef ImportStack
-importStack = IO.unsafePerformIO . newIORef $ []
-
+-- | Module state
+-- | Used to store the modules units, and some other information about
+-- | the modules.
 {-# NOINLINE moduleState #-}
 moduleState :: IORef ModuleState
 moduleState = IO.unsafePerformIO . newIORef $ 
   MkModuleState "" "" Map.empty [] Map.empty
 
+-- | Result state
+-- | Used to store result of the resolution, i.e. flattened resolved modules AST.
 {-# NOINLINE resultState #-}
 resultState :: IORef [HLIR.HLIR "expression"]
 resultState = IO.unsafePerformIO . newIORef $ []
 
 type MonadResolution m = (MonadIO m, MonadError Error m)
 
+-- | Get the correct path for a given path, resolving it
+-- | to the standard library if needed.
 getCorrectPath :: MonadResolution m => FilePath -> m FilePath
 getCorrectPath ('s':'t':'d':':':path) = do
   standardPath <- lookupEnv "BONZAI_PATH"
@@ -72,6 +75,7 @@ getCorrectPath path = do
   let path' = cwd </> takeFileName path <.> "bzi"
   liftIO $ makeAbsolute path'
 
+-- | Resolve a module from its content, used especially for the LSP server
 resolveContent :: MonadResolution m => Text -> m ModuleUnit
 resolveContent content = do
   let imports = mempty
@@ -90,28 +94,42 @@ resolveContent content = do
       modifyIORef' resultState (<> ast)
       pure modUnit
 
+-- | Resolve a module from its path
 resolve :: (MonadResolution m) => FilePath -> Bool -> m ModuleUnit
 resolve path isPublic = do
   st <- readIORef moduleState
+  
+  -- Get the correct path
   newPath <- getCorrectPath path
 
+  -- Update the module state
   modifyIORef moduleState $ \st' ->
     st'
       { initialPath = newPath
       , currentDirectory = takeDirectory newPath
       }
 
+  -- Get the new module name by making the path relative to the
+  -- initial path
   let newModuleName = makeRelative st.initialPath newPath
 
+  -- Checking for file existence
   b <- liftIO $ doesFileExist newPath
   unless b $ throw (ModuleNotFound newPath [])
 
   case Map.lookup (fromString newModuleName) st.visitStateModules of
+    -- If the module is already being visited then we have a cyclic
+    -- dependency, because we are trying to visit it again.
     Just Visiting -> throw (CyclicModuleDependency newPath [])
+
+    -- If the module has already been visited, then we can just return
+    -- the module unit from the resolved map.
     Just Visited -> do
       case Map.lookup newModuleName st.resolved of
         Just m -> pure m { public = isPublic }
         Nothing -> throw (ModuleNotFound newPath [])
+
+    -- If the module has not been visited yet, then we need to visit it.
     _ -> do
       -- Mark the module as being visited
       modifyIORef moduleState $ \st' ->
@@ -123,23 +141,30 @@ resolve path isPublic = do
               st'.visitStateModules 
         }
 
+      -- Read the content of the file
       content <- liftIO $ readFileBS newPath
       let contentAsText :: Text = decodeUtf8 content
 
+      -- Parse the content of the file
       cst <- P.parseBonzaiFile newPath contentAsText P.parseProgram
 
       case cst of
         Left err -> throw (ParseError err)
         Right ast -> do
+          -- Get the public variables, types, and classes
           let imports = mempty
               variables = getPublicVariables ast
               types = getPublicTypes ast
               classes = mempty
 
+          -- Create a new module unit
           let moduleUnit = MkModuleUnit newModuleName newPath isPublic imports variables types classes
 
+          -- Resolve common errors and resolve imports withing the parsed module
           m' <- foldlM resolveImports moduleUnit ast
 
+          -- Update the module state with the new module unit and with the new 
+          -- visit state
           modifyIORef moduleState $ \st' ->
             st
               { resolved = Map.insert newModuleName moduleUnit st'.resolved
@@ -149,10 +174,16 @@ resolve path isPublic = do
                     Visited
                     st'.visitStateModules
               }
+          
+          -- Update the result state with the new AST
           modifyIORef' resultState (<> ast)
 
+          -- Return the new module unit, combined with new resolved imports
           pure moduleUnit { imports = m'.imports }
 
+-- | Get the public variables from a list of expressions
+-- | This function is used to get the public variables from a list of expressions
+-- | in order to store them in the module unit.
 getPublicVariables :: [HLIR.HLIR "expression"] -> Set Text
 getPublicVariables = foldl' getPublicVariables' mempty
  where
@@ -169,6 +200,9 @@ getPublicVariables = foldl' getPublicVariables' mempty
   getPublicVariablesDataConstr s (HLIR.MkDataVariable n) = Set.insert n s
   getPublicVariablesDataConstr s (HLIR.MkDataConstructor n _) = Set.insert n s
 
+-- | Get the public types from a list of expressions
+-- | This function is used to get the public types from a list of expressions
+-- | in order to store them in the module unit.
 getPublicTypes :: [HLIR.HLIR "expression"] -> Set Text
 getPublicTypes = foldl' getPublicTypes' mempty
  where
@@ -310,6 +344,12 @@ resolveImportsDataConstr m (HLIR.MkDataConstructor n _) = pure m { variables = S
 
 type Depth = Int
 
+-- | Check if a variable is defined in a module unit
+-- | This algorithm relies on the depth of the search, and the module unit
+-- | in which we are looking for the variable.
+-- | The depth is used to limit the search to the public variables of the
+-- | module unit, and the module unit is used to search for the variable
+-- | in the imports of the module unit.
 isVariableDefined :: Depth -> Text -> ModuleUnit -> Bool
 isVariableDefined depth v m =
   Set.member v m.variables
@@ -318,6 +358,9 @@ isVariableDefined depth v m =
   getPublicImports' :: Set ModuleUnit
   getPublicImports' = Set.filter (\m' -> public m' || depth == 0) m.imports
 
+-- | Remove requires from a list of expressions
+-- | This function is used to remove requires from a list of expressions
+-- | in order to flatten the AST.
 removeRequires :: [HLIR.HLIR "expression"] -> [HLIR.HLIR "expression"]
 removeRequires = filter (not . isRequire)
  where
