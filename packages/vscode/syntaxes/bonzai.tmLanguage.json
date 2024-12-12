@@ -176,7 +176,11 @@
         {
           "name": "variable.other.readwrite.bonzai",
           "match": "\\$[a-zA-Z_][a-zA-Z0-9_]*"
-        }
+        },
+				{
+					"name": "string.quoted.double.bonzai",
+					"match": "\\$\\$[a-zA-Z_][a-zA-Z0-9_]*"
+				}
       ]
     },
 
