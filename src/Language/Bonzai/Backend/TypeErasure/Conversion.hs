@@ -7,6 +7,39 @@ import qualified Data.Map as Map
 import Language.Bonzai.Backend.Closure.Free (Substitutable(substitute))
 import qualified Data.List as List
 
+-- | MLIR CONVERSION
+-- |
+-- | This pass converts the HLIR to MLIR by erasing all type information.
+-- | It also converts datatypes and their constructors to functions that 
+-- | return a list of strings representing the type and constructor name.
+-- |
+-- | For example, the following datatype:
+-- |
+-- | data Maybe a = Just a | Nothing
+-- |
+-- | will be converted to the following functions:
+-- |
+-- | let Just x = [Special, "Maybe", "Just", x]
+-- | let Nothing = [Special, "Maybe", "Nothing"]
+-- |
+-- | The conversion also includes the conversion of pattern matches to if-else
+-- | expressions. This is done by converting each pattern match to a series of
+-- | if-else expressions that check the conditions of the pattern match.
+-- |
+-- | For example, the following pattern match:
+-- |
+-- | case x of
+-- |   Just y -> y
+-- |   Nothing -> 0
+-- |
+-- | will be converted to the following if-else expression:
+-- |
+-- | if x[0] == Special && x[1] == "Maybe" && x[2] == "Just"
+-- |   y
+-- | else if x[0] == Special && x[1] == "Maybe" && x[2] == "Nothing"
+-- |   0
+-- | else
+-- |   panic "non-exhaustive pattern"
 convert :: HLIR.TLIR "expression" -> MLIR.MLIR "expression"
 convert (HLIR.MkExprLiteral l) = MLIR.MkExprLiteral l
 convert (HLIR.MkExprVariable a) = MLIR.MkExprVariable a.name
@@ -38,6 +71,9 @@ convert (HLIR.MkExprWrapLive e _) = MLIR.MkExprLambda [] (convert e)
 convert (HLIR.MkExprMut e _) = MLIR.MkExprMut (convert e)
 convert _ = compilerError "impossible"
 
+-- | Create a function bsaed on a datatype constructor, the function will return a
+-- | list that starts with a special value, followed by the type name and the
+-- | constructor name. The rest of the list will be the arguments of the constructor.
 createFunction :: Text -> HLIR.TLIR "data" -> MLIR.MLIR "expression"
 createFunction typeName (HLIR.MkDataConstructor name args) = do
   let args' = ["x" <> show i | i <- [(0 :: Int) .. length args - 1]]
@@ -49,6 +85,10 @@ createFunction typeName (HLIR.MkDataVariable name) = do
 
   MLIR.MkExprLet name body
 
+-- | Create a sequence of if-else expressions based on a list that contains:
+-- | - A list of conditions
+-- | - A map of variables that need to be substituted
+-- | - The expression that needs to be evaluated
 createIfs
   :: [(([MLIR.MLIR "expression"], Map Text (MLIR.MLIR "expression")), MLIR.MLIR "expression")]
   -> MLIR.MLIR "expression"
@@ -59,11 +99,13 @@ createIfs (((conds, maps), e ): xs) = do
   MLIR.MkExprTernary cond lets (createIfs xs)
 createIfs [] = MLIR.MkExprApplication (MLIR.MkExprVariable "panic") [MLIR.MkExprLiteral (HLIR.MkLitString "non-exhaustive pattern")]
 
+-- | Create a sequence of conditions based on a list of patterns
 createFinalCondition :: [MLIR.MLIR "expression"] -> MLIR.MLIR "expression"
 createFinalCondition [] = MLIR.MkExprLiteral (MLIR.MkLitInt 1)
 createFinalCondition [x] = x
 createFinalCondition (x : xs) = MLIR.MkExprApplication (MLIR.MkExprVariable "&&") [x, createFinalCondition xs]
 
+-- | Create a sequence of let expressions based on a list of variables and expressions
 createLets
   :: [(Text, MLIR.MLIR "expression")]
   -> MLIR.MLIR "expression"
@@ -98,6 +140,9 @@ equalsTo a b = MLIR.MkExprApplication (MLIR.MkExprVariable "==") [a, b]
 sliceFrom :: MLIR.MLIR "expression" -> Integer -> MLIR.MLIR "expression"
 sliceFrom e i = MLIR.MkExprApplication (MLIR.MkExprVariable "sliceFrom") [e, MLIR.MkExprLiteral (HLIR.MkLitInt i)]
 
+-- | Create a sequence of conditions based on a pattern match
+-- | The function returns a list of conditions and a map of variables that need
+-- | to be substituted.
 createCondition
   :: MLIR.MLIR "expression"
   -> HLIR.TLIR "pattern"
