@@ -24,12 +24,18 @@ import Language.Bonzai.Syntax.Internal.Type as Ty
 import qualified Data.Text as T
 import GHC.TypeLits (Symbol)
 
+-- | UPDATE TYPE
+-- | Untyped representation of an update operation in Bonzai.
+-- | An update operation is used to update a variable, a field, or an index.
 data Update
   = MkUpdtVariable Text
   | MkUpdtField Update Text
   | MkUpdtIndex Update Expression
   deriving (Eq)
 
+-- | EXPRESSION TYPE
+-- | Untyped representation of an expression in Bonzai.
+-- | An expression is used to represent a computation in Bonzai.
 data Expression
   = MkExprLiteral Literal
   | MkExprVariable Text

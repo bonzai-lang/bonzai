@@ -37,12 +37,23 @@ import GHC.Show qualified as S
 import Data.Aeson
 import qualified Relude as BS
 
+-- | UPDATE TYPE
+-- | Update type is used to represent updates to variables, fields, and indices.
+-- | It is used to update the value of a variable, a field of a record, or an
+-- | element of a list.
 data Update f t
   = MkUpdtVariable (Annotation (f t))
   | MkUpdtField (Update f t) Text
   | MkUpdtIndex (Update f t) (Expression f t)
   deriving (Show, Generic)
 
+-- | EXPRESSION TYPE
+-- | Expression type is used to represent expressions in Bonzai. It is used to
+-- | represent literals, variables, applications, lambdas, ternaries, updates,
+-- | let bindings, blocks, actors, on blocks, send blocks, require blocks, locations,
+-- | spawns, lists, natives, interfaces, while loops, index expressions, data types,
+-- | match expressions, live expressions, unwrap live expressions, wrap live expressions,
+-- | and public expressions.
 data Expression f t
   = MkExprLiteral Literal
   | MkExprVariable (Annotation (f t))
@@ -72,11 +83,17 @@ data Expression f t
   | MkExprPublic (Expression f t)
   deriving Generic
 
+-- | DATA CONSTRUCTOR TYPE
+-- | Data constructor type is used to represent data constructors in Bonzai. It is
+-- | used to represent constructors of data types.
 data DataConstructor t
   = MkDataVariable Text
   | MkDataConstructor Text [t]
   deriving Generic
 
+-- | PATTERN TYPE
+-- | Pattern type is used to represent patterns in Bonzai. It is used to represent
+-- | patterns in match expressions.
 data Pattern f t 
   = MkPatVariable Text (f t)
   | MkPatConstructor Text [Pattern f t]
@@ -108,12 +125,18 @@ instance (FromJSON (f t), FromJSON t) => FromJSON (Pattern f t)
 instance (ToText t, ToText (f t)) => Show (Expression f t) where
   show = T.unpack . toText
 
+-- | BINARY EXPRESSION PATTERN
+-- | A pattern synonym to represent binary expressions in Bonzai.
 pattern MkExprBinary :: Text -> Expression Maybe t -> Expression Maybe t -> Expression Maybe t
 pattern MkExprBinary op a b = MkExprApplication (MkExprVariable (MkAnnotation op Nothing)) [a, b] Nothing
 
+-- | STRING EXPRESSION PATTERN
+-- | A pattern synonym to represent string expressions in Bonzai.
 pattern MkExprString :: Text -> Expression f t
 pattern MkExprString s = MkExprLiteral (MkLitString s)
 
+-- | TUPLE EXPRESSION PATTERN
+-- | A pattern synonym to represent tuple expressions in Bonzai.
 pattern MkExprTuple :: Expression Maybe t -> Expression Maybe t -> Expression Maybe t
 pattern MkExprTuple a b = MkExprApplication (MkExprVariable (MkAnnotation "Tuple" Nothing)) [a, b] Nothing
 
@@ -186,7 +209,6 @@ instance Locate (Expression f t) where
 
 instance Locate (Pattern f t) where
   locate = MkPatLocated
-
 
 instance (Eq (f t), Eq t) => Eq (Update f t) where
   MkUpdtVariable a == MkUpdtVariable b = a == b
