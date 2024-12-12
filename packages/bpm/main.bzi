@@ -1,4 +1,4 @@
-require "std:natives"
+require "std:foundation"
 
 extern fn get_args(): list<string>
 extern fn slice<A>(xs: list<A>, start: int, end: int): list<A>
@@ -18,15 +18,15 @@ if file_exists(build_file) then {
   let bonzai_path = get_env("BONZAI_PATH")
 
   execute_command_silent("bonzaic $build_file")
-  execute_command("bonzai $build_file.bin -l \$BONZAI_PATH/bindings/bin/bindings.dylib")
+  execute_command("bonzai $build_file.bin -l $$BONZAI_PATH/bindings/bin/bindings.dylib")
 } else if length(args) == 5 then {
   let bonzai_path = get_env("BONZAI_PATH")
   let build_file = cwd + "/" + args[4]
 
   if file_exists(build_file) then {
     execute_command_silent("bonzaic $build_file")
-    print("bonzai $build_file.bin -l \$BONZAI_PATH/bindings/bin/bindings.dylib")
-    execute_command("bonzai $build_file.bin -l \$BONZAI_PATH/bindings/bin/bindings.dylib")
+    print("bonzai $build_file.bin -l $$BONZAI_PATH/bindings/bin/bindings.dylib")
+    execute_command("bonzai $build_file.bin -l $$BONZAI_PATH/bindings/bin/bindings.dylib")
   } else {
     panic("No build file found in $build_file")
   }
