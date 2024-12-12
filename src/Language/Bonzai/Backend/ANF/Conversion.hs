@@ -3,6 +3,25 @@ module Language.Bonzai.Backend.ANF.Conversion where
 import qualified Language.Bonzai.Syntax.MLIR as MLIR
 import qualified GHC.IO as IO
 
+-- | ANF CONVERSION
+-- |
+-- | This pass converts the MLIR to ANF by converting all expressions to a series
+-- | of let expressions. For instance, unpack expressions are converted to let
+-- | expressions, and so on.
+-- |
+-- | The conversion is done by traversing the AST and converting each expression
+-- | to a series of let expressions. The conversion is done in a way that the
+-- | resulting AST is in A-Normal Form.
+-- |
+-- | For example, the following expression:
+-- |
+-- | let x = 1 in x + 2
+-- |
+-- | will be converted to the following expression:
+-- |
+-- | let x = 1 
+-- | let anf0 = x + 2
+-- | anf0
 {-# NOINLINE symbolCounter #-}
 symbolCounter :: IORef Int
 symbolCounter = IO.unsafePerformIO $ newIORef 0
