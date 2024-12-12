@@ -47,7 +47,7 @@ parseInterpolatedString = do
 
     buildString :: [Char] -> HLIR.HLIR "expression"
     buildString [] = HLIR.MkExprLiteral (HLIR.MkLitString "")
-    buildString ('\\':'$':xs) = HLIR.MkExprBinary "+" (HLIR.MkExprString "$") (buildString xs)
+    buildString ('$':'$':xs) = HLIR.MkExprBinary "+" (HLIR.MkExprString "$") (buildString xs)
     buildString ('$':x:xs) | Lex.isIdentCharStart (Text.singleton x) = do
       -- span the variable name
       let (var, rest) = span Lex.isIdentChar xs
