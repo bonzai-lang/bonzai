@@ -79,32 +79,25 @@ buildProgram fp = do
       mempty
       mempty
   
-  -- Running module resolution 
   moduleResult <- runExceptT $ resolve fileNameWithoutDir True
 
   handle moduleResult . const $ do
-    -- Removing require statements
     preHLIR <- removeRequires <$> readIORef resultState
 
-    -- Typechecking the AST
     typedAST <- runTypechecking preHLIR
 
     handle typedAST $ \tlir -> do
       -- Erasing types from the AST, converting it to MLIR
       let mlir = eraseTypes tlir
 
-      -- Running the closure conversion and hoisting passes
       closureConverted <- runClosureConversion mlir
       hoistedAST <- runClosureHoisting closureConverted
-      
-      -- Running the ANF conversion pass
+    
       anfAST <- runANFConversion hoistedAST
 
-      -- Running the LLIR conversion and bytecode conversion passes
       (llir, cs, gs) <- runLLIRConversion anfAST
       bytecode <- runBytecodeConversion gs llir
 
-      -- Serializing the bytecode
       let serialized = runSerializer bytecode cs
 
       -- Writing the serialized bytecode to a file
