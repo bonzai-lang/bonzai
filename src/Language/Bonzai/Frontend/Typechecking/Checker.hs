@@ -9,6 +9,8 @@ import qualified Language.Bonzai.Frontend.Typechecking.Unification as U
 import qualified Data.List as List
 import qualified Data.Foldable as Foldable
 
+-- | Typecheck an expression : misworded, should be infer the type of an expression
+-- | as bi-directional typechecking is not supported.
 typecheck :: M.MonadChecker m => HLIR.HLIR "expression" -> m (HLIR.TLIR "expression", HLIR.Type)
 typecheck (HLIR.MkExprVariable ann) = do
   st <- readIORef M.checkerState
@@ -17,11 +19,15 @@ typecheck (HLIR.MkExprVariable ann) = do
       ty <- M.instantiate s
 
       case ty of 
+        -- If the type is a live type, we need to wrap it in a lambda 
+        -- to make sure that the type is not evaluated before it is used.
+        -- The lambda will be introduced during type erasure pass.
         HLIR.MkTyLive _ -> 
           pure (
             HLIR.MkExprUnwrapLive (HLIR.MkExprVariable ann { HLIR.value = Identity ty }) (Identity ty),
             ty
           )
+          
         _ -> 
           pure (
             HLIR.MkExprVariable ann { HLIR.value = Identity ty }, 
@@ -461,12 +467,15 @@ runTypechecking es = do
     Left err -> Left err
     Right es' -> Right $ map fst es'
 
+-- | Get the binding name of an expression
 getName :: HLIR.HLIR "expression" -> Text
 getName (HLIR.MkExprLet _ ann _) = ann.name
 getName (HLIR.MkExprOn n _ _) = n
 getName (HLIR.MkExprLoc e _) = getName e
 getName e = compilerError $ "typecheck: event block should only contain let bindings or events, received " <> toText e
 
+-- | Check if an expression contains a live variable in order to 
+-- | wrap it too in a lambda during type erasure pass.
 containsLive :: HLIR.TLIR "expression" -> Bool
 containsLive (HLIR.MkExprLive _ _) = True
 containsLive (HLIR.MkExprLoc e _) = containsLive e
@@ -496,6 +505,8 @@ containsLive _ = False
 snd3 :: (a, b, c) -> b
 snd3 (_, x, _) = x
 
+-- | Decomposing actor header into name and type arguments
+-- | Used to lookup the interface of an actor.
 decomposeHeader :: M.MonadChecker m => HLIR.Type -> m (Text, [HLIR.Type])
 decomposeHeader (HLIR.MkTyActor t) = decomposeHeader t
 decomposeHeader (HLIR.MkTyApp (HLIR.MkTyId name) tys) = pure (name, tys)

@@ -5,7 +5,7 @@ import qualified Language.Bonzai.Syntax.HLIR as HLIR
 import qualified Language.Bonzai.Frontend.Typechecking.Monad as M
 import qualified Data.Map as Map
 
--- check to see if a TVar (the first argument) occurs in the type
+-- Check to see if a TVar (the first argument) occurs in the type
 -- given as the second argument. Fail if it does.
 -- At the same time, update the levels of all encountered free
 -- variables to be the min of variable's current level and
@@ -29,11 +29,15 @@ doesOccurB tv (HLIR.MkTyApp t1 t2) = do
     else or <$> traverse (doesOccurB tv) t2
 doesOccurB _ _ = pure False
 
--- unify two types
+-- Unify two types
+-- Type unification is the process of making two types equal by
+-- substituting type variables with other types.
+-- The unification algorithm is based on the Hindley-Milner type
+-- inference algorithm.
 unifiesWith :: M.MonadChecker m => HLIR.Type -> HLIR.Type -> m ()
 unifiesWith t t' = do
-  t1 <- liftIO $ compressPaths t
-  t2 <- liftIO $ compressPaths t'
+  t1 <- HLIR.simplify t
+  t2 <- HLIR.simplify t'
   if t1 == t2
     then pure ()
     else case (t1, t2) of
@@ -53,34 +57,14 @@ unifiesWith t t' = do
       (HLIR.MkTyId n, HLIR.MkTyId n') | n == n' -> pure ()
       _ -> M.throw (M.UnificationFail t1 t2)
 
-compressPaths' :: MonadIO m => [HLIR.Type] -> m [HLIR.Type]
-compressPaths' = traverse compressPaths
-
-compressPaths :: MonadIO m => HLIR.Type -> m HLIR.Type
-compressPaths (HLIR.MkTyVar tv) = do
-  tv' <- readIORef tv
-  case tv' of
-    HLIR.Link t -> do
-      t' <- compressPaths t
-      writeIORef tv (HLIR.Link t')
-      pure t'
-    HLIR.Unbound _ _ -> pure (HLIR.MkTyVar tv)
-compressPaths (HLIR.MkTyApp t ts) = do
-  t' <- compressPaths t
-  ts' <- traverse compressPaths ts
-  pure (HLIR.MkTyApp t' ts')
-compressPaths t = pure t
-
-association :: Ord a => Map a b -> Map a c -> Map a (Maybe b, Maybe c)
-association m1 m2 = Map.fromList $ do
-  (k, v) <- Map.toList m1
-  pure (k, (Just v, Map.lookup k m2))
-
+-- | Check to see if two types can be unified without
+-- | altering the types of any type variables.
 doesUnifyWith :: M.MonadChecker m => HLIR.Type -> HLIR.Type -> m Bool
 doesUnifyWith t t' = runExceptT (unifiesWith t t') >>= \case
   Left _ -> pure False
   Right _ -> pure True
 
+-- | find function but in a monadic way
 findM :: (Monad m) => (a -> m (Maybe b)) -> [a] -> m (Maybe b)
 findM f (x : xs) = do
   res <- f x
@@ -89,6 +73,15 @@ findM f (x : xs) = do
     Nothing -> findM f xs
 findM _ [] = pure Nothing
 
+-- | Find an interface by name and arguments
+-- | The algorithm is as follows:
+-- | 1. Get all interfaces from the checker state
+-- | 2. Iterate over all interfaces and check if the name and
+-- |    the number of arguments match
+-- | 3. If they do, check if the arguments unify with the
+-- |    arguments of the interface
+-- | 4. If they do, return the interface
+-- | 5. If no interface is found, return Nothing
 findInterface :: (M.MonadChecker m) => Text -> [HLIR.Type] -> m (Maybe (Map Text HLIR.Scheme))
 findInterface name args = do
   interfaces <- Map.toList . M.interfaces <$> readIORef M.checkerState

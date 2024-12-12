@@ -29,10 +29,13 @@ import qualified Data.Set as Set
 type MonadChecker m = (MonadIO m, MonadError Error m)
 type Substitution = Map Text HLIR.Type
 
+-- | Type counter is used to generate fresh type variables
 {-# NOINLINE typeCounter #-}
 typeCounter :: IORef Int
 typeCounter = IO.unsafePerformIO $ newIORef 0
 
+-- | Current level is used to keep track of the current level of the type variable
+-- | in the typechecking process, in order to check for the scope of the type variable.
 {-# NOINLINE currentLevel #-}
 currentLevel :: IORef Int
 currentLevel = IO.unsafePerformIO $ newIORef 0
@@ -43,6 +46,7 @@ data CheckerState = MkCheckerState {
   , varPos :: [(Text, (HLIR.Scheme, HLIR.Position))]
 } deriving (Eq, Show)
 
+-- | Helper function to update the state of the typechecker
 with :: MonadIO m => IORef a -> (a -> a) -> m b -> m b
 with ref f m = do
   x <- readIORef ref
@@ -119,6 +123,7 @@ instantiateWithSub s (HLIR.Forall qvars ty) = do
       pure (x' : xs', subst'')
     goMany subst [] = pure ([], subst)
 
+-- | Generalize a type by quantifying over all free type variables
 generalize :: (MonadChecker m) => HLIR.Type -> m HLIR.Scheme
 generalize ty = do
   free <- getFreeVars ty
