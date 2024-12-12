@@ -213,12 +213,14 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
     HeapValue* ev = GET_PTR(event);
 
+    int old_sp = module->stack->stack_pointer;
+
     stack_push(module, event);
     stack_push(module, MAKE_INTEGER(module->pc + 5));
-    stack_push(module, MAKE_INTEGER(module->stack->stack_pointer));
+    stack_push(module, MAKE_INTEGER(old_sp));
     stack_push(module, MAKE_INTEGER(module->base_pointer));
 
-    module->base_pointer = module->stack->stack_pointer - 4;
+    module->base_pointer = old_sp;
     module->callstack++;
     module->pc = ev->as_event.ipc + 5;
     
