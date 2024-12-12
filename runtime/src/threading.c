@@ -26,11 +26,12 @@ Value call_threaded(Module *new_module, Value callee, int32_t argc, Value *argv)
   int32_t new_pc = new_module->pc + 5;
 
   new_module->gc_enabled = false;
-  Value frame = MAKE_FRAME(new_module, new_pc, old_sp, new_module->base_pointer);
-  stack_push(new_module, frame);
+  stack_push(new_module, MAKE_INTEGER(new_pc));
+  stack_push(new_module, MAKE_INTEGER(old_sp));
+  stack_push(new_module, MAKE_INTEGER(new_module->base_pointer));
   new_module->gc_enabled = true;
 
-  new_module->base_pointer = new_module->stack->stack_pointer - 1;
+  new_module->base_pointer = new_module->stack->stack_pointer - 3;
   new_module->stack->stack_pointer++;
 
   Value ret = run_interpreter(new_module, ipc, true, new_module->callstack - 1);

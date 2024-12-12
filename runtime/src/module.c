@@ -28,10 +28,10 @@ Frame pop_event_frame(Module* mod) {
   Value sp = mod->stack->values[mod->base_pointer + 2];
   Value bp = mod->stack->values[mod->base_pointer + 3];
 
-  ASSERT_TYPE(mod, "pop_frame", ev, TYPE_EVENT);
-  ASSERT_TYPE(mod, "pop_frame", pc, TYPE_INTEGER);
-  ASSERT_TYPE(mod, "pop_frame", sp, TYPE_INTEGER);
-  ASSERT_TYPE(mod, "pop_frame", bp, TYPE_INTEGER);
+  ASSERT_TYPE(mod, "pop_event_frame", ev, TYPE_EVENT);
+  ASSERT_TYPE(mod, "pop_event_frame", pc, TYPE_INTEGER);
+  ASSERT_TYPE(mod, "pop_event_frame", sp, TYPE_INTEGER);
+  ASSERT_TYPE(mod, "pop_event_frame", bp, TYPE_INTEGER);
 
   Frame frame = {
     .instruction_pointer = GET_INT(pc),

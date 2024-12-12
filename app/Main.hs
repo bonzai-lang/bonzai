@@ -39,8 +39,6 @@ buildProgram fp = do
     void $ ppError $ "File " <> fp <> " does not exist"
     exitFailure
 
-  void . ppBuild $ "Parsing " <> fp
-
   let folder = takeDirectory fp
       fileNameWithoutDir = dropExtension $ takeFileName fp
 
@@ -55,12 +53,9 @@ buildProgram fp = do
 
   handle moduleResult . const $ do
     preHLIR <- removeRequires <$> readIORef resultState
-
-    void . ppBuild $ ("Typechecking the program" :: String)
     typedAST <- runTypechecking preHLIR
 
     handle typedAST $ \tlir -> do
-      ppBuild ("Compiling the program" :: String)
       let mlir = eraseTypes tlir
 
       closureConverted <- runClosureConversion mlir
@@ -77,12 +72,8 @@ buildProgram fp = do
 
       writeFileLBS outputFile serialized
 
-      void . ppSuccess $ "Compiled successfully to " <> outputFile
-
 buildProgramFromContent :: String -> IO ()
 buildProgramFromContent content = do
-  void . ppBuild $ ("Parsing content" :: String)
-
   let folder = "."
       fileNameWithoutDir = "main"
 
@@ -97,12 +88,7 @@ buildProgramFromContent content = do
 
   handle moduleResult . const $ do
     preHLIR <- removeRequires <$> readIORef resultState
-
-    void . ppBuild $ ("Typechecking the program" :: String)
-    typedAST <- runTypechecking preHLIR
-
-    handle typedAST $ \_ -> do
-      ppSuccess ("Typechecked successfully" :: String)
+    void $ runTypechecking preHLIR
 
 
 main :: IO ()

@@ -36,7 +36,7 @@ system(f"cp {executable} bin/{executable_out}")
 # Build the runtime project
 
 runtime_executable = f"bonzai-runtime{ext}"
-runtime_executable_out = f"bonzai{ext}"
+runtime_executable_out = f"bonzai-runtime{ext}"
 
 xmake_root = '--root' if is_root else ''
 system(f'xmake b {xmake_root} -P runtime bonzai-runtime')
@@ -50,9 +50,17 @@ shell_script = f"""#!/bin/sh
 bonzai $BONZAI_PATH/packages/bpm/main.bzi.bin -l $BONZAI_PATH/bindings/bin/bindings.dylib "$@"
 """
 
+bonzai_script = f"""#!/bin/sh
+{executable_out} build "$@" && {runtime_executable_out} "$@".bin -l $BONZAI_PATH/bindings/bin/bindings.dylib
+"""
+
 with open('bin/bpm', 'w') as f:
   f.write(shell_script)
 
+with open('bin/bonzai', 'w') as f:
+  f.write(bonzai_script)
+
 system('chmod +x bin/bpm')
+system('chmod +x bin/bonzai')
 
 print('Build ran successfully')

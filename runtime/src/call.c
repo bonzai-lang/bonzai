@@ -15,6 +15,7 @@ void op_call(Module *module, Value callee, int32_t argc) {
   int32_t old_sp = module->stack->stack_pointer - argc;
 
   module->stack->stack_pointer += local_space - argc;
+  int32_t sp_before = module->stack->stack_pointer;
 
   int32_t new_pc = module->pc + 5;
 
@@ -22,7 +23,7 @@ void op_call(Module *module, Value callee, int32_t argc) {
   stack_push(module, MAKE_INTEGER(old_sp));
   stack_push(module, MAKE_INTEGER(module->base_pointer));
 
-  module->base_pointer = module->stack->stack_pointer - 3;
+  module->base_pointer = sp_before;
   module->callstack++;
 
   module->pc = ipc;
