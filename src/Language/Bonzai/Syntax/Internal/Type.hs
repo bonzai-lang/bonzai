@@ -139,6 +139,9 @@ pattern MkTyTuple a b = MkTyApp (MkTyId "Tuple") [a, b]
 
 instance ToText Type where 
   toText (MkTyId a) = a
+  toText (MkTyMutable a) = T.concat ["mut ", toText a]
+  toText (MkTyLive a) = T.concat ["live ", toText a]
+  toText (MkTyActor a) = T.concat ["actor ", toText a]
   toText (args :->: ret) = T.concat ["(", T.intercalate ", " (map toText args), ") -> ", toText ret]
   toText (MkTyTuple a b) = T.concat ["(", toText a, ", ", toText b, ")"]
   toText (MkTyApp a b) = T.concat [toText a, "<", T.intercalate ", " (map toText b), ">"]
