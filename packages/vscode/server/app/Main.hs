@@ -100,6 +100,13 @@ getVar (HLIR.MkExprUpdate up val) pos = do
     Nothing -> case up of
       HLIR.MkUpdtVariable name -> Just (HLIR.name name, runIdentity $ HLIR.value name)
       _ -> Nothing
+getVar (HLIR.MkExprMut e _) pos = getVar e pos
+getVar (HLIR.MkExprSpawn e) pos = getVar e pos
+getVar (HLIR.MkExprIndex e i) pos = getVar i pos <|> getVar e pos
+getVar (HLIR.MkExprRequire {}) _ = Nothing
+getVar (HLIR.MkExprLive ann e) pos = case getVar e pos of
+  Just x -> Just x
+  Nothing -> Just (HLIR.name ann, runIdentity $ HLIR.value ann)
 getVar _ _ = Nothing
 
 getVarInPattern :: HLIR.TLIR "pattern" -> (Position, Uri) -> Maybe (Text, HLIR.Type)
@@ -179,7 +186,9 @@ findLets (HLIR.MkExprTernary c t e _) pos p = do
   let vars' = findLets t pos p
   let vars'' = findLets e pos p
   vars <> vars' <> vars''
-findLets (HLIR.MkExprBlock _ _) _ _ = error "Block not supported"
+findLets (HLIR.MkExprBlock es _) pos p = do
+  let vars = foldr (\e acc -> findLets e pos p <> acc) mempty es
+  vars
 findLets (HLIR.MkExprApplication f args _) pos p = do
   let vars = findLets f pos p
   let vars' = foldr (\e acc -> findLets e pos p <> acc) mempty args
@@ -590,7 +599,7 @@ handlers =
                     ) (toText v) Nothing : acc) [] vars'
 
               responder $ Right $ InL completions
-      
+
       , notificationHandler SMethod_TextDocumentDidSave $ \req -> do
           let TNotificationMessage _ _ (DidSaveTextDocumentParams (TextDocumentIdentifier uri) _) = req
 
