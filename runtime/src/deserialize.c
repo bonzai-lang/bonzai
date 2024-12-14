@@ -75,7 +75,7 @@ Constants deserialize_constants(Module *mod, FILE* file) {
   fread(&constant_count, sizeof(int32_t), 1, file);
 
   constants.size = constant_count;
-  constants.values = /*test*/malloc(constant_count * sizeof(Value));
+  constants.values = malloc(constant_count * sizeof(Value));
   for (int32_t i = 0; i < constant_count; i++) {
     constants.values[i] = deserialize_value(mod, file);
   }

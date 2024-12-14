@@ -7,6 +7,8 @@
 #include <string.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <error.h>
+#include <stdatomic.h>
 
 typedef uint64_t Value;
 
@@ -156,6 +158,24 @@ typedef struct HeapValue {
   };
 } HeapValue;
 
+typedef struct {
+  Stack** stacks;
+  int stack_count;
+  int stack_capacity;
+} stacks_t;
+
+typedef struct {
+  stacks_t stacks;
+  HeapValue* first_object;
+  int num_objects, max_objects;
+  bool gc_enabled;
+  bool gc_running;
+  bool gc_requested;
+
+  pthread_cond_t gc_cond;
+  pthread_mutex_t gc_mutex;
+} gc_t;
+
 #define IS_PTR(x) (((x) & MASK_SIGNATURE) == SIGNATURE_POINTER)
 #define IS_FUN(x) (((x) & MASK_SIGNATURE) == SIGNATURE_FUNCTION)
 
@@ -178,19 +198,62 @@ Value MAKE_STRING_NON_GC(struct Module* mod, char* x);
 void gc(struct Module* vm);
 void force_sweep(struct Module* vm);
 HeapValue* allocate(struct Module* mod, ValueType type);
+void mark_value(Value value);
 
 #define MAKE_SPECIAL() kNull
 #define MAKE_ADDRESS(x) MAKE_INTEGER(x)
 
-ValueType get_type(Value value);
 char* type_of(Value value);
 
 Stack* stack_new();
-void stack_push(struct Module *mod, Value value);
-Value stack_pop(struct Module* mod);
 
 int value_eq(struct Module* mod, Value a, Value b);
 
 void debug_value(Value v);
+
+#define stack_push(module, value) \
+  do {                            \
+    if (module->stack->stack_pointer >= module->stack->stack_capacity) { \
+      module->stack->stack_capacity *= 2; \
+      module->stack->values = realloc(module->stack->values, module->stack->stack_capacity * sizeof(Value)); \
+      if (!module->stack->values) { \
+        THROW(module, "Failed to allocate memory for stack"); \
+      } \
+    } \
+    module->stack->values[module->stack->stack_pointer++] = value; \
+  } while (0)
+
+#define stack_pop(module) \
+  (module->stack->values[--module->stack->stack_pointer])
+
+inline static ValueType get_type(Value value) {
+  uint64_t signature = value & MASK_SIGNATURE;
+  if ((~value & MASK_EXPONENT) != 0) return TYPE_FLOAT;
+
+  // Check for encoded pointer
+  if (signature == SIGNATURE_POINTER) {
+    HeapValue* ptr = GET_PTR(value);
+    return ptr->type;
+  }
+
+  // Short encoded types
+  switch (signature) {
+    case SIGNATURE_NAN:
+      return TYPE_UNKNOWN;
+    case SIGNATURE_SPECIAL:
+      return TYPE_SPECIAL;
+    case SIGNATURE_INTEGER:
+      return TYPE_INTEGER;
+    case SIGNATURE_FUNCTION:
+      return TYPE_FUNCTION;
+    case SIGNATURE_FUNCENV:
+      return TYPE_FUNCENV;
+  }
+
+  return TYPE_UNKNOWN;
+}
+
+void safe_point(struct Module* mod);
+void stop_the_world(struct Module* mod, bool stop);
 
 #endif  // VALUE_H

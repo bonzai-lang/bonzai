@@ -1,8 +1,9 @@
 #include <error.h>
 #include <module.h>
 #include <value.h>
+#include <stdatomic.h>
 
-Frame pop_frame(Module* mod) {
+__attribute__((always_inline)) inline Frame pop_frame(Module* mod) {
   Value pc = mod->stack->values[mod->base_pointer];
   Value sp = mod->stack->values[mod->base_pointer + 1];
   Value bp = mod->stack->values[mod->base_pointer + 2];
@@ -22,7 +23,7 @@ Frame pop_frame(Module* mod) {
   return frame;
 }
 
-Frame pop_event_frame(Module* mod) {
+__attribute__((always_inline)) inline Frame pop_event_frame(Module* mod) {
   Value ev = mod->stack->values[mod->base_pointer];
   Value pc = mod->stack->values[mod->base_pointer + 1];
   Value sp = mod->stack->values[mod->base_pointer + 2];
@@ -46,10 +47,25 @@ Frame pop_event_frame(Module* mod) {
   return frame;
 }
 
-void init_gc(Module* mod) {
-  mod->first_object = NULL;
-  mod->max_objects = INIT_OBJECTS;
-  mod->num_objects = 0;
+// Initialize the GC system and its worker thread
+void init_gc(gc_t* gc, Module* mod) {
+  // Initialize GC state
+  gc->first_object = NULL;
+  gc->max_objects = INIT_OBJECTS;  // Example default size
+  gc->num_objects = 0;
+  gc->gc_enabled = true;
+  gc->gc_running = false;
+  gc->stacks.stack_capacity = STACKS_SIZE;  // Example stack capacity
+  gc->stacks.stacks = malloc(sizeof(void*) * gc->stacks.stack_capacity);
 
-  mod->gc_enabled = true;
+  // Handle memory allocation failure
+  if (gc->stacks.stacks == NULL) {
+    perror("Failed to allocate memory for stacks");
+    exit(EXIT_FAILURE);
+  }
+
+  pthread_cond_init(&gc->gc_cond, NULL);
+  pthread_mutex_init(&gc->gc_mutex, NULL);
+
+  mod->gc = gc;
 }

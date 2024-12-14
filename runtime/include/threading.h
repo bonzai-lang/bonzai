@@ -12,6 +12,9 @@ typedef struct Actor {
   pthread_t thread;
   struct Event event;
   struct Module* mod;
+
+  pthread_cond_t cond;
+  pthread_mutex_t mutex;
 } Actor;
 
 void *actor_run(void *arg);

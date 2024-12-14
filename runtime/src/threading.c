@@ -17,6 +17,7 @@ Value list_get(Module* mod, Value list, uint32_t idx) {
 Value call_threaded(Module *new_module, Value callee, int32_t argc, Value *argv) {
   int16_t ipc = (int16_t)(callee & MASK_PAYLOAD_INT);
   int16_t local_space = (int16_t)((callee >> 16) & MASK_PAYLOAD_INT);
+
   int32_t old_sp = new_module->stack->stack_pointer;
 
   // Push arguments in reverse order
@@ -25,15 +26,13 @@ Value call_threaded(Module *new_module, Value callee, int32_t argc, Value *argv)
 
   int32_t new_pc = new_module->pc + 5;
 
-  new_module->gc_enabled = false;
   stack_push(new_module, MAKE_INTEGER(new_pc));
   stack_push(new_module, MAKE_INTEGER(old_sp));
   stack_push(new_module, MAKE_INTEGER(new_module->base_pointer));
-  new_module->gc_enabled = true;
 
   new_module->base_pointer = new_module->stack->stack_pointer - 3;
   new_module->stack->stack_pointer++;
-
+  
   Value ret = run_interpreter(new_module, ipc, true, new_module->callstack - 1);
 
   return ret;
@@ -45,8 +44,9 @@ void *actor_run(void *arg) {
 
   Module* new_module = malloc(sizeof(Module));
   new_module->stack = stack_new();
-  init_gc(new_module);
   pthread_mutex_lock(&module->module_mutex);
+  new_module->gc = module->gc;
+  new_module->gc->stacks.stacks[new_module->gc->stacks.stack_count++] = new_module->stack;
   memcpy(new_module->stack->values, module->stack->values, GLOBALS_SIZE * sizeof(Value));
   new_module->instr_count = module->instr_count;
   new_module->instrs = module->instrs;
@@ -56,6 +56,7 @@ void *actor_run(void *arg) {
   new_module->handles = module->handles;
   new_module->num_handles = module->num_handles;
   new_module->native_handles = module->native_handles;
+  new_module->current_actor = actor;
   pthread_mutex_unlock(&module->module_mutex);
   new_module->callstack = 1;
 
@@ -100,6 +101,8 @@ Actor *create_actor(struct Event event, struct Module* mod) {
   actor->queue = create_message_queue();
   actor->event = event;
   actor->mod = mod;
+  pthread_mutex_init(&actor->mutex, NULL);
+  pthread_cond_init(&actor->cond, NULL);
 
   pthread_create(&actor->thread, NULL, actor_run, actor);
   
@@ -114,5 +117,10 @@ void send_message(Actor *actor, int name, Value *args, int argc) {
   msg->name = name;
   msg->argc = argc;
   msg->next = NULL;
+
+  // for (int i = 0; i < argc; i++) {
+  //   mark_value(args[i]);
+  // }
+
   enqueue(actor->queue, msg);
 }

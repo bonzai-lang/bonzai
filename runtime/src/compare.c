@@ -59,4 +59,24 @@ Value compare_gt(Module* mod, Value a, Value b) {
   return MAKE_INTEGER(GET_INT(a) > GET_INT(b));
 }
 
-ComparisonFun comparison_table[] = { NULL, compare_gt, compare_eq, NULL, NULL, compare_and, compare_or };
+Value compare_lt(Module* mod, Value a, Value b) {
+  ASSERT(mod, get_type(a) == TYPE_INTEGER && get_type(b) == TYPE_INTEGER, "Expected integers");
+  return MAKE_INTEGER(GET_INT(a) < GET_INT(b));
+}
+
+Value compare_ne(Module* mod, Value a, Value b) {
+  ASSERT(mod, get_type(a) == TYPE_INTEGER && get_type(b) == TYPE_INTEGER, "Expected integers");
+  return MAKE_INTEGER(GET_INT(a) != GET_INT(b));
+}
+
+Value compare_ge(Module* mod, Value a, Value b) {
+  ASSERT(mod, get_type(a) == TYPE_INTEGER && get_type(b) == TYPE_INTEGER, "Expected integers");
+  return MAKE_INTEGER(GET_INT(a) >= GET_INT(b));
+}
+
+Value compare_le(Module* mod, Value a, Value b) {
+  ASSERT(mod, get_type(a) == TYPE_INTEGER && get_type(b) == TYPE_INTEGER, "Expected integers");
+  return MAKE_INTEGER(GET_INT(a) <= GET_INT(b));
+}
+
+ComparisonFun comparison_table[] = { compare_lt, compare_gt, compare_eq, compare_ne, compare_le, compare_ge, compare_and, compare_or };

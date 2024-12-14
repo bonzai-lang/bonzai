@@ -55,10 +55,11 @@ void op_native_call(Module *module, Value callee, int32_t argc) {
 
   Value* args = malloc(sizeof(Value) * argc);
 
-  module->gc_enabled = false;
+  module->gc->gc_enabled = false;
   // Pop args in reverse order
   for (int i = argc - 1; i >= 0; i--) {
     args[i] = stack_pop(module);
+    // mark_value(args[i]);
   }
 
   NativeFunction handler = find_function(module, fun);
@@ -71,7 +72,7 @@ void op_native_call(Module *module, Value callee, int32_t argc) {
 
   stack_push(module, ret);
 
-  module->gc_enabled = true;
+  module->gc->gc_enabled = true;
 
   free(args);
   module->pc += 5;

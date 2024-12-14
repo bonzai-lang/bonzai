@@ -61,7 +61,8 @@ int main(int argc, char* argv[]) {
   module.latest_position[0] = 0;
   module.latest_position[1] = 0;
 
-  init_gc(&module);
+  gc_t* gc = malloc(sizeof(gc_t));
+  init_gc(gc, &module);
 
   if (argc < 2) THROW_FMT((&module), "Usage: %s <file>", argv[0]);
   FILE* file = fopen(argv[1], "rb");
@@ -85,8 +86,10 @@ int main(int argc, char* argv[]) {
   }
 
   module.stack = stack_new();
+  module.gc->stacks.stacks[module.gc->stacks.stack_count++] = module.stack;
   module.handles = libs;
   module.num_handles = num_libs;
+  module.current_actor = NULL;
 
   pthread_mutex_init(&module.module_mutex, NULL);
 
@@ -101,6 +104,8 @@ int main(int argc, char* argv[]) {
   module.argv = args;
 
   run_interpreter(&module, 0, false, 0);
+
+  // pthread_join(gc_thread, NULL);
 
   // Closing and freeing resources
   fclose(file);

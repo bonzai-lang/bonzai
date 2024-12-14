@@ -9,6 +9,8 @@
 
 typedef int Position[2];
 
+#define STACKS_SIZE 32
+
 typedef struct {
   Value* values;
   int32_t size;
@@ -21,6 +23,8 @@ typedef struct Module {
   int32_t base_pointer;
   int32_t spawn_pointer;
   int32_t callstack;
+
+  struct Actor* current_actor;
 
   Constants constants;
   Stack *stack;
@@ -40,21 +44,19 @@ typedef struct Module {
   bool is_terminated;
 
   pthread_mutex_t module_mutex;
-
-  HeapValue* first_object;
-  int num_objects, max_objects;
-  bool gc_enabled;
   
   Position latest_position;
   const char* file;
 
   void** native_handles;
+  
+  gc_t* gc;
 } Module;
 
 typedef Value (*NativeFunction)(struct Module *m, Value *args, int argc);
 
 Frame pop_frame(Module *mod);
 Frame pop_event_frame(Module* mod);
-void init_gc(Module* vm);
+void init_gc(gc_t* gc, Module* mod);
 
 #endif  // MODULE_H

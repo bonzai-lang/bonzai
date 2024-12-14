@@ -6,7 +6,9 @@
 #include <call.h>
 #include <stdbool.h>
 #include <threading.h>
+#include <math.h>
 
+// Increase IP might also check if gc is lock
 #define INCREASE_IP_BY(mod, x) (mod->pc += ((x) * 5))
 #define INCREASE_IP(mod) INCREASE_IP_BY(mod, 1)
 
@@ -30,7 +32,8 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     &&case_call_local, &&case_jump_if_false, &&case_jump_rel, &&case_get_index,
     &&case_special, &&case_halt, &&case_spawn, &&case_event_on, 
     &&case_send, &&case_make_function_and_store, &&case_load_native, &&case_make_event,
-    &&case_return_event, &&case_make_mutable, &&case_loc, UNKNOWN
+    &&case_return_event, &&case_make_mutable, &&case_loc, &&case_add, &&case_sub,
+    &&case_mul, &&case_div, &&case_mod, &&case_call_native, UNKNOWN
   };
 
   goto *jmp_table[op];
@@ -113,7 +116,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
   case_make_list: {
     Value* list = malloc(i1 * sizeof(Value));
-    module->gc_enabled = false;
+    module->gc->gc_enabled = false;
     
     // Loop in reverse order to pop values in the correct order
     for (int i = i1 - 1; i >= 0; i--) {
@@ -123,7 +126,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     Value value = MAKE_LIST(module, list, i1);
     stack_push(module, value);
 
-    module->gc_enabled = true;
+    module->gc->gc_enabled = true;
     INCREASE_IP(module);
     goto *jmp_table[op];
   }
@@ -145,6 +148,8 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_call: {
+    safe_point(module);
+
     Value callee = stack_pop(module);
 
     ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
@@ -154,10 +159,33 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     goto *jmp_table[op];
   }
 
-  case_call_global: {}
-  case_call_local: {}
+  case_call_global: {
+    safe_point(module);
+
+    Value callee = module->stack->values[i1];
+
+    ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
+
+    interpreter_table[(callee & MASK_SIGNATURE) == SIGNATURE_FUNCTION](module, callee, i2);
+
+    goto *jmp_table[op];
+  }
+
+  case_call_local: {
+    safe_point(module);
+
+    Value callee = module->stack->values[module->base_pointer + i1];
+
+    ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
+
+    interpreter_table[(callee & MASK_SIGNATURE) == SIGNATURE_FUNCTION](module, callee, i2);
+
+    goto *jmp_table[op];
+  }
 
   case_jump_if_false: {
+    safe_point(module);
+
     Value value = stack_pop(module);
     if (GET_INT(value) == 0) {
       INCREASE_IP_BY(module, i1);
@@ -168,6 +196,8 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_jump_rel: {
+    safe_point(module);
+
     INCREASE_IP_BY(module, i1);
     goto *jmp_table[op];
   }
@@ -319,10 +349,10 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_make_mutable: {
-    module->gc_enabled = false;
+    module->gc->gc_enabled = false;
     Value x = stack_pop(module);
     stack_push(module, MAKE_MUTABLE(module, x));
-    module->gc_enabled = true;
+    module->gc->gc_enabled = true;
     INCREASE_IP(module);
     goto *jmp_table[op];
   }
@@ -333,6 +363,171 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     module->file = GET_STRING(constants.values[i3]);
 
     INCREASE_IP(module);
+    goto *jmp_table[op];
+  }
+
+  case_add: {
+    Value b = stack_pop(module);
+    Value a = stack_pop(module);
+
+    ValueType ty = get_type(a);
+
+
+    ASSERT_TYPE(module, "add", b, ty);
+
+    switch (ty) {
+      case TYPE_INTEGER: 
+        stack_push(module, MAKE_INTEGER(a + b));
+        break;
+      
+      case TYPE_FLOAT: {
+        double f = GET_FLOAT(a) + GET_FLOAT(b);
+        stack_push(module, MAKE_FLOAT(f));
+        break;
+      }
+
+      case TYPE_STRING: {
+        char* s1 = GET_STRING(a);
+        char* s2 = GET_STRING(b);
+        char* s = malloc(strlen(s1) + strlen(s2) + 1);
+        
+        sprintf(s, "%s%s", s1, s2);
+
+        stack_push(module, MAKE_STRING(module, s));
+        break;
+      }
+
+      case TYPE_LIST: {
+        HeapValue* l1 = GET_PTR(a);
+        HeapValue* l2 = GET_PTR(b);
+        Value* list = malloc((l1->length + l2->length) * sizeof(Value));
+        for (uint32_t i = 0; i < l1->length; i++) list[i] = l1->as_ptr[i];
+        for (uint32_t i = 0; i < l2->length; i++) list[l1->length + i] = l2->as_ptr[i];
+        stack_push(module, MAKE_LIST(module, list, l1->length + l2->length));
+        break;
+      }
+
+      default: 
+        THROW(module, "Unsupported type for +");
+    }
+
+    INCREASE_IP(module);
+    goto *jmp_table[op];
+  }
+
+  case_sub: {
+    Value a = stack_pop(module);
+    Value b = stack_pop(module);
+
+    ValueType ty = get_type(a);
+
+    ASSERT_TYPE(module, "sub", b, ty);
+
+    switch (ty) {
+      case TYPE_INTEGER: 
+        stack_push(module, MAKE_INTEGER(GET_INT(b) - GET_INT(a)));
+        break;
+      
+      case TYPE_FLOAT: {
+        double f = GET_FLOAT(b) - GET_FLOAT(a);
+        stack_push(module, MAKE_FLOAT(f));
+        break;
+      }
+
+      default: 
+        THROW(module, "Unsupported type for -");
+    }
+
+    INCREASE_IP(module);
+    goto *jmp_table[op];
+  }
+
+  case_mul: {
+    Value a = stack_pop(module);
+    Value b = stack_pop(module);
+
+    ValueType ty = get_type(a);
+
+    ASSERT_TYPE(module, "mul", b, ty);
+
+    switch (ty) {
+      case TYPE_INTEGER: 
+        stack_push(module, MAKE_INTEGER(GET_INT(b) * GET_INT(a)));
+        break;
+      
+      case TYPE_FLOAT: {
+        double f = GET_FLOAT(b) * GET_FLOAT(a);
+        stack_push(module, MAKE_FLOAT(f));
+        break;
+      }
+
+      default: 
+        THROW(module, "Unsupported type for *");
+    }
+
+    INCREASE_IP(module);
+    goto *jmp_table[op];
+  }
+
+  case_div: {
+    Value a = stack_pop(module);
+    Value b = stack_pop(module);
+
+    ValueType ty = get_type(a);
+
+    ASSERT_TYPE(module, "div", b, ty);
+
+    switch (ty) {
+      case TYPE_INTEGER: 
+        stack_push(module, MAKE_INTEGER(GET_INT(b) / GET_INT(a)));
+        break;
+      
+      case TYPE_FLOAT: {
+        double f = GET_FLOAT(b) / GET_FLOAT(a);
+        stack_push(module, MAKE_FLOAT(f));
+        break;
+      }
+
+      default: 
+        THROW(module, "Unsupported type for /");
+    }
+
+    INCREASE_IP(module);
+    goto *jmp_table[op];
+  }
+
+  case_mod: {
+    Value b = stack_pop(module);
+    Value a = stack_pop(module);
+
+    ValueType ty = get_type(a);
+
+    ASSERT_TYPE(module, "mod", b, ty);
+
+    switch (ty) {
+      case TYPE_INTEGER: 
+        stack_push(module, MAKE_INTEGER(GET_INT(b) % GET_INT(a)));
+        break;
+      
+      case TYPE_FLOAT: {
+        float f = fmod(GET_FLOAT(b), GET_FLOAT(a));
+        stack_push(module, MAKE_FLOAT(f));
+        break;
+      }
+
+      default: 
+        THROW(module, "Unsupported type for %%");
+    }
+
+    INCREASE_IP(module);
+    goto *jmp_table[op];
+  }
+
+  case_call_native: {
+    Value native = module->constants.values[i1];
+    Value nat = MAKE_NATIVE(module, GET_STRING(native), i1);
+    
+    op_native_call(module, nat, i2);
     goto *jmp_table[op];
   }
 

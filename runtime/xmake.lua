@@ -7,7 +7,7 @@ end
 set_warnings("allextra")
 
 target("bonzai-runtime")
-  add_rules("mode.release")
+  -- add_rules("mode.release")
 
   -- Adding the runtime source files
   add_files("src/**.c")
@@ -16,7 +16,7 @@ target("bonzai-runtime")
   -- Setting up the target
   set_kind("binary") 
   set_targetdir("bin")
-  set_optimize("fastest")
+  set_optimize("fast")
 
 target("bonzai-runtime-test")
   add_rules("mode.debug", "mode.profile")

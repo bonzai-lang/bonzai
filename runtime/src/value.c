@@ -1,9 +1,11 @@
+#include <debug.h>
 #include <error.h>
+#include <math.h>
 #include <module.h>
 #include <stdio.h>
 #include <string.h>
+#include <threading.h>
 #include <value.h>
-#include <math.h>
 
 void mark_value(Value value) {
   if (!IS_PTR(value)) return;
@@ -29,14 +31,34 @@ void mark_value(Value value) {
 }
 
 void mark_all(struct Module* vm) {
-  for (int i = 0; i < vm->stack->stack_pointer; i++) {
-    // printf("Marking stack value %d\n", i);
-    mark_value(vm->stack->values[i]);
+  gc_t* gc = vm->gc;
+
+  // Mark messages being sent
+  for (int i = 0; i < vm->event_count; i++) {
+    struct Actor* actor = vm->events[i];
+
+    MessageQueue* queue = actor->queue;
+
+    for (Message* pending = queue->head; pending != NULL;
+         pending = pending->next) {
+      for (int arg_index = 0; arg_index < pending->argc; arg_index++) {
+        mark_value(pending->args[arg_index]);
+      }
+    }
+  }
+
+  // Traverse the stacks by the end
+  for (int stack_id = 0; stack_id < gc->stacks.stack_count; stack_id++) {
+    Stack* stack = gc->stacks.stacks[stack_id];
+    for (int i = 0; i < stack->stack_pointer; i++) {
+      mark_value(stack->values[i]);
+    }
   }
 }
 
 void sweep(struct Module* vm) {
-  HeapValue** object = &vm->first_object;
+  gc_t* gc = vm->gc;
+  HeapValue** object = &gc->first_object;
   while (*object) {
     if (!(*object)->is_marked && !(*object)->is_constant) {
       /* This object wasn't reached, so remove it from the list
@@ -62,7 +84,7 @@ void sweep(struct Module* vm) {
       free(unreached);
 
       *object = unreached->next;
-      vm->num_objects--;
+      gc->num_objects--;
     } else {
       /* This object was reached, so unmark it (for the next GC)
          and move on to the next. */
@@ -71,21 +93,25 @@ void sweep(struct Module* vm) {
     }
   }
 }
-
 void gc(struct Module* vm) {
+  gc_t* gc_ = vm->gc;
+  vm->gc->gc_running = true;
   // int numObjects = vm->num_objects;
 
   mark_all(vm);
   sweep(vm);
 
-  vm->max_objects = vm->num_objects < INIT_OBJECTS ? INIT_OBJECTS : vm->num_objects * 2;
+  gc_->max_objects =
+      gc_->num_objects < INIT_OBJECTS ? INIT_OBJECTS : gc_->num_objects * 2;
 
+  vm->gc->gc_running = false;
   // printf("Collected %d objects, %d remaining.\n", numObjects - vm->num_objects,
   //        vm->num_objects);
 }
 
 void force_sweep(struct Module* vm) {
-  HeapValue* object = vm->first_object;
+  gc_t* gc = vm->gc;
+  HeapValue* object = gc->first_object;
   while (object) {
     HeapValue* next = object->next;
     switch (object->type) {
@@ -106,16 +132,27 @@ void force_sweep(struct Module* vm) {
     free(object);
     object = next;
   }
-  vm->first_object = NULL;
-  vm->num_objects = 0;
+  gc->first_object = NULL;
+  gc->num_objects = 0;
 }
 
 HeapValue* allocate(struct Module* mod, ValueType type) {
-  if (mod->num_objects == mod->max_objects) {
-    if (mod->gc_enabled) {
+  gc_t* gc_ = mod->gc;
+  pthread_mutex_lock(&gc_->gc_mutex);
+  if (gc_->gc_running) {
+    pthread_cond_wait(&gc_->gc_cond, &gc_->gc_mutex);
+    pthread_mutex_unlock(&gc_->gc_mutex);
+  } else {
+    pthread_mutex_unlock(&gc_->gc_mutex);
+  }
+
+  if (gc_->num_objects == gc_->max_objects) {
+    if (gc_->gc_enabled) {
+      // stop_the_world(mod, true);
       gc(mod);
+      stop_the_world(mod, false);
     } else {
-      mod->max_objects += 2;
+      mod->gc->max_objects += 2;
     }
   }
 
@@ -123,13 +160,11 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
 
   v->type = type;
   v->is_marked = false;
-  v->next = mod->first_object;
+  v->next = gc_->first_object;
   v->is_constant = false;
 
-  mod->first_object = v;
-  mod->num_objects++;
-
-  // printf("Allocated %d objects, %d remaining.\n", mod->num_objects, mod->max_objects - mod->num_objects);
+  gc_->first_object = v;
+  gc_->num_objects++;
 
   return v;
 }
@@ -218,33 +253,6 @@ Value MAKE_EVENT_ON(struct Module* mod, int id, Value func) {
   return MAKE_PTR(v);
 }
 
-ValueType get_type(Value value) {
-  uint64_t signature = value & MASK_SIGNATURE;
-  if ((~value & MASK_EXPONENT) != 0) return TYPE_FLOAT;
-
-  // Check for encoded pointer
-  if (signature == SIGNATURE_POINTER) {
-    HeapValue* ptr = GET_PTR(value);
-    return ptr->type;
-  }
-
-  // Short encoded types
-  switch (signature) {
-    case SIGNATURE_NAN:
-      return TYPE_UNKNOWN;
-    case SIGNATURE_SPECIAL:
-      return TYPE_SPECIAL;
-    case SIGNATURE_INTEGER:
-      return TYPE_INTEGER;
-    case SIGNATURE_FUNCTION:
-      return TYPE_FUNCTION;
-    case SIGNATURE_FUNCENV:
-      return TYPE_FUNCENV;
-  }
-
-  return TYPE_UNKNOWN;
-}
-
 char* type_of(Value value) {
   switch (get_type(value)) {
     case TYPE_INTEGER:
@@ -284,29 +292,6 @@ Stack* stack_new() {
   stack->stack_capacity = MAX_STACK_SIZE;
   stack->values = malloc(stack->stack_capacity * sizeof(Value));
   return stack;
-}
-
-void stack_push(Module* mod, Value value) {
-  // printf("Pushing value %llu\n", value);
-  Stack* stack = mod->stack;
-  if (stack->stack_pointer >= stack->stack_capacity) {
-    stack->stack_capacity *= 2;
-    stack->values = realloc(stack->values, stack->stack_capacity * sizeof(Value));
-
-    if (!stack->values) {
-      THROW(mod, "Failed to allocate memory for stack");
-    }
-  }
-
-  stack->values[stack->stack_pointer++] = value;
-}
-
-Value stack_pop(Module* mod) { 
-  Stack* stack = mod->stack;
-  if (stack->stack_pointer <= 0) {
-    THROW(mod, "Stack underflow");
-  }
-  return stack->values[--stack->stack_pointer];
 }
 
 void enqueue(MessageQueue* queue, Message* msg) {
@@ -441,4 +426,54 @@ void debug_value(Value v) {
       printf("Unknown");
       break;
   }
+}
+
+void stop_the_world(Module* mod, bool stop) {
+  if (!stop) {
+    pthread_cond_signal(&mod->gc->gc_cond);
+  }
+
+  // if (stop) {
+  //   // pthread_mutex_lock(&mod->gc->gc_mutex);
+  //   mod->gc->gc_running = true;
+  //   // pthread_mutex_unlock(&mod->gc->gc_mutex);
+
+  //   for (int i = 0; i < mod->event_count; i++) {
+  //     struct Actor* actor = mod->events[i];
+      
+  //     printf("Actor %d is pausing\n", i);
+
+  //     pthread_mutex_lock(&actor->mutex);
+  //     pthread_cond_wait(&actor->cond, &actor->mutex);
+  //     pthread_mutex_unlock(&actor->mutex);
+
+  //     printf("Actor %d is paused\n", i);
+  //   }
+  // } else {
+  //   // pthread_mutex_lock(&mod->gc->gc_mutex);
+  //   mod->gc->gc_running = false;
+  //   // pthread_mutex_unlock(&mod->gc->gc_mutex);
+
+  //   printf("GC stopped\n");
+  //   pthread_cond_signal(&mod->gc->is_gc_running);
+  // }
+}
+
+void safe_point(Module* mod) {
+  // if (mod->current_actor == NULL) return;
+  // if (!mod->gc->gc_running) return;
+
+  // // Signal the GC thread that we are stoped
+  // pthread_cond_signal(&mod->current_actor->cond);
+
+  // // mod->gc->stopped_threads++;
+  
+  // printf("reached safe point: %p (%d actors)\n", mod->current_actor, mod->event_count);
+
+  // while (mod->gc->gc_running) {}
+
+  // Wait for the GC thread to signal us
+  // pthread_mutex_lock(&mod->gc->gc_mutex);
+  // pthread_cond_wait(&mod->gc->is_gc_running, &mod->gc->gc_mutex);
+  // pthread_mutex_unlock(&mod->gc->gc_mutex);
 }
