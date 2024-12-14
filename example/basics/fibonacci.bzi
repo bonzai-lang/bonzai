@@ -2,10 +2,5 @@ require "std:math"
 require "std:io"
 
 fn fib(n: int): int => 
-  match n {
-    case 0 => 0
-    case 1 => 1
-    case _ => fib(n - 1) + fib(n - 2)
-  }
-
+  if n < 2 then n else fib(n - 1) + fib(n - 2) 
 print(fib(30))

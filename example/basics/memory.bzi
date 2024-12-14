@@ -1,0 +1,26 @@
+require "std:foundation"
+
+fn generate_memory() => {
+  ["test", "test", "test"]
+}
+
+interface Loopable {
+  fn loop()
+}
+
+actor Loop < Loopable {
+  on loop() => {
+    while true {
+      let memory = generate_memory()
+      print(memory)
+    }
+  }
+}
+
+let l1 = spawn Loop
+let l2 = spawn Loop
+let l3 = spawn Loop
+
+l1->loop()
+l2->loop()
+l3->loop()

@@ -1,4 +1,4 @@
-require "std:io"
+require "std:foundation"
 
 print("many lines")
 print("many lines")
