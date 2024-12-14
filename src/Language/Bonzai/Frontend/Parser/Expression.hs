@@ -66,7 +66,7 @@ parseLiteral = localize . Lex.lexeme $ P.choice [
 -- | To use the dollar sign anyway, you can escape it by using two followed dollar
 -- | signs. For instance, the string "Hello, $$name" will be evaluated to "Hello, $name".
 parseInterpolatedString :: (MonadIO m) => P.Parser m (HLIR.HLIR "expression")
-parseInterpolatedString = buildString . toString <$> Lit.parseString
+parseInterpolatedString = removeEmptyStrings . buildString . toString <$> Lit.parseString
   where
     toString' :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
     toString' x = HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "toString" Nothing)) [x] Nothing
@@ -86,6 +86,12 @@ parseInterpolatedString = buildString . toString <$> Lit.parseString
       let str' = HLIR.MkExprLiteral (HLIR.MkLitString (Text.pack (x:str)))
 
       HLIR.MkExprBinary "+" str' (buildString rest)
+
+    removeEmptyStrings :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
+    removeEmptyStrings (HLIR.MkExprBinary "+" (HLIR.MkExprString "") x) = removeEmptyStrings x
+    removeEmptyStrings (HLIR.MkExprBinary "+" x (HLIR.MkExprString "")) = removeEmptyStrings x
+    removeEmptyStrings (HLIR.MkExprBinary "+" x y) = HLIR.MkExprBinary "+" (removeEmptyStrings x) (removeEmptyStrings y)
+    removeEmptyStrings x = x
 
 -- | PARSE TERNARY
 -- | Parse a ternary expression. A ternary expression is an expression that consists
