@@ -78,9 +78,9 @@ encodeInstruction (ListGet i) =
 encodeInstruction (Call i) =
   encodeInstr 10 >> encodeInteger i >> replicateNull 3
 encodeInstruction (CallGlobal i j) =
-  encodeInstr 11 >> encodeInteger i >> encodeInteger j
+  encodeInstr 11 >> encodeInteger i >> encodeInteger j >> replicateNull 2
 encodeInstruction (CallLocal i j) =
-  encodeInstr 12 >> encodeInteger i >> encodeInteger j
+  encodeInstr 12 >> encodeInteger i >> encodeInteger j >> replicateNull 2
 encodeInstruction (JumpIfFalse i) =
   encodeInstr 13 >> encodeInteger i >> replicateNull 3
 encodeInstruction (JumpRel i) =
@@ -109,6 +109,18 @@ encodeInstruction MakeMutable =
   encodeInstr 25 >> replicateNull 4
 encodeInstruction (Loc i j k) =
   encodeInstr 26 >> encodeInteger i >> encodeInteger j >> encodeInteger k >> replicateNull 1
+encodeInstruction Add =
+  encodeInstr 27 >> replicateNull 4
+encodeInstruction Sub =
+  encodeInstr 28 >> replicateNull 4
+encodeInstruction Mul =
+  encodeInstr 29 >> replicateNull 4
+encodeInstruction Div =
+  encodeInstr 30 >> replicateNull 4
+encodeInstruction Mod =
+  encodeInstr 31 >> replicateNull 4
+encodeInstruction (CallNative i j) =
+  encodeInstr 32 >> encodeInteger i >> encodeInteger j >> replicateNull 2
 
 encodeText :: Text -> Put
 encodeText w = do

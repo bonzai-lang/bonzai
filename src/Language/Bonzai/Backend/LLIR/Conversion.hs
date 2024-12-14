@@ -209,6 +209,73 @@ instance Assemble MLIR.Expression where
       pure $ LLIR.instr (LLIR.LoadNative i)
     else compilerError $ "Variable " <> n <> " not found in globals, locals or natives"
 
+  assemble (MLIR.MkExprApplication (MLIR.MkExprVariable op) [a, b]) 
+    | op `elem` ["==", "!=", "<", ">", "<=", ">="] = do
+      a' <- assemble a
+      b' <- assemble b
+      
+      let op' = case op of
+            "==" -> LLIR.EqualTo
+            "!=" -> LLIR.NotEqualTo
+            "<" -> LLIR.LessThan
+            ">" -> LLIR.GreaterThan
+            "<=" -> LLIR.LessThanOrEqualTo
+            ">=" -> LLIR.GreaterThanOrEqualTo
+            _ -> error "Impossible"
+
+      pure $ a' <> b' <> LLIR.instr (LLIR.Compare op')
+  
+  assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "+") [a, b]) = do
+    a' <- assemble a
+    b' <- assemble b
+    pure $ a' <> b' <> LLIR.instr LLIR.Add
+
+  assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "-") [a, b]) = do
+    a' <- assemble a
+    b' <- assemble b
+    pure $ a' <> b' <> LLIR.instr LLIR.Sub
+  
+  assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "*") [a, b]) = do
+    a' <- assemble a
+    b' <- assemble b
+    pure $ a' <> b' <> LLIR.instr LLIR.Mul
+  
+  assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "/") [a, b]) = do
+    a' <- assemble a
+    b' <- assemble b
+    pure $ a' <> b' <> LLIR.instr LLIR.Div
+  
+  assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "%") [a, b]) = do
+    a' <- assemble a
+    b' <- assemble b
+    pure $ a' <> b' <> LLIR.instr LLIR.Mod
+
+  assemble (MLIR.MkExprApplication (MLIR.MkExprLoc (p1, _) e) args) = do
+    includeLocs <- readIORef includeLocations
+
+    if includeLocs then do
+      file <- fetchConstant (MLIR.MkLitString . toText $ p1.sourceName)
+      f <- assemble (MLIR.MkExprApplication e args)
+      pure $ LLIR.instr (LLIR.Loc (MP.unPos p1.sourceLine) (MP.unPos p1.sourceColumn) file) <> f
+    else assemble (MLIR.MkExprApplication e args)
+
+  assemble (MLIR.MkExprApplication (MLIR.MkExprVariable name) args) = do
+    glbs <- readIORef globals
+    nats <- readIORef natives
+    locals <- ask
+
+    if Set.member name locals then do
+      args' <- assemble args
+      pure $ args' <> LLIR.instr (LLIR.CallLocal name (length args))
+    else if Set.member name glbs then do
+      args' <- assemble args
+      pure $ args' <> LLIR.instr (LLIR.CallGlobal name (length args))
+    else if Set.member name nats then do
+      i <- fetchConstant (MLIR.MkLitString name)
+      args' <- assemble args
+      pure $ args' <> LLIR.instr (LLIR.CallNative i (length args))
+    else compilerError $ "Function " <> name <> " not found in globals, locals or natives"
+
   assemble (MLIR.MkExprApplication f args) = do
     f' <- assemble f
     args' <- assemble args

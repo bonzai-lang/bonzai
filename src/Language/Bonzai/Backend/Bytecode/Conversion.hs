@@ -82,6 +82,7 @@ instance Assemble LLIR.Instruction where
         addr <- negIdx idx
         pure [BC.CallLocal addr arity]
       Nothing -> error $ "Local " <> index <> " not found"
+  assemble (LLIR.CallNative index arity) = pure [BC.CallNative index arity]
   
   assemble (LLIR.JumpIfFalse address) = pure [BC.JumpIfFalse address]
   assemble (LLIR.JumpRel address) = pure [BC.JumpRel address]
@@ -94,6 +95,11 @@ instance Assemble LLIR.Instruction where
   assemble LLIR.Spawn = pure [BC.Spawn]
   assemble LLIR.MakeMutable = pure [BC.MakeMutable]
   assemble (LLIR.Loc a b c) = pure [BC.Loc a b c]
+  assemble LLIR.Add = pure [BC.Add]
+  assemble LLIR.Sub = pure [BC.Sub]
+  assemble LLIR.Mul = pure [BC.Mul]
+  assemble LLIR.Div = pure [BC.Div]
+  assemble LLIR.Mod = pure [BC.Mod]
 
 instance Assemble LLIR.Segment where
   assemble (LLIR.EventOn id' arity bodyLength ls instructions) = do

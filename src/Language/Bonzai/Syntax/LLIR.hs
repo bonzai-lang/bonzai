@@ -41,7 +41,7 @@ data Instruction
   | MakeEvent EventQuantity InstructionLength LocalSpace
   | ListGet Int
   | Call Int
-  | CallGlobal Text Int | CallLocal Text Int
+  | CallGlobal Text Int | CallLocal Text Int | CallNative Int Int
   | JumpIfFalse Int
   | JumpRel Int
   | GetIndex
@@ -51,6 +51,7 @@ data Instruction
   | Send Int Int
   | MakeMutable
   | Loc Int Int Int
+  | Add | Sub | Mul | Div | Mod
   deriving (Eq)
 
 data Library = MkLibrary Int (Set FunctionLibrary)
@@ -91,6 +92,7 @@ instance ToText Instruction where
   toText (Call n) = T.concat ["call ", T.pack (show n)]
   toText (CallGlobal n i) = T.concat ["call_global ", n, " ", T.pack (show i)]
   toText (CallLocal n i) = T.concat ["call_local ", n, " ", T.pack (show i)]
+  toText (CallNative n i) = T.concat ["call_native ", T.pack (show n), " ", T.pack (show i)]
   toText (JumpIfFalse n) = T.concat ["jump_if_false ", T.pack (show n)]
   toText (JumpRel n) = T.concat ["jump_rel ", T.pack (show n)]
   toText GetIndex = "get_index"
@@ -100,6 +102,11 @@ instance ToText Instruction where
   toText (Send n t) = T.concat ["send ", T.pack (show n), " ", T.pack (show t)]
   toText MakeMutable = "make_mutable"
   toText (Loc n t f) = T.concat ["loc ", T.pack (show n), " ", T.pack (show t), " ", T.pack (show f)]
+  toText Add = "add"
+  toText Sub = "sub"
+  toText Mul = "mul"
+  toText Div = "div"
+  toText Mod = "mod"
 
 instance ToText Segment where
   toText (Function n as _ _ is) = T.concat ["function ", n, "(", T.intercalate ", " as, ") { ", T.intercalate "; " (map toText is), " }"]

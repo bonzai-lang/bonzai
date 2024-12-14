@@ -17,7 +17,7 @@ data Instruction
   | MakeEvent LLIR.EventQuantity LLIR.InstructionLength
   | ListGet Int
   | Call Int
-  | CallGlobal Int Int | CallLocal Int Int
+  | CallGlobal Int Int | CallLocal Int Int | CallNative Int Int
   | JumpIfFalse Int
   | JumpRel Int
   | GetIndex
@@ -30,6 +30,7 @@ data Instruction
   | ReturnEvent
   | MakeMutable
   | Loc Int Int Int
+  | Add | Sub | Mul | Div | Mod
   deriving (Eq)
 
 instance ToText Int where
@@ -51,6 +52,7 @@ instance ToText Instruction where
   toText (Call a) = "Call " <> toText a
   toText (CallGlobal a b) = "CallGlobal " <> toText a <> " " <> toText b
   toText (CallLocal a b) = "CallLocal " <> toText a <> " " <> toText b
+  toText (CallNative a b) = "CallNative " <> toText a <> " " <> toText b
   toText (JumpIfFalse a) = "JumpIfFalse " <> toText a
   toText (JumpRel a) = "JumpRel " <> toText a
   toText GetIndex = "GetIndex"
@@ -63,6 +65,11 @@ instance ToText Instruction where
   toText ReturnEvent = "ReturnEvent"
   toText MakeMutable = "MakeMutable"
   toText (Loc a b c) = "Loc " <> toText a <> " " <> toText b <> " " <> toText c
+  toText Add = "Add"
+  toText Sub = "Sub"
+  toText Mul = "Mul"
+  toText Div = "Div"
+  toText Mod = "Mod"
 
 instance ToText [Instruction] where
   toText xs = T.intercalate "\n" . map format $ couple
