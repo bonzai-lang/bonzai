@@ -154,25 +154,16 @@ convert (MLIR.MkExprOn ev args body) = do
 
   pure (MLIR.MkExprOn ev ("env" : args) body')
 convert (MLIR.MkExprSend e ev es) = do
-  globals' <- readIORef globals
-  natives' <- readIORef natives
-
-  let reserved = globals' <> natives'
-
   args' <- mapM convert es
 
-  case ev of
-    x | Map.member x reserved ->
-      pure $ MLIR.MkExprApplication (MLIR.MkExprVariable x) args'
-    _ -> do
-      name <- freshLambda "call"
-      e' <- convert e
+  name <- freshLambda "call"
+  e' <- convert e
 
-      let callVar = MLIR.MkExprVariable name
-      let function = MLIR.MkExprIndex callVar (MLIR.MkExprLiteral (MLIR.MkLitInt 0))
-      let env = MLIR.MkExprIndex callVar (MLIR.MkExprLiteral (MLIR.MkLitInt 1))
+  let callVar = MLIR.MkExprVariable name
+  let function = MLIR.MkExprIndex callVar (MLIR.MkExprLiteral (MLIR.MkLitInt 0))
+  let env = MLIR.MkExprIndex callVar (MLIR.MkExprLiteral (MLIR.MkLitInt 1))
 
-      pure $ MLIR.MkExprUnpack name e' (MLIR.MkExprSend function ev (env : args'))
+  pure $ MLIR.MkExprUnpack name e' (MLIR.MkExprSend function ev (env : args'))
 convert (MLIR.MkExprSpawn e) = do
   e' <- convert e
   name <- freshLambda "spawn"
