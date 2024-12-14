@@ -515,3 +515,8 @@ Value wait_time(Module* mod, Value* args, int argc) {
 
   return MAKE_INTEGER(0);
 }
+
+Value make_unit(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "unit", argc, 0);
+  return kNull;
+}
