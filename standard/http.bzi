@@ -4,6 +4,7 @@ require "std:datatypes/string"
 require "math"
 require "std:datatypes/mutable"
 require "std:datatypes/list"
+require "std:io"
 
 extern fn start_http_server(port: int): HTTP
 extern fn accept_request(server: HTTP): Request
@@ -16,6 +17,7 @@ extern fn fetch(url: string): Throwable<(string, string)>
 extern fn fetch_with(url: string, headers: string): Throwable<(string, string)>
 extern fn redirect_to(req: Request, url: string): unit
 extern fn get_path(req: Request): string
+extern fn make_unit(): unit
 
 type Header {
   Header(code: int, reason: string)
@@ -74,17 +76,36 @@ interface HTTPWrapper {
   fn close()
 }
 
+interface RequestIntercept {
+  fn intercept(server: HTTP, handler: fn(Request): unit)
+}
+
+fn Request() => {
+  actor < RequestIntercept {
+    on intercept(server: HTTP, handler) => {
+      while true {
+        let req = accept_request(server)
+
+        // print("test1")
+        // print(req)
+        // print(handler)
+        handler(req)
+        // print("test2")
+
+        close_client(req)
+      }
+    }
+  }
+}
+
 pub fn HTTPServer(port: int) => {
   let http = start_http_server(port)
 
   actor < HTTPWrapper {
     on listen(handler) => {
-      while true {
-        let req = accept_request(http)
+      let i1 = spawn Request()
 
-        handler(req)
-        close_client(req)
-      }
+      i1->intercept(http, handler)
     }
     
     on close() =>
