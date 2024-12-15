@@ -9,7 +9,11 @@
 #include <math.h>
 
 // Increase IP might also check if gc is lock
-#define INCREASE_IP_BY(mod, x) (mod->pc += ((x) * 5))
+#define INCREASE_IP_BY(mod, x) \
+  if (mod->latest_try_catch_count > 0) { \
+    mod->latest_try_catch[1][mod->latest_try_catch_count - 1] += 1; \
+  } \
+  (mod->pc += ((x) * 5));
 #define INCREASE_IP(mod) INCREASE_IP_BY(mod, 1)
 
 Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callstack) {
@@ -33,7 +37,8 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     &&case_special, &&case_halt, &&case_spawn, &&case_event_on, 
     &&case_send, &&case_make_function_and_store, &&case_load_native, &&case_make_event,
     &&case_return_event, &&case_make_mutable, &&case_loc, &&case_add, &&case_sub,
-    &&case_mul, &&case_div, &&case_mod, &&case_call_native, UNKNOWN
+    &&case_mul, &&case_div, &&case_mod, &&case_call_native, &&case_try_catch, 
+    &&case_get_value, UNKNOWN
   };
 
   goto *jmp_table[op];
@@ -86,8 +91,9 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
     module->pc = fr.instruction_pointer;
 
-    if (does_return && callstack == module->callstack) 
+    if (does_return && callstack == module->callstack) {
       return ret;
+    }
 
     goto *jmp_table[op];
   }
@@ -389,11 +395,8 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
       case TYPE_STRING: {
         char* s1 = GET_STRING(a);
         char* s2 = GET_STRING(b);
-        char* s = malloc(strlen(s1) + strlen(s2) + 1);
-        
-        sprintf(s, "%s%s", s1, s2);
 
-        stack_push(module, MAKE_STRING(module, s));
+        stack_push(module, MAKE_STRING_MULTIPLE(module, s1, s2));
         break;
       }
 
@@ -528,6 +531,26 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     Value nat = MAKE_NATIVE(module, GET_STRING(native), i1);
     
     op_native_call(module, nat, i2);
+    goto *jmp_table[op];
+  }
+
+  case_try_catch: {
+    module->latest_try_catch[0][module->latest_try_catch_count] = i1 + 1;
+    module->latest_try_catch[1][module->latest_try_catch_count] = 0;
+    module->latest_try_catch_count++;
+
+    INCREASE_IP(module);
+    goto *jmp_table[op];
+  }
+
+  case_get_value: {
+    Value value = stack_pop(module);
+
+    ASSERT_TYPE(module, "get_value", value, TYPE_MUTABLE);
+
+    stack_push(module, GET_MUTABLE(value));
+
+    INCREASE_IP(module);
     goto *jmp_table[op];
   }
 

@@ -187,7 +187,8 @@ typedef struct {
   (SIGNATURE_FUNCTION | (uint16_t)(x) | ((uint16_t)(y) << 16))
 
 Value MAKE_MUTABLE(struct Module* mod, Value x);
-Value MAKE_STRING(struct Module* mod, char* x);
+Value MAKE_STRING(struct Module* mod, char* string);
+Value MAKE_STRING_MULTIPLE(struct Module* mod, ...);
 Value MAKE_LIST(struct Module* mod, Value* x, uint32_t len);
 Value MAKE_EVENT(struct Module* mod, uint32_t ons_count, uint32_t ipc);
 Value MAKE_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp);

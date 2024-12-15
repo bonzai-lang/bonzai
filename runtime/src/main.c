@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
   gc_t* gc = malloc(sizeof(gc_t));
   init_gc(gc, &module);
 
-  if (argc < 2) THROW_FMT((&module), "Usage: %s <file>", argv[0]);
+  if (argc < 2) { THROW_FMT((&module), "Usage: %s <file>", argv[0]); }
   FILE* file = fopen(argv[1], "rb");
 
   if (file == NULL) {
@@ -90,6 +90,7 @@ int main(int argc, char* argv[]) {
   module.handles = libs;
   module.num_handles = num_libs;
   module.current_actor = NULL;
+  module.latest_try_catch_count = 0;
 
   pthread_mutex_init(&module.module_mutex, NULL);
 
@@ -119,6 +120,9 @@ int main(int argc, char* argv[]) {
   free(module.stack);
   free(module.instrs);
   free(module.constants.values);
+  free(module.native_handles);
+  free(gc->stacks.stacks);
+  free(gc);
 
   free(args);
   free_libraries(libraries);

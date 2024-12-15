@@ -6,26 +6,34 @@
 
 #define ENABLE_ASSERTIONS 1
 
+// THROW should jump to catch body if there is
+// a try-catch block, otherwise it should print
 #define THROW(module, message)                  \
-  do {                                          \
+  if (module->latest_try_catch_count > 0) {     \
+    module->stack->values[module->stack->stack_pointer++] = MAKE_STRING_MULTIPLE(module, message); \
+    jump_try_catch(module);                     \
+  } else {                                      \
     printf("%s[error]: %s", BRED, COLOR_RESET); \
     printf(message);                            \
-    printf("\n"); \
+    printf("\n");                               \
     if (module->file && module->latest_position[0] != 0 && module->latest_position[1] != 0) { \
-      printf("   %sat %s:%d:%d\n",         \
-        BLK, \
-        module->file,                \
-        module->latest_position[0],  \
-        module->latest_position[1]); \
+      printf("   %sat %s:%d:%d\n",              \
+        BLK,                                    \
+        module->file,                           \
+        module->latest_position[0],             \
+        module->latest_position[1]);            \
     } \
     printf("   %sin %s:%d\n", BLK, __func__, __LINE__); \
-    printf("   %sat IPC %d", BLK, module->pc); \
-    printf("\n");                            \
-    exit(EXIT_FAILURE);                      \
-  } while (0);
+    printf("   %sat IPC %d", BLK, module->pc);  \
+    printf("\n");                               \
+    exit(EXIT_FAILURE);                         \
+  }
 
 #define THROW_FMT(module, ...)   \
-  do {                   \
+  if (module->latest_try_catch_count > 0) { \
+    module->stack->values[module->stack->stack_pointer++] = MAKE_STRING_MULTIPLE(module, __VA_ARGS__); \
+    jump_try_catch(module); \
+  } else {                    \
     printf("%s[error]: %s", BRED, COLOR_RESET); \
     printf(__VA_ARGS__); \
     printf("\n"); \
@@ -40,7 +48,8 @@
     printf("  %s- at IPC %d", BLK, module->pc); \
     printf("\n");        \
     exit(EXIT_FAILURE);  \
-  } while (0);
+  }
+  
 
 #if ENABLE_ASSERTIONS
 

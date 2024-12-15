@@ -6,6 +6,7 @@
 #include <string.h>
 #include <threading.h>
 #include <value.h>
+#include <stdarg.h>
 
 void mark_value(Value value) {
   if (!IS_PTR(value)) return;
@@ -169,10 +170,41 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
   return v;
 }
 
+Value MAKE_STRING_MULTIPLE(struct Module* mod, ...) {
+  va_list args;
+  va_start(args, mod);
+
+  int len = 0;
+
+  for (char* str = va_arg(args, char*); str != NULL; str = va_arg(args, char*)) {
+    len += strlen(str);
+  }
+
+  va_end(args);
+
+  char* str = malloc(len + 1);
+
+  va_start(args, mod);
+
+  for (char* s = va_arg(args, char*); s != NULL; s = va_arg(args, char*)) {
+    strcat(str, s);
+  }
+
+  va_end(args);
+
+  HeapValue* v = allocate(mod, TYPE_STRING);
+  v->as_string = str;
+  v->length = len;
+  v->is_constant = false;
+
+  return MAKE_PTR(v);
+}
+
 Value MAKE_STRING(struct Module* mod, char* x) {
   HeapValue* v = allocate(mod, TYPE_STRING);
   v->as_string = x;
   v->length = strlen(x);
+  v->is_constant = false;
 
   return MAKE_PTR(v);
 }

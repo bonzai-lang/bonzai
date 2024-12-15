@@ -15,6 +15,10 @@ typedef struct Actor {
 
   pthread_cond_t cond;
   pthread_mutex_t mutex;
+
+  struct Actor** children;
+  struct Actor* parent;
+  int children_count;
 } Actor;
 
 void *actor_run(void *arg);

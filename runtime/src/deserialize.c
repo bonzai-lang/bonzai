@@ -47,8 +47,9 @@ Value deserialize_value(Module* mod, FILE* file) {
       break;
     }
 
-    default:
+    default: {
       THROW_FMT(mod, "Invalid value type, received %d", type);
+    }
   }
 
   return value;

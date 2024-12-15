@@ -2,6 +2,7 @@
 #include <module.h>
 #include <value.h>
 #include <stdatomic.h>
+#include <debug.h>
 
 __attribute__((always_inline)) inline Frame pop_frame(Module* mod) {
   Value pc = mod->stack->values[mod->base_pointer];
@@ -68,4 +69,11 @@ void init_gc(gc_t* gc, Module* mod) {
   pthread_mutex_init(&gc->gc_mutex, NULL);
 
   mod->gc = gc;
+}
+
+void jump_try_catch(struct Module* module) {
+  int jmp = module->latest_try_catch[0][module->latest_try_catch_count - 1];
+  int offset = module->latest_try_catch[1][module->latest_try_catch_count - 1];
+  module->latest_try_catch_count--;
+  module->pc += (jmp - offset) * 5;
 }

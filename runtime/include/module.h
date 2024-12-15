@@ -35,6 +35,8 @@ typedef struct Module {
   int32_t argc;
   Value *argv;
 
+  Value *actor_args;
+
   int32_t pc;
   Value (*call_function)(struct Module *m, Value callee, int32_t argc, Value* argv);
   
@@ -49,6 +51,9 @@ typedef struct Module {
   const char* file;
 
   void** native_handles;
+
+  int latest_try_catch[2][1024];
+  int latest_try_catch_count;
   
   gc_t* gc;
 } Module;
@@ -59,4 +64,5 @@ Frame pop_frame(Module *mod);
 Frame pop_event_frame(Module* mod);
 void init_gc(gc_t* gc, Module* mod);
 
+void jump_try_catch(Module* module); 
 #endif  // MODULE_H

@@ -52,7 +52,6 @@ void op_native_call(Module *module, Value callee, int32_t argc) {
   ASSERT_TYPE(module, "op_native_call", callee, TYPE_NATIVE);
   struct Native fun = GET_NATIVE(callee);
 
-
   Value* args = malloc(sizeof(Value) * argc);
 
   module->gc->gc_enabled = false;

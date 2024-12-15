@@ -9,7 +9,9 @@
 
 Value list_get(Module* mod, Value list, uint32_t idx) {
   HeapValue *l = GET_PTR(list);
-  if (idx < 0 || idx >= l->length) THROW_FMT(mod, "Invalid index, received %d", idx);
+  if (idx < 0 || idx >= l->length) {
+    THROW_FMT(mod, "Invalid index, received %d", idx);
+  }
 
   return l->as_ptr[idx];
 }
@@ -32,7 +34,7 @@ Value call_threaded(Module *new_module, Value callee, int32_t argc, Value *argv)
 
   new_module->base_pointer = new_module->stack->stack_pointer - 3;
   new_module->stack->stack_pointer++;
-  
+
   Value ret = run_interpreter(new_module, ipc, true, new_module->callstack - 1);
 
   return ret;
@@ -57,10 +59,11 @@ void *actor_run(void *arg) {
   new_module->num_handles = module->num_handles;
   new_module->native_handles = module->native_handles;
   new_module->current_actor = actor;
+  new_module->is_terminated = 0;
   pthread_mutex_unlock(&module->module_mutex);
   new_module->callstack = 1;
-
-  while (1) {
+  
+  while (true) {
     Message *msg = dequeue(actor->queue);
     
     struct Event event = actor->event;
@@ -68,28 +71,25 @@ void *actor_run(void *arg) {
     int argc = msg->argc;
     int id = msg->name;
 
+    new_module->actor_args = args;
+
     Value *ons = event.ons;
     Value event_func = ons[id];
 
+    free(msg);
+    
     call_threaded(new_module, event_func, argc, args);
 
-    free(msg);
+    // gc(new_module);
     free(args);
-
+    
     if (new_module->is_terminated && actor->queue->head == NULL) {
-      // Free the stack and the module
-      free(new_module->stack->values);
-      free(new_module->stack);
-      free(new_module);
-      free(actor->queue);
-      free(actor);
-      pthread_exit(0);
+      break;
     }
   }
 
   // Free the stack and the module
-  free(new_module->stack->values);
-  free(new_module->stack);
+  gc(new_module);
   free(new_module);
   free(actor->queue);
   free(actor);
