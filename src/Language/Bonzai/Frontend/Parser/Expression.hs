@@ -644,6 +644,18 @@ parseExpression = localize $ P.makeExprParser parseTerm table
   where
     table = [
         [
+          P.InfixN $ Lex.symbol "+=" $> HLIR.MkExprMutableOperation "+=",
+          P.InfixN $ Lex.symbol "-=" $> HLIR.MkExprMutableOperation "-=",
+          P.InfixN $ Lex.symbol "*=" $> HLIR.MkExprMutableOperation "*=",
+          P.InfixN $ Lex.symbol "/=" $> HLIR.MkExprMutableOperation "/=",
+          P.InfixN $ Lex.symbol "%=" $> HLIR.MkExprMutableOperation "%=",
+          P.InfixN $ Lex.symbol "&=" $> HLIR.MkExprMutableOperation "&=",
+          P.InfixN $ Lex.symbol "|=" $> HLIR.MkExprMutableOperation "|=",
+          P.InfixN $ Lex.symbol "^=" $> HLIR.MkExprMutableOperation "^=",
+          P.InfixN $ Lex.symbol "<<=" $> HLIR.MkExprMutableOperation "<<=",
+          P.InfixN $ Lex.symbol ">>=" $> HLIR.MkExprMutableOperation ">>=" 
+        ],
+        [
           P.Postfix . Lex.makeUnaryOp $ do
             args <- Lex.parens (P.sepBy parseExpression Lex.comma)
             pure $ \e -> HLIR.MkExprApplication e args Nothing

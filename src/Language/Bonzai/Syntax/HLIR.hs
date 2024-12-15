@@ -10,6 +10,7 @@ module Language.Bonzai.Syntax.HLIR (
   pattern MkExprBinary,
   pattern MkExprString,
   pattern MkExprTuple,
+  pattern MkExprMutableOperation,
 
   -- Re-exports
   module Lit,
@@ -140,6 +141,9 @@ pattern MkExprString s = MkExprLiteral (MkLitString s)
 -- | A pattern synonym to represent tuple expressions in Bonzai.
 pattern MkExprTuple :: Expression Maybe t -> Expression Maybe t -> Expression Maybe t
 pattern MkExprTuple a b = MkExprApplication (MkExprVariable (MkAnnotation "Tuple" Nothing)) [a, b] Nothing
+
+pattern MkExprMutableOperation :: Text -> Expression Maybe t -> Expression Maybe t -> Expression Maybe t
+pattern MkExprMutableOperation op a b = MkExprApplication (MkExprVariable (MkAnnotation op Nothing)) [a, b] Nothing
 
 type family HLIR (s :: Symbol) where
   HLIR "update" = Update Maybe Type

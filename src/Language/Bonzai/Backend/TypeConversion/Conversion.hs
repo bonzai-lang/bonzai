@@ -91,6 +91,7 @@ convert (TLIR.MkExprMut e t) = do
   e' <- convert e
   pure (TMLIR.MkExprRef e' t.runIdentity)
 convert (TLIR.MkExprLive {}) = compilerError "Cannot convert TLIR.MKExprLive to TMLIR"
+convert (TLIR.MkExprTryCatch {}) = compilerError "Cannot convert TLIR.MkExprTryCatch to TMLIR"
 convert (TLIR.MkExprPublic {}) = compilerError "Cannot convert TLIR.MkExprPublic to TMLIR"
 
 convertDataConstructor :: TLIR.DataConstructor TLIR.Type -> TMLIR.DataConstructor
