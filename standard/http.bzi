@@ -10,10 +10,10 @@ extern fn start_http_server(port: int): HTTP
 extern fn accept_request(server: HTTP): Request
 extern fn close_client(req: Request)
 extern fn get_buffer(req: Request): string
-extern fn send_buffer(req: Request, buffer: string)
-extern fn send_buffer_with(req: Request, buffer: string)
+pub extern fn send_buffer(req: Request, buffer: string)
+pub extern fn send_buffer_with(req: Request, buffer: string)
 extern fn close_server(server: HTTP)
-extern fn fetch(url: string): Throwable<(string, string)>
+pub extern fn fetch(url: string): Throwable<(string, string)>
 extern fn fetch_with(url: string, headers: string): Throwable<(string, string)>
 extern fn redirect_to(req: Request, url: string): unit
 extern fn get_path(req: Request): string

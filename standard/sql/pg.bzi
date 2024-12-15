@@ -4,6 +4,6 @@ extern fn psql_connect(info: string): Throwable<SQL>
 extern fn psql_close_connection(conn: SQL)
 extern fn psql_query(conn: SQL, query: string): list<list<string>>
 
-let PGSQL::connect = psql_connect
-let PGSQL::close = psql_close_connection
-let PGSQL::query = psql_query
+pub let PGSQL::connect = psql_connect
+pub let PGSQL::close = psql_close_connection
+pub let PGSQL::query = psql_query

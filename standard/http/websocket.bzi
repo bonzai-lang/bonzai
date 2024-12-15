@@ -16,7 +16,7 @@ interface Websocket {
   fn close()
 }
 
-fn Websocket(host: string, port: int, path: string, isSecure: bool) => {
+pub fn Websocket(host: string, port: int, path: string, isSecure: bool) => {
   let ws = initWebsocket(host, port, isSecure)
   performHandshake(ws, path, host, port)
 

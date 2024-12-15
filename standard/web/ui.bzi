@@ -1,5 +1,10 @@
-require "std:language/parser"
-require "std:datatypes/tuple"
+require "std:language/parser": 
+  choice, right, char, Parser::bind, 
+  Parser::pure, many, satisfy, is_whitespace, 
+  left, Parser::map, or, implode, many1, 
+  is_digit, toInt, Parser::andThen, toFloat, 
+  string, sepBy, lazy, runParser, is_alphanumeric, try_
+require "std:datatypes/tuple": Map::fromList, Tuple, Map::foldl
 require "std:datatypes/error"
 require "std:datatypes/list"
 require "std:math"
@@ -63,7 +68,7 @@ fn HTMLParser(): Parser<HTML> => {
 
   let text = many1(satisfy(fn (c) => c != '<')) :Parser::map: fn(xs) => Text(xs.implode())
 
-  choice([selfClosingTag.try(), block, text])
+  choice([selfClosingTag.try_(), block, text])
 }
 
 fn renderHTML(html: HTML): string => 

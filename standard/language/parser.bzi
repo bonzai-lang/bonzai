@@ -29,7 +29,7 @@ fn runParser<A>(parser: Parser<A>, input: string): Result<A> =>
 fn parseError<A>(msg: string): Parser<A> =>
   Parser(fn(inp) => ParseError(msg, inp))
 
-fn try<A>(parser: Parser<A>): Parser<A> =>
+fn try_<A>(parser: Parser<A>): Parser<A> =>
   Parser(fn(input) => {
     match runParser(parser, input) {
       case ParseResult(x, rest) => ParseResult(x, rest)

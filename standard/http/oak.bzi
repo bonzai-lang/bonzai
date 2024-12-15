@@ -1,5 +1,5 @@
-require "std:http"
-require "std:datatypes/tuple"
+require "std:http": get_path, HTTPServer, respondText
+require "std:datatypes/tuple": Map::empty, Map::lookup, Map::insert
 require "std:math"
 require "std:datatypes/mutable"
 

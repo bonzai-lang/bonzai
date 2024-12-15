@@ -36,4 +36,4 @@ extern fn randomValue(): int
 extern fn itof(i: int): float
 extern fn ftoi(f: float): int
 
-let random = randomValue
+pub let random = randomValue
