@@ -13,6 +13,7 @@ module Language.Bonzai.Frontend.Typechecking.Monad (
   exitLevel,
 
   instantiate,
+  instantiateWithSub,
   fresh,
   generalize,
 ) where
@@ -42,7 +43,7 @@ currentLevel = IO.unsafePerformIO $ newIORef 0
 
 data CheckerState = MkCheckerState {
     variables :: Map Text HLIR.Scheme
-  , interfaces :: Map (Text, [HLIR.Type]) (Map Text HLIR.Scheme)
+  , interfaces :: Map (Text, [HLIR.QuVar]) (Map Text HLIR.Type)
   , varPos :: [(Text, (HLIR.Scheme, HLIR.Position))]
 } deriving (Eq, Show)
 

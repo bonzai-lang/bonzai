@@ -166,7 +166,7 @@ typecheck (HLIR.MkExprActor i es) = do
   interface <- U.findInterface header tys
 
   methodsTys <- case interface of
-    Just methods -> mapM M.instantiate methods
+    Just methods -> pure methods
     Nothing -> throw (M.ActorNotFound i)
 
   (es', tys') <- unzip <$> traverse (`typecheckEvent` methodsTys) es
@@ -222,9 +222,7 @@ typecheck (HLIR.MkExprSend e ev a _) = do
 
   interface <- U.findInterface header tys
   case interface of
-    Just methods -> do
-      methodsTys <- mapM M.instantiate methods
-
+    Just methodsTys -> do
       case Map.lookup ev methodsTys of
         Just (argsTy HLIR.:->: _) -> do
           if length argsTy /= length elTys
@@ -256,9 +254,9 @@ typecheck (HLIR.MkExprInterface ann defs) = do
   let name = ann.name
       generics = ann.value
 
-  let actor = if null ann.value then (name, []) else (name, HLIR.MkTyId <$> generics)
+  let actor = if null ann.value then (name, []) else (name, generics)
 
-  let schemes = map (\(HLIR.MkAnnotation funName funTy) -> (funName, HLIR.Forall generics funTy)) defs
+  let schemes = map (\(HLIR.MkAnnotation funName funTy) -> (funName, funTy)) defs
 
   modifyIORef M.checkerState $ \st -> st { M.interfaces = Map.insert actor (Map.fromList schemes) st.interfaces }
 

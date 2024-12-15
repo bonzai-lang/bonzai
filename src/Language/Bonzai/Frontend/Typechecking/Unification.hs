@@ -48,6 +48,9 @@ unifiesWith t t' = do
             M.throw (M.UnificationFail t1 t2)
           writeIORef tv1 (HLIR.Link t2)
       (_, HLIR.MkTyVar _) -> unifiesWith t2 t1
+      (HLIR.MkTyQuantified qv1, HLIR.MkTyQuantified qv2) | qv1 == qv2 -> pure ()
+      (HLIR.MkTyQuantified _, _) -> pure ()
+      (_, HLIR.MkTyQuantified _) -> pure ()
       (HLIR.MkTyApp t1a t1b, HLIR.MkTyApp t2a t2b) | length t1b == length t2b -> do
         unifiesWith t1a t2a
         zipWithM_ unifiesWith t1b t2b
@@ -82,17 +85,15 @@ findM _ [] = pure Nothing
 -- |    arguments of the interface
 -- | 4. If they do, return the interface
 -- | 5. If no interface is found, return Nothing
-findInterface :: (M.MonadChecker m) => Text -> [HLIR.Type] -> m (Maybe (Map Text HLIR.Scheme))
+findInterface :: (M.MonadChecker m) => Text -> [HLIR.Type] -> m (Maybe (Map Text HLIR.Type))
 findInterface name args = do
   interfaces <- Map.toList . M.interfaces <$> readIORef M.checkerState
 
   findM (\((name', args'), m) -> do
     if name == name' && length args == length args'
       then do
-        b <- and <$> zipWithM doesUnifyWith args args'
-        
-        pure $ if b then Just m else Nothing
+        let subst = Map.fromList (zip args' args)
+        Just <$> mapM ((fst <$>) . M.instantiateWithSub subst . HLIR.Forall []) m
       else pure Nothing
     ) interfaces
 
-  
