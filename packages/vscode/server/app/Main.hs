@@ -107,6 +107,8 @@ getVar (HLIR.MkExprRequire {}) _ = Nothing
 getVar (HLIR.MkExprLive ann e) pos = case getVar e pos of
   Just x -> Just x
   Nothing -> Just (HLIR.name ann, runIdentity $ HLIR.value ann)
+getVar (HLIR.MkExprTryCatch t n c) pos =
+  getVar t pos <|> getVar c pos <|> Just (HLIR.name n, HLIR.MkTyString)
 getVar _ _ = Nothing
 
 getVarInPattern :: HLIR.TLIR "pattern" -> (Position, Uri) -> Maybe (Text, HLIR.Type)
@@ -228,6 +230,17 @@ findLets (HLIR.MkExprUpdate up val) pos p = do
   case up of
     HLIR.MkUpdtVariable name -> vars <> Map.singleton (HLIR.name name) (runIdentity $ HLIR.value name, Nothing)
     _ -> vars
+findLets (HLIR.MkExprIndex e i) pos p = do 
+  let vars = findLets e pos p
+  let vars' = findLets i pos p
+  vars <> vars'
+findLets (HLIR.MkExprLive ann e) pos p = do
+  let vars = findLets e pos p
+  vars <> Map.singleton (HLIR.name ann) (runIdentity $ HLIR.value ann, Nothing)
+findLets (HLIR.MkExprTryCatch t n c) pos p = do
+  let vars = findLets t pos p
+  let vars' = findLets c pos p
+  vars <> vars' <> Map.singleton (HLIR.name n) (HLIR.MkTyString, Nothing)
 findLets _ _ _ = mempty
 
 findLetsInPattern :: HLIR.TLIR "pattern" -> (Position, Uri) -> Maybe HLIR.Position -> Map Text HLIR.Type
