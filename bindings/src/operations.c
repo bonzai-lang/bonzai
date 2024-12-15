@@ -155,8 +155,10 @@ Value exit_with(Module* mod, Value* args, int argc) {
   int code = GET_INT(args[0]);
 
   mod->is_terminated = true;
-  pthread_exit(0);
-  exit(code);
+
+  free(args);
+  free(mod->actor_args);
+  pthread_exit(NULL);
 }
 
 Value mutable_value(Module* mod, Value* args, int argc) {
