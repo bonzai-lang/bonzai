@@ -10,7 +10,7 @@ interface Config {
   fn execute()
 }
 
-fn Config() => {
+pub fn Config() => {
   mut file = ""
   mut compiler_options = ""
   mut runtime_options = ""

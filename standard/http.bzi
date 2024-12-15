@@ -77,38 +77,43 @@ interface HTTPWrapper {
 }
 
 interface RequestIntercept {
-  fn intercept(server: HTTP, handler: fn(Request): unit)
+  fn intercept(server: HTTP, handler: fn(Request): unit, isClosed: mut bool)
+  fn close()
 }
 
 fn Request() => {
   actor < RequestIntercept {
-    on intercept(server: HTTP, handler) => {
-      while true {
+    on intercept(server: HTTP, handler, isClosed) => {
+      while !isClosed.value {
         let req = accept_request(server)
 
-        // print("test1")
-        // print(req)
-        // print(handler)
         handler(req)
-        // print("test2")
 
         close_client(req)
       }
+
+      exit()
     }
+
+    on close() => exit()
   }
 }
 
 pub fn HTTPServer(port: int) => {
   let http = start_http_server(port)
+  mut isClosed = false
 
   actor < HTTPWrapper {
     on listen(handler) => {
       let i1 = spawn Request()
-
-      i1->intercept(http, handler)
+      i1->intercept(http, handler, isClosed)
     }
     
-    on close() =>
+    on close() => {
+      isClosed = true
       close_server(http)
+
+      exit()
+    }
   }
 }
