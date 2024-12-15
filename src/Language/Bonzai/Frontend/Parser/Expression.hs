@@ -532,10 +532,10 @@ parseSpawn = localize $ do
 -- | definition. It is used to define a map in Bonzai.
 -- | The syntax of a map expression is as follows:
 -- |
--- | "#{" (key ":" value ("," key ":" value)*)? "}"
+-- | "{" (key ":" value ("," key ":" value)*)? "}"
 parseMap :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseMap = do
-  xs <- P.string "#{" *> Lex.scn *> P.sepBy parseMapPair Lex.comma <* Lex.symbol "}"
+  xs <- P.string "{" *> Lex.scn *> P.sepBy1 parseMapPair Lex.comma <* Lex.symbol "}"
 
   let mapVar = HLIR.MkExprVariable (HLIR.MkAnnotation "Map" Nothing)
   pure $ HLIR.MkExprApplication mapVar [HLIR.MkExprList xs] Nothing
