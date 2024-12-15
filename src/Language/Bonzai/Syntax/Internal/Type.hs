@@ -168,7 +168,7 @@ simplify (MkTyApp a b) = do
 simplify a = pure a
 
 instance ToText TyVar where
-  toText (Link a) = "#" <> toText a
+  toText (Link a) = toText a
   toText (Unbound a l) = a <> "@" <> T.pack (show l)
 
 instance ToText (Maybe Type) where
