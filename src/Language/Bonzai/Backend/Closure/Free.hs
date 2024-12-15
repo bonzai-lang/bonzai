@@ -86,6 +86,7 @@ instance Free MLIR.Expression where
   free (MLIR.MkExprLoc _ e) = free e
   free (MLIR.MkExprWhile c e) = free c <> free e
   free MLIR.MkExprSpecial = Set.empty
+  free (MLIR.MkExprTryCatch e _ e') = free e <> free e'
 
 instance Free MLIR.Update where
   free (MLIR.MkUpdtVariable a) = Set.singleton a
@@ -116,6 +117,7 @@ instance Substitutable MLIR.Expression MLIR.Expression where
   substitute r (MLIR.MkExprLoc p e) = MLIR.MkExprLoc p (substitute r e)
   substitute r (MLIR.MkExprWhile c e) = MLIR.MkExprWhile (substitute r c) (substitute r e)
   substitute _ MLIR.MkExprSpecial = MLIR.MkExprSpecial
+  substitute (a, e) (MLIR.MkExprTryCatch e' n e'') = MLIR.MkExprTryCatch (substitute (a, e) e') n (substitute (a, e) e'')
 
 instance Substitutable MLIR.Update MLIR.Update where
   substitute (a, e) (MLIR.MkUpdtVariable a') = if a == a' then e else MLIR.MkUpdtVariable a'

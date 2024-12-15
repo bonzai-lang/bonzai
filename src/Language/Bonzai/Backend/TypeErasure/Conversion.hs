@@ -69,6 +69,7 @@ convert (HLIR.MkExprMatch e _ cs _) = do
 convert (HLIR.MkExprUnwrapLive e _) = MLIR.MkExprApplication (convert e) []
 convert (HLIR.MkExprWrapLive e _) = MLIR.MkExprLambda [] (convert e)
 convert (HLIR.MkExprMut e _) = MLIR.MkExprMut (convert e)
+convert (HLIR.MkExprTryCatch e n e') = MLIR.MkExprTryCatch (convert e) n.name (convert e')
 convert _ = compilerError "impossible"
 
 -- | Create a function bsaed on a datatype constructor, the function will return a

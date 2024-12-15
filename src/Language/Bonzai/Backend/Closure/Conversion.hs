@@ -184,6 +184,7 @@ convert (MLIR.MkExprUnpack x e e') = MLIR.MkExprUnpack x <$> convert e <*> conve
 convert (MLIR.MkExprLoc p e) = MLIR.MkExprLoc p <$> convert e
 convert (MLIR.MkExprWhile c e) = MLIR.MkExprWhile <$> convert c <*> convert e
 convert MLIR.MkExprSpecial = pure MLIR.MkExprSpecial
+convert (MLIR.MkExprTryCatch e n e') = MLIR.MkExprTryCatch <$> convert e <*> pure n <*> convert e'
 
 convertLambda :: MonadIO m => Set Text -> MLIR.Expression -> m MLIR.Expression
 convertLambda reserved (MLIR.MkExprLambda args body) = do

@@ -121,6 +121,10 @@ encodeInstruction Mod =
   encodeInstr 31 >> replicateNull 4
 encodeInstruction (CallNative i j) =
   encodeInstr 32 >> encodeInteger i >> encodeInteger j >> replicateNull 2
+encodeInstruction (TryCatch i) =
+  encodeInstr 33 >> encodeInteger i >> replicateNull 3
+encodeInstruction GetValue =
+  encodeInstr 34 >> replicateNull 4
 
 encodeText :: Text -> Put
 encodeText w = do

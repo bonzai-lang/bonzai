@@ -101,6 +101,11 @@ instance Assemble LLIR.Instruction where
   assemble LLIR.Div = pure [BC.Div]
   assemble LLIR.Mod = pure [BC.Mod]
 
+  assemble (LLIR.TryCatch jumpAddr) = do
+    pure [BC.TryCatch jumpAddr]
+  
+  assemble LLIR.GetValue = pure [BC.GetValue]
+
 instance Assemble LLIR.Segment where
   assemble (LLIR.EventOn id' arity bodyLength ls instructions) = do
     let freed' = Map.fromList ls
