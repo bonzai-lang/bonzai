@@ -567,6 +567,26 @@ parseRequire = localize $ do
 
   pure $ HLIR.MkExprRequire path (fromList vars)
 
+-- | PARSE TRY-CATCH EXPRESSION
+-- | Parse a try-catch expression. A try-catch expression is an expression that consists
+-- | of a try-catch statement. It is used to catch an error in Bonzai.
+-- | The syntax of a try-catch expression is as follows:
+-- |
+-- | "try" expression "catch" identifier "{" expression* "}"
+parseTryCatch :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseTryCatch = localize $ do
+  void $ Lex.reserved "try"
+  expr <- parseExpression
+
+  void $ Lex.reserved "catch"
+  name <- Lex.identifier <|> Lex.parens Lex.operator
+
+  void $ Lex.symbol "{"
+  body <- P.many parseExpression
+  void $ Lex.symbol "}"
+
+  pure $ HLIR.MkExprTryCatch expr (HLIR.MkAnnotation name Nothing) (HLIR.MkExprBlock body Nothing)
+
 -- | PARSE TERM EXPRESSION
 -- | Parse a term expression. A term expression is an expression that consists of a term.
 -- | It is used to represent a non-recursive value in Bonzai.
@@ -589,6 +609,7 @@ parseTerm =
     P.try parseMap,
     parseBlock,
     parseList,
+    parseTryCatch,
     P.try parseTuple,
     P.try parseUpdate,
     parseVariable,

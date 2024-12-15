@@ -81,6 +81,7 @@ data Expression f t
   | MkExprUnwrapLive (Expression f t) (f t)
   | MkExprWrapLive (Expression f t) (f t)
   | MkExprPublic (Expression f t)
+  | MkExprTryCatch (Expression f t) (Annotation (f t)) (Expression f t)
   deriving Generic
 
 -- | DATA CONSTRUCTOR TYPE
@@ -184,6 +185,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprUnwrapLive e _) = T.concat ["unwrap ", toText e]
   toText (MkExprWrapLive e _) = T.concat ["wrap ", toText e]
   toText (MkExprPublic e) = T.concat ["pub ", toText e]
+  toText (MkExprTryCatch e _ e') = T.concat ["try ", toText e, " catch ", toText e']
 
 instance ToText t => ToText (DataConstructor t) where
   toText (MkDataVariable v) = v

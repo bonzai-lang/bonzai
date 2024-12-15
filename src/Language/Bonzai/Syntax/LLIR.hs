@@ -52,6 +52,8 @@ data Instruction
   | MakeMutable
   | Loc Int Int Int
   | Add | Sub | Mul | Div | Mod
+  | TryCatch Int
+  | GetValue
   deriving (Eq)
 
 data Library = MkLibrary Int (Set FunctionLibrary)
@@ -107,6 +109,8 @@ instance ToText Instruction where
   toText Mul = "mul"
   toText Div = "div"
   toText Mod = "mod"
+  toText (TryCatch i) = T.concat ["try_catch ", T.pack (show i)]
+  toText GetValue = "get_value"
 
 instance ToText Segment where
   toText (Function n as _ _ is) = T.concat ["function ", n, "(", T.intercalate ", " as, ") { ", T.intercalate "; " (map toText is), " }"]

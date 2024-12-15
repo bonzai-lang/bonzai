@@ -57,6 +57,7 @@ data Expression
   | MkExprLoc Position Expression
   | MkExprWhile Expression Expression
   | MkExprSpecial
+  | MkExprTryCatch Expression Text Expression
   deriving (Eq)
 
 pattern MkExprFunction :: Text -> [Text] -> Expression -> Expression
@@ -95,6 +96,7 @@ instance ToText Expression where
   toText (MkExprLoc _ e) = toText e
   toText (MkExprWhile c e) = T.concat ["while ", toText c, " { ", toText e, " }"]
   toText MkExprSpecial = "<special>"
+  toText (MkExprTryCatch e n e') = T.concat ["try ", toText e, " catch ", n, " { ", toText e', " }"]
 
 instance ToText [Expression] where
   toText = T.intercalate "\n" . map toText

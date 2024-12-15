@@ -316,6 +316,10 @@ resolveImports m (HLIR.MkExprMatch e _ cs _) = do
 
   pure m
 resolveImports m (HLIR.MkExprPublic e) = resolveImports m e
+resolveImports m (HLIR.MkExprTryCatch e ann e') = do
+  m1 <- resolveImports m e
+  void $ resolveImports (m { variables = Set.insert ann.name m.variables }) e'
+  pure m1
 resolveImports _ (HLIR.MkExprUnwrapLive {}) = compilerError "UnwrapLive not implemented"
 resolveImports _ (HLIR.MkExprWrapLive {}) = compilerError "WrapLive not implemented"
 

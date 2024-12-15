@@ -31,6 +31,8 @@ data Instruction
   | MakeMutable
   | Loc Int Int Int
   | Add | Sub | Mul | Div | Mod
+  | TryCatch Int
+  | GetValue
   deriving (Eq)
 
 instance ToText Int where
@@ -70,6 +72,8 @@ instance ToText Instruction where
   toText Mul = "Mul"
   toText Div = "Div"
   toText Mod = "Mod"
+  toText (TryCatch a) = "TryCatch " <> toText a
+  toText GetValue = "GetValue"
 
 instance ToText [Instruction] where
   toText xs = T.intercalate "\n" . map format $ couple

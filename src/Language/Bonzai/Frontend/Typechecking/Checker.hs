@@ -338,6 +338,14 @@ typecheck (HLIR.MkExprLive ann e) = do
   modifyIORef' M.checkerState $ \st -> st { M.variables = Map.insert ann.name newScheme st.variables }
 
   pure (HLIR.MkExprLet mempty ann { HLIR.value = Identity (HLIR.MkTyLive ty) } (HLIR.MkExprWrapLive expr' (Identity ty)), HLIR.MkTyUnit)
+typecheck (HLIR.MkExprTryCatch e ann body) = do
+  (e', ty) <- typecheck e
+
+  (body', ty') <- M.with M.checkerState (\st -> st { M.variables = Map.insert ann.name (HLIR.Forall [] HLIR.MkTyString) st.variables }) $ typecheck body
+
+  ty `U.unifiesWith` ty'
+
+  pure (HLIR.MkExprTryCatch e' ann { HLIR.value = Identity ty' } body', ty)
 typecheck (HLIR.MkExprPublic e) = typecheck e
 typecheck (HLIR.MkExprRequire _ _) = compilerError "typecheck: require should not appear in typechecking"
 typecheck (HLIR.MkExprUnwrapLive _ _) = compilerError "typecheck: unwrap should not appear in typechecking"
