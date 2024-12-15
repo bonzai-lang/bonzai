@@ -2,7 +2,7 @@ interface Reactive<A> {
   fn set(value: A)
 }
 
-fn Reactive<A>(value: A, onChange: fn(mutable<A>): unit) => {
+pub fn Reactive<A>(value: A, onChange: fn(mutable<A>): unit) => {
   mut subject = value
 
   actor < Reactive<A> {
@@ -14,4 +14,4 @@ fn Reactive<A>(value: A, onChange: fn(mutable<A>): unit) => {
   }
 }
 
-fn (%=)<A>(r: Reactive<A>, value: A) => r->set(value)
+pub fn ($=)<A>(r: actor Reactive<A>, value: A) => r->set(value)
