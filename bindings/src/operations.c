@@ -273,6 +273,8 @@ Value length(Module* mod, Value* args, int argc) {
       THROW_FMT(mod, "Unsupported type for length, received %s",
                 type_of(args[0]));
   }
+
+  return MAKE_INTEGER(0);
 }
 
 Value execute_command_silent(Module* mod, Value* args, int argc) {
@@ -296,6 +298,8 @@ Value panic_(Module* mod, Value* args, int argc) {
   ASSERT_TYPE(mod, "panic", args[0], TYPE_STRING);
 
   THROW_FMT(mod, "%s", (GET_STRING(args[0])));
+
+  return MAKE_INTEGER(0);
 }
 
 Value explode(Module* mod, Value* args, int argc) {
@@ -535,4 +539,46 @@ Value wait_time(Module* mod, Value* args, int argc) {
 Value make_unit(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "unit", argc, 0);
   return kNull;
+}
+
+Value read_file(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "read_file", argc, 1);
+  ASSERT_TYPE(mod, "read_file", args[0], TYPE_STRING);
+
+  char* filename = GET_STRING(args[0]);
+  FILE* file = fopen(filename, "r");
+  if (file == NULL) {
+    THROW(mod, "Could not open file");
+  }
+
+  fseek(file, 0, SEEK_END);
+  long length = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  char* buffer = malloc(length + 1);
+  fread(buffer, 1, length, file);
+  buffer[length] = '\0';
+
+  fclose(file);
+
+  return MAKE_STRING(mod, buffer);
+}
+
+Value write_file(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "write_file", argc, 2);
+  ASSERT_TYPE(mod, "write_file", args[0], TYPE_STRING);
+  ASSERT_TYPE(mod, "write_file", args[1], TYPE_STRING);
+
+  char* filename = GET_STRING(args[0]);
+  char* data = GET_STRING(args[1]);
+
+  FILE* file = fopen(filename, "w");
+  if (file == NULL) {
+    THROW(mod, "Could not open file");
+  }
+
+  fwrite(data, 1, strlen(data), file);
+  fclose(file);
+
+  return MAKE_INTEGER(0);
 }
