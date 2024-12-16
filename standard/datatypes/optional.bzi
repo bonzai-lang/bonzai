@@ -2,3 +2,17 @@ pub type Optional<A> {
   Some(value: A),
   None
 }
+
+pub fn Optional::or<A>(x: Optional<A>, y: Optional<A>): Optional<A> => {
+  match x {
+    case Some(value) => Some(value)
+    case None => y
+  }
+}
+
+pub fn Optional::unwrap_or<A>(x: Optional<A>, y: A): A => {
+  match x {
+    case Some(value) => value
+    case None => y
+  }
+}

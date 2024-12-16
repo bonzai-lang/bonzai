@@ -1,4 +1,5 @@
 require "std:math"
+require "std:datatypes/optional"
 
 pub extern fn length<A>(xs: list<A>): int
 pub extern fn sliceFrom<A>(xs: list<A>, i: int): list<A>
@@ -40,4 +41,10 @@ pub fn List::join<A>(xs: list<A>, sep: A): list<A> =>
     case [] => []
     case [x] => [x]
     case [x .. xs] => [x, sep] + List::join(xs, sep)
+  }
+
+pub fn List::find<A>(f: fn(A): bool, xs: list<A>): Optional<A> =>
+  match xs {
+    case [] => None
+    case [x .. xs] => if f(x) then Some(x) else List::find(f, xs)
   }

@@ -5,6 +5,7 @@ require "math"
 require "std:datatypes/mutable"
 require "std:datatypes/list"
 require "std:io"
+require "std:datatypes/map"
 
 extern fn start_http_server(port: int): HTTP
 extern fn accept_request(server: HTTP): Request

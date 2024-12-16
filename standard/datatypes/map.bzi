@@ -1,0 +1,77 @@
+require "std:math"
+require "std:datatypes/tuple"
+require "std:datatypes/error"
+require "std:datatypes/list"
+require "std:datatypes/optional"
+
+pub type Map<V> {
+  Map(entries: list<Tuple<string, V>>)
+}
+
+pub fn Map::empty<V>(): Map<V> =>
+  Map([])
+
+pub fn Map::insert<V>(self: Map<V>, key: string, value: V): Map<V> =>
+  match self {
+    case Map(entries) => Map(entries + [Tuple(key, value)])
+  }
+
+pub fn Map::lookup<V>(self: Map<V>, key: string): Optional<V> =>
+  match self {
+    case Map(entries) => 
+      match entries {
+        case [] => None
+        case [Tuple(k, v) .. rest] => if k == key then Some(v) else Map::lookup(Map(rest), key)
+      }
+  }
+  
+pub fn Map::map<V, W>(self: Map<V>, f: fn(V): W): Map<W> =>
+  match self {
+    case Map(entries) => Map(List::map(entries, fn (entry) => Tuple::mapSecond(entry, fn (v) => f(v))))
+  }
+
+pub fn Map::foldl<V, A>(self: Map<V>, f: fn(string, V, A): A, acc: A): A =>
+  match self {
+    case Map(entries) => List::foldl(fn (entry, acc) => 
+      match entry {
+        case Tuple(k, v) => f(k, v, acc)
+      },
+      acc,
+      entries
+    )
+  }
+
+pub fn Map::foldr<V, A>(self: Map<V>, f: fn(string, V, A): A, acc: A): A =>
+  match self {
+    case Map(entries) => List::foldr(fn (entry, acc) => 
+      match entry {
+        case Tuple(k, v) => f(k, v, acc)
+      },
+      acc,
+      entries
+    )
+  }
+
+pub fn Map::keys<V>(self: Map<V>): list<string> =>
+  match self {
+    case Map(entries) => List::map(entries, fn (entry) => Tuple::first(entry))
+  }
+
+pub fn Map::values<V>(self: Map<V>): list<V> =>
+  match self {
+    case Map(entries) => List::map(entries, fn (entry) => Tuple::second(entry))
+  }
+
+pub fn Map::fromList<V>(entries: list<Tuple<string, V>>): Map<V> =>
+  Map(entries)
+
+pub fn Map::toList<V>(self: Map<V>): list<Tuple<string, V>> =>
+  match self {
+    case Map(entries) => entries
+  }
+
+pub fn Map::size<V>(self: Map<V>): int =>
+  match self {
+    case Map(entries) => List::length(entries)
+  }
+  
