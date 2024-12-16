@@ -26,7 +26,7 @@ Value start_http_server(Module *module, Value* args, int argc) {
   struct sockaddr_in server_addr;
 
   server_socket = socket(AF_INET, SOCK_STREAM, 0);
-  if (server_socket < 0) THROW(module, "Socket creation failed");
+  if (server_socket < 0) { THROW(module, "Socket creation failed"); }
 
   memset(&server_addr, 0, sizeof(server_addr));
   server_addr.sin_family = AF_INET;

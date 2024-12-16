@@ -132,6 +132,11 @@ void print_with_level(Value value, int level) {
       break;
     }
 
+    case TYPE_API: {
+      printf("<api>");
+      break;
+    }
+
     case TYPE_UNKNOWN:
     default: {
       printf("<unknown>");
@@ -352,7 +357,7 @@ Value toString(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "toString", argc, 1);
 
   ValueType ty = get_type(args[0]);
-
+  
   switch (ty) {
     case TYPE_INTEGER: {
       char* str = malloc(12);
@@ -369,32 +374,41 @@ Value toString(Module* mod, Value* args, int argc) {
     }
     case TYPE_LIST: {
       HeapValue* list = GET_PTR(args[0]);
-      char* str = malloc(2 * list->length + 2);
+      char* str = malloc(1);
       str[0] = '[';
 
       for (uint32_t i = 0; i < list->length; i++) {
-        char* item = GET_STRING(toString(mod, &list->as_ptr[i], 1));
+        char* item = GET_STRING(toString(mod, (Value[]) {list->as_ptr[i]}, 1));
+
+        str = realloc(str, strlen(str) + strlen(item) + 3);
+
+        printf("item: %s\n", item);
         strcat(str, item);
         if (i < list->length - 1) {
           strcat(str, ", ");
         }
       }
 
+      str = realloc(str, strlen(str) + 2);
+
       strcat(str, "]");
       return MAKE_STRING(mod, str);
     }
     case TYPE_SPECIAL: {
-      return MAKE_STRING(mod, "<special>");
+      char* str = malloc(10);
+      sprintf(str, "<special>");
+
+      return MAKE_STRING(mod, str);
     }
     case TYPE_MUTABLE: {
       HeapValue* mut = GET_PTR(args[0]);
       return toString(mod, mut->as_ptr, 1);
     }
-    case TYPE_UNKNOWN: {
-      return MAKE_STRING(mod, "unknown");
-    }
-    default: {
-      THROW(mod, "Unsupported type for toString");
+    case TYPE_UNKNOWN: default: {
+      char* str = malloc(10);
+      sprintf(str, "<unknown>");
+
+      return MAKE_STRING(mod, str);
     }
   }
 }

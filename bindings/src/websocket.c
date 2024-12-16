@@ -1,6 +1,7 @@
 #include <arpa/inet.h>
 #include <error.h>
 #include <netdb.h>
+#include <value.h>
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
 #include <openssl/err.h>
@@ -315,7 +316,7 @@ Value sendTextFrame(Module* module, Value* args, int argc) {
   // Use SSL_write for secure sending
   send_text_frame(ssl->ssl, ssl->sockfd, message, ssl->use_ssl, module);
 
-  return MAKE_INTEGER(0);
+  return kNull;
 }
 
 Value receiveFrame(Module* module, Value* args, int argc) {
@@ -340,7 +341,7 @@ Value closeWebsocket(Module* module, Value* args, int argc) {
 
   free(ssl);
 
-  return MAKE_INTEGER(0);
+  return kNull;
 }
 
 Value performHandshake(Module* module, Value* args, int argc) {
@@ -357,5 +358,5 @@ Value performHandshake(Module* module, Value* args, int argc) {
 
   perform_websocket_handshake(ssl->ssl, ssl->sockfd, server_address, server_port, server_path, ssl->use_ssl, module);
 
-  return MAKE_INTEGER(0);
+  return kNull;
 }

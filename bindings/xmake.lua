@@ -17,6 +17,8 @@ target("bonzai-standard")
   add_includedirs("include")
   add_includedirs("../runtime/include")
 
+  add_cxflags("-Wall")
+
   add_packages("libcurl", "openssl", "libpq")
 
   set_kind("shared")
