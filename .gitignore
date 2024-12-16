@@ -25,3 +25,5 @@ CMakeLists.txt
 example/output
 example/*.c
 example/*.h
+
+.env
