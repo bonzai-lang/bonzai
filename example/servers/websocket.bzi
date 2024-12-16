@@ -3,7 +3,7 @@ require "std:io"
 
 let ws = spawn Websocket("localhost", 8080, "/", false)
 
-ws->receive(ws, fn (frame) => {
+ws->receive(fn (frame) => {
   print(frame)
   
   ws->sendText("Hello from Bonzai!")

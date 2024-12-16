@@ -1,5 +1,5 @@
-require "std:http/oak"
-require "std:http"
+require "std:http/oak": OakServer
+require "std:http": respondText
 require "std:io"
 
 let server = spawn OakServer(8000)

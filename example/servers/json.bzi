@@ -3,6 +3,6 @@ require "std:io"
 
 let ws = spawn Websocket("echo.websocket.org", 80, "/", false)
 
-ws->receive(ws, fn (data) => {
+ws->receive(fn (data) => {
   print(data)
 })

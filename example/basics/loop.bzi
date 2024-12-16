@@ -10,7 +10,7 @@ fn Loop(msg: string) => actor < Loopable {
   on loop(self, i) => {
     mut j = 0
     while j.value < i {
-      j = j.value + 1
+      j += 1
     }
     print(msg)
   }

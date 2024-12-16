@@ -7,6 +7,6 @@ let r = spawn Reactive("Hello", fn(var) => {
   print("Hello, " + var.value + "!")
 })
 
-r %= "user"
+r $= "user"
 
-r %= "world"
+r $= "world"

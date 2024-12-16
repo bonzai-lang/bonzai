@@ -1,5 +1,5 @@
-require "std:http/parallel"
-require "std:http"
+require "std:http/parallel": createParallelHTTP
+require "std:http": respondText
 require "std:math"
 require "std:datatypes/string"
 require "std:io"

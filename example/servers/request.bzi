@@ -1,6 +1,6 @@
 require "std:http"
 require "std:io"
-require "std:datatypes/json"
+require "std:datatypes/json": getJSON
 
 let url = "https://jsonplaceholder.typicode.com/todos/1"
 let res = fetch(url)
