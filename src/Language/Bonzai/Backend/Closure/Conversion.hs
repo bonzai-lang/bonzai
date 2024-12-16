@@ -240,7 +240,10 @@ convertToplevel e = convert e
 
 analyzeProgram :: MonadIO m => MLIR.Expression -> m ()
 analyzeProgram (MLIR.MkExprLet x e) = do
-  modifyIORef' globals (Map.insert x (getArity e))
+  let arity = getArity e
+
+  when (arity >= 0) $ do
+    modifyIORef' globals (Map.insert x arity)
 analyzeProgram (MLIR.MkExprLoc _ e) = analyzeProgram e
 analyzeProgram (MLIR.MkExprNative ann ty) = do
   let arity = case ty of

@@ -200,6 +200,9 @@ instance Assemble MLIR.Expression where
     nats <- readIORef natives
     locals <- ask
 
+    -- when (n == "ws") $ do
+    --   print locals
+
     if Set.member n locals then
       pure $ LLIR.loadLocal n
     else if Set.member n gs then
@@ -208,6 +211,16 @@ instance Assemble MLIR.Expression where
       i <- fetchConstant (MLIR.MkLitString n)
       pure $ LLIR.instr (LLIR.LoadNative i)
     else compilerError $ "Variable " <> n <> " not found in globals, locals or natives"
+
+  assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "&&") [a, b]) = do
+    a' <- assemble a
+    b' <- assemble b
+    pure $ a' <> LLIR.instr (LLIR.JumpIfFalse (length b' + 2)) <> b'
+
+  assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "||") [a, b]) = do
+    a' <- assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "!") [a])
+    b' <- assemble b
+    pure $ a' <> LLIR.instr (LLIR.JumpIfFalse (length b' + 2)) <> b'
 
   assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "value") [a]) = do
     a' <- assemble a
