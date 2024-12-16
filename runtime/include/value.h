@@ -140,6 +140,11 @@ struct Native {
   int addr;
 };
 
+struct Function {
+  int ip;
+  int local_space;
+};
+
 // Container type for values
 typedef struct HeapValue {
   ValueType type;
@@ -155,6 +160,7 @@ typedef struct HeapValue {
     struct EventOn as_event_on;
     Frame as_frame;
     struct Native as_native;
+    struct Function as_func;
   };
 } HeapValue;
 
@@ -183,8 +189,8 @@ typedef struct {
 #define MAKE_FLOAT(x) (*(Value*)(&(x)))
 #define MAKE_PTR(x) (SIGNATURE_POINTER | (uint64_t)(x))
 
-#define MAKE_FUNCTION(x, y) \
-  (SIGNATURE_FUNCTION | (uint16_t)(x) | ((uint16_t)(y) << 16))
+// #define MAKE_FUNCTION(x, y) \
+//   (SIGNATURE_FUNCTION | (uint32_t)(x) | ((uint16_t)(y) << 32))
 
 Value MAKE_MUTABLE(struct Module* mod, Value x);
 Value MAKE_STRING(struct Module* mod, char* string);
@@ -196,6 +202,7 @@ Value MAKE_EVENT_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp, i
 Value MAKE_NATIVE(struct Module* mod, char* name, int addr);
 Value MAKE_EVENT_ON(struct Module* mod, int id, Value func);
 Value MAKE_STRING_NON_GC(struct Module* mod, char* x);
+Value MAKE_FUNCTION(struct Module* mod, uint32_t ip, uint16_t local_space);
 void gc(struct Module* vm);
 void force_sweep(struct Module* vm);
 HeapValue* allocate(struct Module* mod, ValueType type);
@@ -252,6 +259,39 @@ inline static ValueType get_type(Value value) {
   }
 
   return TYPE_UNKNOWN;
+}
+
+inline static char* type_to_str(ValueType t) {
+  switch (t) {
+    case TYPE_INTEGER:
+      return "integer";
+    case TYPE_FLOAT:
+      return "float";
+    case TYPE_STRING:
+      return "string";
+    case TYPE_LIST:
+      return "list";
+    case TYPE_SPECIAL:
+      return "special";
+    case TYPE_MUTABLE:
+      return "mutable";
+    case TYPE_FUNCTION:
+      return "function";
+    case TYPE_FUNCENV:
+      return "function_env";
+    case TYPE_UNKNOWN:
+      return "unknown";
+    case TYPE_API:
+      return "api";
+    case TYPE_EVENT:
+      return "event";
+    case TYPE_FRAME:
+      return "frame";
+    case TYPE_EVENT_ON:
+      return "event_on";
+    case TYPE_NATIVE:
+      return "native";
+  }
 }
 
 void safe_point(struct Module* mod);

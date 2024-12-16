@@ -24,7 +24,7 @@
         module->latest_position[1]);            \
     } \
     printf("   %sin %s:%d\n", BLK, __func__, __LINE__); \
-    printf("   %sat IPC %d", BLK, module->pc);  \
+    printf("   %sat IPC %d", BLK, module->pc / 5);  \
     printf("\n");                               \
     exit(EXIT_FAILURE);                         \
   }
@@ -45,7 +45,7 @@
         module->latest_position[1]); \
     } \
     printf("  %s- in %s:%d\n", BLK, __func__, __LINE__); \
-    printf("  %s- at IPC %d", BLK, module->pc); \
+    printf("  %s- at IPC %d", BLK, module->pc / 5); \
     printf("\n");        \
     exit(EXIT_FAILURE);  \
   }
@@ -64,7 +64,7 @@
   }
 
 #define ASSERT_TYPE(module, func, v, t) \
-  ASSERT_FMT(module, get_type(v) == t, "%s expected %s, but got %s", func, type_of(t), type_of(v))
+  ASSERT_FMT(module, get_type(v) == t, "%s expected %s, but got %s", func, type_to_str(t), type_of(v))
 
 #define ASSERT_ARGC(module, func, argc, n) \
   ASSERT_FMT(module, argc == n, "%s expected %d arguments, but got %d", func, n, argc)

@@ -13,6 +13,8 @@ target("bonzai-runtime")
   add_files("src/**.c")
   add_includedirs("include")
 
+  add_cxflags("-Wall")
+
   -- Setting up the target
   set_kind("binary") 
   set_targetdir("bin")

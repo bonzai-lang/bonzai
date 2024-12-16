@@ -65,8 +65,9 @@ Value compare_lt(Module* mod, Value a, Value b) {
 }
 
 Value compare_ne(Module* mod, Value a, Value b) {
-  ASSERT(mod, get_type(a) == TYPE_INTEGER && get_type(b) == TYPE_INTEGER, "Expected integers");
-  return MAKE_INTEGER(GET_INT(a) != GET_INT(b));
+  ASSERT_TYPE(mod, "compare_ne", a, get_type(b));
+
+  return MAKE_INTEGER(!GET_INT(compare_eq(mod, a, b)));
 }
 
 Value compare_ge(Module* mod, Value a, Value b) {

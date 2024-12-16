@@ -10,8 +10,10 @@ void op_call(Module *module, Value callee, int32_t argc) {
 
   ASSERT_TYPE(module, "op_call", callee, TYPE_FUNCTION);
 
-  int16_t ipc = (int16_t) (callee & MASK_PAYLOAD_INT);
-  int16_t local_space = (int16_t) ((callee >> 16) & MASK_PAYLOAD_INT);
+  HeapValue* func = GET_PTR(callee);
+
+  int32_t ipc = func->as_func.ip;
+  int16_t local_space = func->as_func.local_space;
   int32_t old_sp = module->stack->stack_pointer - argc;
 
   module->stack->stack_pointer += local_space - argc;

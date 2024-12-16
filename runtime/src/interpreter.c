@@ -159,20 +159,23 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
     Value callee = stack_pop(module);
 
     ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
+
+    ValueType callee_type = get_type(callee);
     
-    interpreter_table[(callee & MASK_SIGNATURE) == SIGNATURE_FUNCTION](module, callee, i1);
+    interpreter_table[callee_type == TYPE_FUNCTION](module, callee, i1);
 
     goto *jmp_table[op];
   }
 
   case_call_global: {
-    safe_point(module);
+    // printf("Call global %d\n", i1);
 
     Value callee = module->stack->values[i1];
 
     ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
+    ValueType callee_type = get_type(callee);
 
-    interpreter_table[(callee & MASK_SIGNATURE) == SIGNATURE_FUNCTION](module, callee, i2);
+    interpreter_table[callee_type == TYPE_FUNCTION](module, callee, i2);
 
     goto *jmp_table[op];
   }
@@ -265,7 +268,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
   case_event_on: {
     int32_t new_pc = module->pc + 5;
-    Value lambda = MAKE_FUNCTION(new_pc, i4);
+    Value lambda = MAKE_FUNCTION(module, new_pc, i4);
 
     Value event_on = MAKE_EVENT_ON(module, i1, lambda);
 
@@ -298,7 +301,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
   case_make_function_and_store: {
     int32_t new_pc = module->pc + 5;
-    Value lambda = MAKE_FUNCTION(new_pc, i3);
+    Value lambda = MAKE_FUNCTION(module, new_pc, i3);
 
     module->stack->values[i1] = lambda;
 
@@ -373,6 +376,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
   }
 
   case_add: {
+    module->gc->gc_enabled = false;
     Value b = stack_pop(module);
     Value a = stack_pop(module);
 
@@ -396,7 +400,10 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
         char* s1 = GET_STRING(a);
         char* s2 = GET_STRING(b);
 
-        stack_push(module, MAKE_STRING_MULTIPLE(module, s1, s2));
+        char* s = malloc(strlen(s1) + strlen(s2) + 1);
+        sprintf(s, "%s%s", s1, s2);
+
+        stack_push(module, MAKE_STRING(module, s));
         break;
       }
 
@@ -413,6 +420,8 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
       default: 
         THROW(module, "Unsupported type for +");
     }
+
+    module->gc->gc_enabled = true;
 
     INCREASE_IP(module);
     goto *jmp_table[op];
@@ -528,6 +537,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return, int callsta
 
   case_call_native: {
     Value native = module->constants.values[i1];
+    // printf("Calling native %s\n", GET_STRING(native));
     Value nat = MAKE_NATIVE(module, GET_STRING(native), i1);
     
     op_native_call(module, nat, i2);

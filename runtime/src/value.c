@@ -139,19 +139,19 @@ void force_sweep(struct Module* vm) {
 
 HeapValue* allocate(struct Module* mod, ValueType type) {
   gc_t* gc_ = mod->gc;
-  pthread_mutex_lock(&gc_->gc_mutex);
-  if (gc_->gc_running) {
-    pthread_cond_wait(&gc_->gc_cond, &gc_->gc_mutex);
-    pthread_mutex_unlock(&gc_->gc_mutex);
-  } else {
-    pthread_mutex_unlock(&gc_->gc_mutex);
-  }
+  // pthread_mutex_lock(&gc_->gc_mutex);
+  // if (gc_->gc_running) {
+  //   pthread_cond_wait(&gc_->gc_cond, &gc_->gc_mutex);
+  //   pthread_mutex_unlock(&gc_->gc_mutex);
+  // } else {
+  //   pthread_mutex_unlock(&gc_->gc_mutex);
+  // }
 
   if (gc_->num_objects == gc_->max_objects) {
     if (gc_->gc_enabled) {
       // stop_the_world(mod, true);
-      gc(mod);
-      stop_the_world(mod, false);
+      // gc(mod);
+      // stop_the_world(mod, false);
     } else {
       mod->gc->max_objects += 2;
     }
@@ -260,6 +260,15 @@ Value MAKE_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp) {
   v->as_frame.base_ptr = bp;
   v->as_frame.ons_count = 0;
 
+  return MAKE_PTR(v);
+}
+
+Value MAKE_FUNCTION(struct Module* mod, uint32_t ip, uint16_t local_space) {
+  HeapValue* v = allocate(mod, TYPE_FUNCTION);
+
+  v->as_func.ip = ip;
+  v->as_func.local_space = local_space;
+  
   return MAKE_PTR(v);
 }
 
