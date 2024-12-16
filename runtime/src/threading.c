@@ -17,8 +17,10 @@ Value list_get(Module* mod, Value list, uint32_t idx) {
 }
 
 Value call_threaded(Module *new_module, Value callee, int32_t argc, Value *argv) {
-  int16_t ipc = (int16_t)(callee & MASK_PAYLOAD_INT);
-  int16_t local_space = (int16_t)((callee >> 16) & MASK_PAYLOAD_INT);
+  HeapValue* func = GET_PTR(callee);
+
+  uint32_t ipc = func->as_func.ip;
+  uint16_t local_space = func->as_func.local_space;
 
   int32_t old_sp = new_module->stack->stack_pointer;
 
