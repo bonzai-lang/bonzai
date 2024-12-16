@@ -8,6 +8,7 @@ import qualified Data.Map as Map
 import qualified Language.Bonzai.Frontend.Typechecking.Unification as U
 import qualified Data.List as List
 import qualified Data.Foldable as Foldable
+import qualified Data.Set as Set
 
 -- | Typecheck an expression : misworded, should be infer the type of an expression
 -- | as bi-directional typechecking is not supported.
@@ -315,7 +316,10 @@ typecheck (HLIR.MkExprData ann constrs) = do
             (varName, HLIR.Forall generics header)
         ) constrs
 
-  modifyIORef M.checkerState $ \st -> st { M.variables = Map.fromList schemes <> st.variables }
+  modifyIORef M.checkerState $ \st -> st { 
+    M.variables = Map.fromList schemes <> st.variables 
+  , M.dataConstructors = Set.fromList (map fst schemes) <> st.dataConstructors
+  }
 
   pure (HLIR.MkExprData ann constrs, HLIR.MkTyId name)
 typecheck (HLIR.MkExprLive ann e) = do
@@ -354,10 +358,10 @@ typecheckPattern (HLIR.MkPatVariable name varTy) = do
   st <- readIORef M.checkerState
 
   case Map.lookup name st.variables of
-    Just s -> do
+    Just s | name `Set.member` st.dataConstructors -> do
       ty' <- M.instantiate s
       pure (HLIR.MkPatSpecial name, ty', Map.empty)
-    Nothing -> do
+    _ -> do
       ty <- maybe M.fresh pure varTy
       let scheme = HLIR.Forall [] ty
       pure (HLIR.MkPatVariable name (Identity ty), ty, Map.singleton name scheme)
@@ -372,7 +376,7 @@ typecheckPattern (HLIR.MkPatLiteral l) = do
 typecheckPattern (HLIR.MkPatConstructor name pats) = do
   st <- readIORef M.checkerState
   case Map.lookup name st.variables of
-    Just sch -> do
+    Just sch | name `Set.member` st.dataConstructors -> do
       ty <- M.instantiate sch
       case ty of
         tys HLIR.:->: ret -> do
@@ -384,7 +388,7 @@ typecheckPattern (HLIR.MkPatConstructor name pats) = do
 
           pure (HLIR.MkPatConstructor name pats', ret, Map.unions env)
         _ -> throw (M.InvalidConstructor name)
-    Nothing -> throw (M.InvalidConstructor name)
+    _ -> throw (M.InvalidConstructor name)
 typecheckPattern HLIR.MkPatWildcard = do
   ty <- M.fresh
   pure (HLIR.MkPatWildcard, ty, Map.empty)
@@ -464,6 +468,7 @@ runTypechecking es = do
         M.MkCheckerState
           Map.empty
           Map.empty
+          mempty
           mempty
   writeIORef M.checkerState st
   writeIORef M.typeCounter 0

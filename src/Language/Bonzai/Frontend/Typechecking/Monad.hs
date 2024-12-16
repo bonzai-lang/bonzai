@@ -45,6 +45,7 @@ data CheckerState = MkCheckerState {
     variables :: Map Text HLIR.Scheme
   , interfaces :: Map (Text, [HLIR.QuVar]) (Map Text HLIR.Type)
   , varPos :: [(Text, (HLIR.Scheme, HLIR.Position))]
+  , dataConstructors :: Set Text
 } deriving (Eq, Show)
 
 -- | Helper function to update the state of the typechecker
@@ -62,6 +63,7 @@ checkerState = IO.unsafePerformIO . newIORef $
   MkCheckerState
     Map.empty
     Map.empty
+    mempty
     mempty
 
 enterLevel :: (MonadChecker m) => m ()
