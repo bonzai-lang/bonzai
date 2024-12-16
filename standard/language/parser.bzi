@@ -21,7 +21,7 @@ type Result<A> {
 
 type Parser<A> { Parser(p: fn(string): Result<A>) }
 
-fn runParser<A>(parser: Parser<A>, input: string): Result<A> =>
+fn runParser<A>(parser: Parser<A>, input: string): Result<A> => 
   match parser {
     case Parser(f) => f(input)
   }
@@ -70,7 +70,7 @@ fn satisfy(pred: fn(char): bool): Parser<char> => {
       case [] => ParseError("Unexpected end of input", input)
       case [c .. cs] => if pred(c) 
         then ParseResult(c, cs.implode()) 
-        else ParseError("Unexpected character", input)
+        else ParseError("Unexpected character $c", input)
     }
   })
 }
@@ -82,7 +82,7 @@ fn string(s: string): Parser<string> =>
   Parser(fn(input) => {
     let len = length(s.explode())
     let str = slice(input.explode(), 0, len).implode()
-    if str == s then ParseResult(s, input.explode.sliceFrom(len).implode) else ParseError("Unexpected string", input)
+    if str == s then ParseResult(s, input.explode.sliceFrom(len).implode) else ParseError("Unexpected string $s", input)
   })
 
 let and = Parser::andThen
@@ -100,7 +100,7 @@ fn many<A>(parser: Parser<A>): Parser<list<A>> =>
     fn loop(input: string, acc: list<A>): Result<list<A>> => {
       match runParser(parser, input) {
         case ParseResult(x, rest) => loop(rest, acc + [x])
-        case ParseError(_, _) => ParseResult(acc, input)
+        case ParseError(_, rest) => ParseResult(acc, rest)
       }
     }
     loop(input, [])
@@ -115,12 +115,11 @@ fn sepBy<A, B>(parser: Parser<A>, sep: Parser<B>): Parser<list<A>> =>
   Parser(fn(input) => {
     fn loop(input: string, acc: list<A>): Result<list<A>> => {
       match runParser(parser, input) {
-        case ParseResult(x, rest) => {
+        case ParseResult(x, rest) => 
           match runParser(sep, rest) {
-            case ParseResult(_, rest) => loop(rest, acc + [x])
-            case ParseError(_, _) => ParseResult(acc + [x], rest)
+            case ParseResult(res, rest) => loop(rest, acc + [x])
+            case ParseError(_, rest) => ParseResult(acc + [x], rest)
           }
-        }
         case ParseError(_, _) => ParseResult(acc, input)
       }
     }

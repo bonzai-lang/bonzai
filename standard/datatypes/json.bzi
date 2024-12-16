@@ -9,8 +9,9 @@ require "std:datatypes/tuple": Tuple::first, Tuple, Tuple::second, Map::toList
 require "std:datatypes/list"
 require "std:datatypes/string"
 require "std:math"
+require "std:datatypes/error"
 
-type JSON {
+pub type JSON {
   Object(fields: list<(string, JSON)>),
   Array(values: list<JSON>),
   String(value: string),
@@ -20,7 +21,7 @@ type JSON {
   Null
 }
 
-fn jsonParser(): Parser<JSON> => {
+pub fn jsonParser(): Parser<JSON> => {
   let charLiteral = choice([
     char('\\') :right: char('\\'),
     char('\\') :right: char('"'),
@@ -86,19 +87,25 @@ fn jsonParser(): Parser<JSON> => {
   choice([object, array, value])
 }
 
-fn parseJSON(input: string): Optional<JSON> => 
+pub fn parseJsonWithError(input: string): Throwable<JSON> => 
+  match jsonParser().runParser(input) {
+    case ParseResult(x, _) => Ok(x)
+    case ParseError(msg, _) => Error(msg)
+  }
+
+pub fn parseJSON(input: string): Optional<JSON> => 
   match jsonParser().runParser(input) {
     case ParseResult(x, _) => Some(x)
     case ParseError(_, _) => None
   }
 
-fn getJSON(input: string): JSON =>
+pub fn getJSON(input: string): JSON =>
   match parseJSON(input) {
     case Some(x) => x
     case None => Null
   }
 
-fn stringify(json: JSON): string =>
+pub fn stringify(json: JSON): string =>
   match json {
     case Object(fields) => {
       let pairs = List::map(fields, fn (v) => 
@@ -137,7 +144,7 @@ fn getKey(json: JSON, key: string): Optional<JSON> =>
     case _ => None
   }
 
-fn getKeys(json: JSON, keys: list<string>): Optional<JSON> =>
+pub fn getKeys(json: JSON, keys: list<string>): Optional<JSON> =>
   List::foldl(fn (key, acc) =>
     match acc {
       case Some(x) => getKey(x, key)
@@ -147,7 +154,7 @@ fn getKeys(json: JSON, keys: list<string>): Optional<JSON> =>
     keys
   )
 
-fn JSON::stringifyMap(json: Map<JSON>): string => {
+pub fn JSON::stringifyMap(json: Map<JSON>): string => {
   let pairs = Map::toList(json)
   let fields = List::map(pairs, fn (v) => 
     "\"" 
@@ -159,5 +166,5 @@ fn JSON::stringifyMap(json: Map<JSON>): string => {
   "{" + String::join(fields, ",") + "}"
 }
 
-fn JSON::fromMap(json: Map<JSON>): JSON =>
+pub fn JSON::fromMap(json: Map<JSON>): JSON =>
   Object(Map::toList(json))

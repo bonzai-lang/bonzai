@@ -58,7 +58,7 @@ fn respondOk(req: Request, buffer: Map<string>, content: string) => {
 }
 
 fn respondText(req: Request, ty: string, content: string) =>
-  req.respondOk(#{
+  req.respondOk({
     "Content-Type": ty,
     "Content-Length": String::length(content).toString,
     "Connection": "close"
