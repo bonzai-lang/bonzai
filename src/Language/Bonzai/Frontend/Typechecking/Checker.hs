@@ -44,7 +44,7 @@ typecheck (HLIR.MkExprNative ann ty) = do
   let ty' = List.foldl (flip replaceIdwithQuVar) ty ann.value
   let scheme = HLIR.Forall ann.value ty'
 
-  pos <- HLIR.peekPosition
+  pos <- HLIR.peekPosition'
 
   modifyIORef' M.checkerState $ \st -> st { M.variables = Map.insert ann.name scheme st.variables, M.varPos = (ann.name, (scheme, pos)) : M.varPos st }
 
@@ -121,7 +121,7 @@ typecheck (HLIR.MkExprLet generics ann expr) = do
     then M.generalize ty
     else pure $ HLIR.Forall (toList generics) ty
 
-  pos <- HLIR.peekPosition
+  pos <- HLIR.peekPosition'
 
   modifyIORef' M.checkerState $ \st -> st { M.variables = Map.insert ann.name newScheme st.variables, M.varPos = (ann.name, (newScheme, pos)) : M.varPos st }
 

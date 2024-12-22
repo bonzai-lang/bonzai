@@ -170,12 +170,12 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprTernary c t e _) = T.concat [toText c, " ? ", toText t, " : ", toText e]
   toText (MkExprUpdate u e) = T.concat [toText u, " = ", toText e]
   toText (MkExprLet _ a e) = T.concat ["let ", toText a, " = ", toText e]
-  toText (MkExprBlock es _) = T.concat [T.intercalate "; " (map toText es)]
+  toText (MkExprBlock es _) = "{" <> T.concat [T.intercalate "; " (map toText es)] <> "}"
   toText (MkExprActor i e) = T.concat ["event ", toText i , " ", toText e]
   toText (MkExprOn n as e) = T.concat ["on ", n, "(", T.intercalate ", " (map toText as), ") { ", toText e, " }"]
   toText (MkExprSend e n e' _) = T.concat ["(", toText e, ") -> ", n, "(", toText e', ")"]
   toText (MkExprRequire n vars) = T.concat ["require ", n, ": ", T.intercalate ", " (toList vars)]
-  toText (MkExprLoc e _) = toText e
+  toText (MkExprLoc e _) = "@" <> toText e
   toText (MkExprSpawn e) = T.concat ["spawn ", toText e]
   toText (MkExprList es) = T.concat ["[", T.intercalate ", " (map toText es), "]"]
   toText (MkExprNative ann ty) = T.concat ["native ", toText ann.name, "<", T.intercalate ", " ann.value, "> ", toText ty]
@@ -189,7 +189,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprUnwrapLive e _) = T.concat ["unwrap ", toText e]
   toText (MkExprWrapLive e _) = T.concat ["wrap ", toText e]
   toText (MkExprPublic e) = T.concat ["pub ", toText e]
-  toText (MkExprTryCatch e _ e') = T.concat ["try ", toText e, " catch ", toText e']
+  toText (MkExprTryCatch e n e') = T.concat ["try ", toText e, " catch ", toText n, " ", toText e']
 
 instance ToText t => ToText (DataConstructor t) where
   toText (MkDataVariable v) = v
@@ -251,6 +251,7 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprUnwrapLive e t == MkExprUnwrapLive e' t' = e == e' && t == t'
   MkExprWrapLive e t == MkExprWrapLive e' t' = e == e' && t == t'
   MkExprPublic e == MkExprPublic e' = e == e'
+  MkExprTryCatch e n e' == MkExprTryCatch e'' n' e''' = e == e'' && n == n' && e' == e'''
   _ == _ = False
 
 instance (Eq t) => Eq (DataConstructor t) where
