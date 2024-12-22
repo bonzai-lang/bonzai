@@ -2,4 +2,6 @@ require "a"
 require "b"
 require "a-plus-b"
 
+extern fn print<A>(x: A)
+
 print("test")

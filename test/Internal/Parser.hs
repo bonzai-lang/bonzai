@@ -342,7 +342,7 @@ testExpression = do
 
   it "parses mutable expression" $ do
     let input = "mut x = 1"
-    let expected = HLIR.MkExprMut (HLIR.MkAnnotation "x" Nothing) (HLIR.MkExprLiteral $ HLIR.MkLitInt 1)
+    let expected = HLIR.MkExprLet mempty (HLIR.MkAnnotation "x" Nothing) (HLIR.MkExprMut (HLIR.MkExprLiteral $ HLIR.MkLitInt 1) Nothing)
     res <- P.parseTestContent P.parseMut input
     res `shouldBeRight` expected
 
@@ -360,7 +360,7 @@ testExpression = do
 
   it "parses a while expression" $ do
     let input = "while true { 1 }"
-    let expected = HLIR.MkExprWhile (bool True) (HLIR.MkExprBlock [int 1])
+    let expected = HLIR.MkExprWhile (bool True) (HLIR.MkExprBlock [int 1] Nothing)
     res <- P.parseTestContent P.parseWhile input
     res `shouldBeRight` expected
 
@@ -381,33 +381,33 @@ testExpression = do
     shouldBeError res
 
     let input = "while true { 1 2 3 }"
-    let expected = HLIR.MkExprWhile (bool True) (HLIR.MkExprBlock [int 1, int 2, int 3])
+    let expected = HLIR.MkExprWhile (bool True) (HLIR.MkExprBlock [int 1, int 2, int 3] Nothing)
     res <- P.parseTestContent P.parseWhile input
     res `shouldBeRight` expected
 
   it "parses a block of expressions" $ do
     let input = "{}"
-    let expected = HLIR.MkExprBlock []
+    let expected = HLIR.MkExprBlock [] Nothing
     res <- P.parseTestContent P.parseBlock input
     res `shouldBeRight` expected
 
     let input = "{ 1 }"
-    let expected = HLIR.MkExprBlock [int 1]
+    let expected = HLIR.MkExprBlock [int 1] Nothing
     res <- P.parseTestContent P.parseBlock input
     res `shouldBeRight` expected
 
     let input = "{ 1 2 }"
-    let expected = HLIR.MkExprBlock [int 1, int 2]
+    let expected = HLIR.MkExprBlock [int 1, int 2] Nothing
     res <- P.parseTestContent P.parseBlock input
     res `shouldBeRight` expected
 
     let input = "{ 1 2 3 }"
-    let expected = HLIR.MkExprBlock [int 1, int 2, int 3]
+    let expected = HLIR.MkExprBlock [int 1, int 2, int 3] Nothing
     res <- P.parseTestContent P.parseBlock input
     res `shouldBeRight` expected
 
     let input = "{ 1 2 3 4 }"
-    let expected = HLIR.MkExprBlock [int 1, int 2, int 3, int 4]
+    let expected = HLIR.MkExprBlock [int 1, int 2, int 3, int 4] Nothing
     res <- P.parseTestContent P.parseBlock input
     res `shouldBeRight` expected
 
@@ -599,6 +599,33 @@ testExpression = do
     res <- P.parseTestContent P.parseLive input
     shouldBeError res
 
+  it "parses a try-catch expression" $ do
+    let input = "try 1 catch e print(e)"
+    res <- P.parseTestContent P.parseTryCatch input
+    shouldBeError res
+
+    let input = "try 1 catch e"
+    res <- P.parseTestContent P.parseTryCatch input
+    shouldBeError res
+
+    let input = "try 1 catch"
+    res <- P.parseTestContent P.parseTryCatch input
+    shouldBeError res
+
+    let input = "try 1"
+    res <- P.parseTestContent P.parseTryCatch input
+    shouldBeError res
+
+    let input = "try"
+    res <- P.parseTestContent P.parseTryCatch input
+    shouldBeError res
+
+    let input = "try { 1 } catch e { 2 }"
+    let expected = HLIR.MkExprTryCatch (HLIR.MkExprBlock [int 1] Nothing) (HLIR.MkAnnotation "e" Nothing) (HLIR.MkExprBlock [int 2] Nothing)
+
+    res <- P.parseTestContent P.parseExpression input
+    (removeLocation <$> res) `shouldBeRight` expected
+
   it "parses an expression" $ do
     let input = "1"
     let expected = int 1
@@ -656,17 +683,17 @@ testExpression = do
     res `shouldBeRight` expected
 
     let input = "mut x = 1"
-    let expected = HLIR.MkExprMut (HLIR.MkAnnotation "x" Nothing) (int 1)
+    let expected = HLIR.MkExprLet mempty (HLIR.MkAnnotation "x" Nothing) (HLIR.MkExprMut (int 1) Nothing)
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "while true { 1 }"
-    let expected = HLIR.MkExprWhile (bool True) (HLIR.MkExprBlock [int 1])
+    let expected = HLIR.MkExprWhile (bool True) (HLIR.MkExprBlock [int 1] Nothing)
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "{}"
-    let expected = HLIR.MkExprBlock []
+    let expected = HLIR.MkExprBlock [] Nothing
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
@@ -724,22 +751,22 @@ testExpression = do
     shouldBeError res
 
     let input = "f(x, y, z)"
-    let expected = HLIR.MkExprApplication (var "f") [var "x", var "y", var "z"]
+    let expected = HLIR.MkExprApplication (var "f") [var "x", var "y", var "z"] Nothing
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "x.f"
-    let expected = HLIR.MkExprApplication (var "f") [var "x"]
+    let expected = HLIR.MkExprApplication (var "f") [var "x"] Nothing
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "x.f()"
-    let expected = HLIR.MkExprApplication (var "f") [var "x"]
+    let expected = HLIR.MkExprApplication (var "f") [var "x"] Nothing
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "x.f(x)"
-    let expected = HLIR.MkExprApplication (var "f") [var "x", var "x"]
+    let expected = HLIR.MkExprApplication (var "f") [var "x", var "x"] Nothing
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
@@ -767,22 +794,22 @@ testExpression = do
     shouldBeError res
 
     let input = "x.y.z"
-    let expected = HLIR.MkExprApplication (var "z") [HLIR.MkExprApplication (var "y") [var "x"]]
+    let expected = HLIR.MkExprApplication (var "z") [HLIR.MkExprApplication (var "y") [var "x"] Nothing] Nothing
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "x.y.z()"
-    let expected = HLIR.MkExprApplication (var "z") [HLIR.MkExprApplication (var "y") [var "x"]]
+    let expected = HLIR.MkExprApplication (var "z") [HLIR.MkExprApplication (var "y") [var "x"] Nothing] Nothing
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "x.y.z(x)"
-    let expected = HLIR.MkExprApplication (var "z") [HLIR.MkExprApplication (var "y") [var "x"], var "x"]
+    let expected = HLIR.MkExprApplication (var "z") [HLIR.MkExprApplication (var "y") [var "x"] Nothing, var "x"] Nothing
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
     let input = "x.y.z(x, y)"
-    let expected = HLIR.MkExprApplication (var "z") [HLIR.MkExprApplication (var "y") [var "x"], var "x", var "y"]
+    let expected = HLIR.MkExprApplication (var "z") [HLIR.MkExprApplication (var "y") [var "x"] Nothing, var "x", var "y"] Nothing
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
@@ -792,7 +819,7 @@ testExpression = do
     res `shouldBeRight` expected
 
     let input = "x(y)(z)"
-    let expected = HLIR.MkExprApplication (HLIR.MkExprApplication (var "x") [var "y"]) [var "z"]
+    let expected = HLIR.MkExprApplication (HLIR.MkExprApplication (var "x") [var "y"] Nothing) [var "z"] Nothing
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
@@ -864,7 +891,7 @@ testExpression = do
     res `shouldBeRight` expected
 
     let input = "x % 2 % 3"
-    let expected = HLIR.MkExprBinary "%" (var "x") (HLIR.MkExprBinary "%" (int 2) (int 3))
+    let expected = HLIR.MkExprBinary "%" (HLIR.MkExprBinary "%" (var "x") (int 2)) (int 3)
     res <- P.parseTestContent P.parseExpression input
     res `shouldBeRight` expected
 
@@ -880,7 +907,7 @@ programParser = do
     shouldBeError res
 
     let input = "require \"hello\""
-    let expected = HLIR.MkExprRequire "hello"
+    let expected = HLIR.MkExprRequire "hello" mempty
     res <- P.parseTestContent P.parseRequire input
     res `shouldBeRight` expected
 

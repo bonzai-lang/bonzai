@@ -1,3 +1,5 @@
 require "b"
 
+extern fn print<A>(x: A)
+
 print(x)

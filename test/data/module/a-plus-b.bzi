@@ -1,4 +1,4 @@
-extern fn print<A>(x: A)
+pub extern fn print<A>(x: A)
 
 print("test 1")
 

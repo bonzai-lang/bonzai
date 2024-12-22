@@ -25,11 +25,11 @@ testModuleImport = do
       std `shouldBeRight` List.nub std_result
     
     it "resolve standard path with environment variable" $ do
-      std <- runModuleConversion "std:natives"
+      std <- runModuleConversion "std:math"
 
       stdPath <- fromMaybe "" <$> lookupEnv "BONZAI_PATH"
 
-      std_result <- fromFile $ stdPath </> "standard" </> "natives.bzi"
+      std_result <- fromFile $ stdPath </> "standard" </> "math.bzi"
 
       std `shouldBeRight` List.nub std_result
 
@@ -56,6 +56,6 @@ testModuleImport = do
         _ -> False
 
 isRequire :: HLIR.HLIR "expression" -> Bool
-isRequire (HLIR.MkExprRequire _) = True
+isRequire (HLIR.MkExprRequire _ _) = True
 isRequire (HLIR.MkExprLoc e _) = isRequire e
 isRequire _ = False

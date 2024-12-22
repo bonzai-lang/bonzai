@@ -9,15 +9,14 @@ import GHC.IO (unsafePerformIO)
 import qualified Language.Bonzai.Frontend.Typechecking.Checker as Ty
 import Data.Map qualified as Map
 import Control.Monad.Result
-import Prelude hiding (on)
-import Language.Bonzai.Frontend.Typechecking.Unification (compressPaths)
+import Prelude hiding (on, bool)
 
 shouldBeError' :: (Show a, Eq a) => Either (a, HLIR.Position) b -> a -> Expectation
 shouldBeError' (Left (a, _)) b = a `shouldBe` b
 shouldBeError' (Right _) _ = expectationFailure "Expected an error, but got a success"
 
 shouldTypeBe :: Either a HLIR.Type -> HLIR.Type -> Expectation
-shouldTypeBe (Right ty) expected = compressPaths ty `shouldReturn` expected
+shouldTypeBe (Right ty) expected = HLIR.simplify ty `shouldReturn` expected
 shouldTypeBe (Left _) _ = expectationFailure "Expected a type, but got an error"
 
 shouldBeRight' :: (Show a, Eq a) => Either a b -> Expectation
@@ -29,6 +28,9 @@ unbound name lvl = do
   let tv = HLIR.Unbound name lvl
   HLIR.MkTyVar (unsafePerformIO $ newIORef tv)
 
+compressPaths' :: [HLIR.Type] -> IO [HLIR.Type]
+compressPaths' = mapM HLIR.simplify
+
 testTypechecking :: Spec
 testTypechecking = do
   describe "unification" $ do
@@ -39,7 +41,7 @@ testTypechecking = do
       void . runExceptT $ do
         t1 `Ty.unifiesWith` t2
 
-      Ty.compressPaths' [t1, t2] `shouldReturn` [unbound "b" 0, unbound "b" 0] 
+      compressPaths' [t1, t2] `shouldReturn` [unbound "b" 0, unbound "b" 0] 
     
     it "unifies two type variables with a type" $ do
       t1 <- Ty.fresh
@@ -49,7 +51,7 @@ testTypechecking = do
       void . runExceptT $ do
         ([t1] HLIR.:->: t2) `Ty.unifiesWith` ([t3] HLIR.:->: t2)
 
-      Ty.compressPaths' [t1, t2, t3] `shouldReturn` [unbound "e" 0, unbound "d" 0, unbound "e" 0]
+      compressPaths' [t1, t2, t3] `shouldReturn` [unbound "e" 0, unbound "d" 0, unbound "e" 0]
 
     it "unifies type variables with a concrete type" $ do
       t1 <- Ty.fresh
@@ -57,7 +59,7 @@ testTypechecking = do
       void . runExceptT $ do
         t1 `Ty.unifiesWith` HLIR.MkTyInt
 
-      Ty.compressPaths t1 `shouldReturn` HLIR.MkTyInt
+      HLIR.simplify t1 `shouldReturn` HLIR.MkTyInt
       
     it "unifies two type variables with a concrete type" $ do
       t1 <- Ty.fresh
@@ -67,7 +69,7 @@ testTypechecking = do
         t1 `Ty.unifiesWith` t2
         t1 `Ty.unifiesWith` HLIR.MkTyInt
 
-      Ty.compressPaths' [t1, t2] `shouldReturn` [HLIR.MkTyInt, HLIR.MkTyInt]
+      compressPaths' [t1, t2] `shouldReturn` [HLIR.MkTyInt, HLIR.MkTyInt]
       
     it "unifies two type variables with a concrete type and a type" $ do
       t1 <- Ty.fresh
@@ -80,7 +82,7 @@ testTypechecking = do
         t3 `Ty.unifiesWith` ([t1] HLIR.:->: t2)
 
       let funTy = [HLIR.MkTyInt] HLIR.:->: HLIR.MkTyInt
-      Ty.compressPaths' [t1, t2, t3] `shouldReturn` [HLIR.MkTyInt, HLIR.MkTyInt, funTy]
+      compressPaths' [t1, t2, t3] `shouldReturn` [HLIR.MkTyInt, HLIR.MkTyInt, funTy]
     
     it "does not unify two different types" $ do
       t1 <- Ty.fresh
@@ -132,8 +134,6 @@ testTypechecking = do
       res `shouldBe` Right [lit]
 
   let env = Map.fromList [
-          ("true", HLIR.Forall [] HLIR.MkTyBool),
-          ("false", HLIR.Forall [] HLIR.MkTyBool),
           ("print", HLIR.Forall ["a"] ([HLIR.MkTyQuantified "a"] HLIR.:->: HLIR.MkTyUnit)),
           ("+", HLIR.Forall ["a"] ([HLIR.MkTyQuantified "a", HLIR.MkTyQuantified "a"] HLIR.:->: HLIR.MkTyQuantified "a")),
           ("-", HLIR.Forall ["a"] ([HLIR.MkTyQuantified "a", HLIR.MkTyQuantified "a"] HLIR.:->: HLIR.MkTyQuantified "a")),
@@ -170,25 +170,25 @@ testTypechecking = do
   describe "application typechecking" $ do
     it "typechecks a function application" $ do
       let var' = HLIR.MkExprVariable (HLIR.MkAnnotation "print" Nothing)
-      let app = HLIR.MkExprApplication var' [HLIR.MkExprLiteral (HLIR.MkLitInt 42)]
+      let app = HLIR.MkExprApplication var' [HLIR.MkExprLiteral (HLIR.MkLitInt 42)] Nothing
       res <- runTypechecking' app env mempty
       shouldBeRight' res
     
     it "does not typecheck an unknown function" $ do
       let var' = HLIR.MkExprVariable (HLIR.MkAnnotation "unknown" Nothing)
-      let app = HLIR.MkExprApplication var' [HLIR.MkExprLiteral (HLIR.MkLitInt 42)]
+      let app = HLIR.MkExprApplication var' [HLIR.MkExprLiteral (HLIR.MkLitInt 42)] Nothing
       res <- runTypechecking' app env mempty
       shouldBeError' res (VariableNotFound "unknown")
     
     it "does not typecheck an application with the wrong number of arguments" $ do
       let var' = HLIR.MkExprVariable (HLIR.MkAnnotation "print" Nothing)
-      let app = HLIR.MkExprApplication var' []
+      let app = HLIR.MkExprApplication var' [] Nothing
       res <- runTypechecking' app env mempty
       shouldBeError res
     
     it "does not typecheck an application with the wrong argument type" $ do
       let var' = HLIR.MkExprVariable (HLIR.MkAnnotation "intEq" Nothing)
-      let app = HLIR.MkExprApplication var' [HLIR.MkExprLiteral (HLIR.MkLitChar 'a')]
+      let app = HLIR.MkExprApplication var' [HLIR.MkExprLiteral (HLIR.MkLitChar 'a')] Nothing
       res <- runTypechecking' app env mempty
       shouldBeError res
     
@@ -216,33 +216,33 @@ testTypechecking = do
     
   describe "if-then-else typechecking" $ do
     it "typechecks an if-then-else" $ do
-      let if' = HLIR.MkExprTernary (HLIR.MkExprVariable (HLIR.MkAnnotation "true" Nothing)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
+      let if' = ifThenElse (bool True) (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
       res <- runTypechecking' if' env mempty
       shouldBeRight' res
     
     it "does not typecheck an if-then-else with a non-boolean condition" $ do
-      let if' = HLIR.MkExprTernary (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
+      let if' = ifThenElse (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
       res <- runTypechecking' if' env mempty
       shouldBeError res
     
     it "does not typecheck an if-then-else with different branches" $ do
-      let if' = HLIR.MkExprTernary (HLIR.MkExprVariable (HLIR.MkAnnotation "true" Nothing)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) (HLIR.MkExprLiteral (HLIR.MkLitFloat 42.0))
+      let if' = ifThenElse (bool True) (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) (HLIR.MkExprLiteral (HLIR.MkLitFloat 42.0))
       res <- runTypechecking' if' env mempty
       shouldBeError res
     
   describe "block typechecking" $ do
     it "typechecks a block" $ do
-      let block = HLIR.MkExprBlock [HLIR.MkExprLiteral (HLIR.MkLitInt 42), HLIR.MkExprLiteral (HLIR.MkLitInt 42)]
+      let block = HLIR.MkExprBlock [HLIR.MkExprLiteral (HLIR.MkLitInt 42), HLIR.MkExprLiteral (HLIR.MkLitInt 42)] Nothing
       res <- runTypechecking' block env mempty
       
       res `shouldTypeBe` HLIR.MkTyInt
     
     it "does not typecheck a block with an unknown variable" $ do
-      let block = HLIR.MkExprBlock [HLIR.MkExprVariable (HLIR.MkAnnotation "x" Nothing)]
+      let block = HLIR.MkExprBlock [HLIR.MkExprVariable (HLIR.MkAnnotation "x" Nothing)] Nothing
       res <- runTypechecking' block env mempty
       shouldBeError' res (VariableNotFound "x")
     
-  let interface = Map.singleton "event" (HLIR.Forall [] ([HLIR.MkTyInt] HLIR.:->: HLIR.MkTyUnit))
+  let interface = Map.singleton "event" ([HLIR.MkTyInt] HLIR.:->: HLIR.MkTyUnit)
   
   describe "actor typechecking" $ do
     it "does not typecheck an actor with unknown interface" $ do
@@ -252,39 +252,39 @@ testTypechecking = do
 
     it "typechecks an actor" $ do
       let actor' = actor "event" "interface" [on "event" ["x"] (HLIR.MkExprBlock [
-              HLIR.MkExprApplication (var "print") [var "x"]
-            ])]
+              HLIR.MkExprApplication (var "print") [var "x"] Nothing
+            ] Nothing)]
       res <- runTypechecking' actor' env (Map.singleton "interface" interface)
       shouldBeRight' res
     
     it "does not typecheck an actor with an unknown event" $ do
       let actor' = actor "unknown" "interface" [on "unknown-event" ["x"] (HLIR.MkExprBlock [
-              HLIR.MkExprApplication (var "print") [var "x"]
-            ])]
+              HLIR.MkExprApplication (var "print") [var "x"] Nothing
+            ] Nothing)]
       res <- runTypechecking' actor' env (Map.singleton "interface" interface)
       shouldBeError' res (EventNotFound "unknown-event")
 
     it "does not typecheck an actor with an unknown variable" $ do
       let actor' = actor "event" "interface" [on "event" ["x"] (HLIR.MkExprBlock [
-              HLIR.MkExprApplication (var "print") [var "y"]
-            ])]
+              HLIR.MkExprApplication (var "print") [var "y"] Nothing
+            ] Nothing)]
       res <- runTypechecking' actor' env (Map.singleton "interface" interface)
       shouldBeError' res (VariableNotFound "y")
     
   describe "mutable typechecking" $ do
     it "typechecks a mutable" $ do
-      let mut = HLIR.MkExprMut (HLIR.MkAnnotation "x" Nothing) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
+      let mut = HLIR.MkExprMut (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) Nothing
       res <- runTypechecking' mut env mempty
       shouldBeRight' res
     
     it "does not typecheck a mutable with an unknown variable" $ do
-      let mut = HLIR.MkExprMut (HLIR.MkAnnotation "x" Nothing) (HLIR.MkExprVariable (HLIR.MkAnnotation "y" Nothing))
+      let mut = HLIR.MkExprMut (HLIR.MkExprVariable (HLIR.MkAnnotation "y" Nothing)) Nothing
       res <- runTypechecking' mut env mempty
       shouldBeError' res (VariableNotFound "y")
     
   describe "while typechecking" $ do
     it "typechecks a while" $ do
-      let while' = HLIR.MkExprWhile (HLIR.MkExprVariable (HLIR.MkAnnotation "true" Nothing)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
+      let while' = HLIR.MkExprWhile (bool True) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
       res <- runTypechecking' while' env mempty
       shouldBeRight' res
     

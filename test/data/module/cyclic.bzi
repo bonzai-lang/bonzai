@@ -1,3 +1,5 @@
 require "cyclic"
 
+extern fn print<A>(x: A)
+
 print("test")
