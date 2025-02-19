@@ -1,4 +1,8 @@
 require "std:foundation"
+require "std:language/parser": 
+  satisfy, many, right, left, Parser::bind, 
+  Parser::map, noneOf, is_whitespace, is_alphanumeric, 
+  implode, explode, many1, choice, runParser
 
 extern fn get_args(): list<string>
 extern fn slice<A>(xs: list<A>, start: int, end: int): list<A>
@@ -9,27 +13,42 @@ extern fn execute_command(command: string)
 extern fn execute_command_silent(command: string)
 extern fn length<A>(xs: list<A>): int
 
-let cwd = get_cwd()
-let build_file = "$cwd/build.bzi"
-
-let args = get_args()
-
-if file_exists(build_file) then {
-  let bonzai_path = get_env("BONZAI_PATH")
-
-  execute_command_silent("bonzaic $build_file")
-  execute_command("bonzai $build_file.bin -l $$BONZAI_PATH/bindings/bin/bindings.dylib")
-} else if length(args) == 5 then {
-  let bonzai_path = get_env("BONZAI_PATH")
-  let build_file = cwd + "/" + args[4]
-
-  if file_exists(build_file) then {
-    execute_command_silent("bonzaic $build_file")
-    print("bonzai $build_file.bin -l $$BONZAI_PATH/bindings/bin/bindings.dylib")
-    execute_command("bonzai $build_file.bin -l $$BONZAI_PATH/bindings/bin/bindings.dylib")
-  } else {
-    panic("No build file found in $build_file")
-  }
-} else {
-  panic("You must either have a build.bzi file in the current directory or pass a build file as an argument")
+type CLI {
+  Command(name: string, description: string, action: fn(list<string>): unit)
 }
+
+type Argument {
+  Option(name: string, value: string),
+  Argument(value: string),
+  Flag(name: string)
+}
+
+fn parseCLI(args: list<string>) => {
+  fn lex<A>(p: Parser<A>): Parser<A> => {
+    let ws = satisfy(is_whitespace).many()
+    ws :right: p :left: ws
+  }
+
+  fn parseArgument() => {
+    let ws = satisfy(is_whitespace).many()
+    let minus = satisfy(fn(x) => x == '-')
+
+    let optionParser = minus :right: satisfy(is_alphanumeric).many1() :Parser::bind: fn(flag) =>
+      ws :right: noneOf([' ']).many1() :left: ws :Parser::map: fn(value) => Option(flag.implode, value.implode)
+      
+    let argumentParser = noneOf([' ']).many1() :Parser::map: fn(value) => Argument(value.implode)
+
+    let flagParser = minus :right: satisfy(is_alphanumeric).many1() :Parser::map: fn(flag) => Flag(flag.implode)
+    let biflagParser = minus :right: minus :right: satisfy(is_alphanumeric).many1() :Parser::map: fn(flag) => Flag(flag.implode)
+
+    choice([optionParser, flagParser, biflagParser, argumentParser])
+  };
+
+  let parser = parseArgument().lex.many()
+
+  let formattedArgs = List::concat(List::join(args.map(explode), [' ']))
+
+  parser.runParser(formattedArgs)
+}
+
+print(parseCLI(get_args()))
