@@ -71,7 +71,6 @@ synthesize (HLIR.MkExprApplication f args) = do
       ty `U.unifiesWith` (tys HLIR.:->: ret)
 
       pure (HLIR.MkExprApplication f' args', ret)
-
 synthesize (HLIR.MkExprLambda args ret body) = do
   args' <- traverse (\(HLIR.MkAnnotation ann annTy) -> case annTy of
       Just ty -> pure (ann, ty)
@@ -116,7 +115,7 @@ synthesize (HLIR.MkExprTernary c t e) = do
   e' <- check e thenTy
 
   pure (HLIR.MkExprTernary c' t' e', thenTy)
-synthesize (HLIR.MkExprLet generics ann expr) = do
+synthesize (HLIR.MkExprLet generics ann expr body) = do
   M.enterLevel
   ty <- M.fresh
   let scheme = HLIR.Forall (toList generics) ty
@@ -137,7 +136,9 @@ synthesize (HLIR.MkExprLet generics ann expr) = do
 
   modifyIORef' M.checkerState $ \st -> st { M.variables = Map.insert ann.name newScheme st.variables, M.varPos = (ann.name, (newScheme, pos)) : M.varPos st }
 
-  pure (HLIR.MkExprLet generics ann { HLIR.value = Identity ty } expr', HLIR.MkTyUnit)
+  (body', ty') <- synthesize body
+
+  pure (HLIR.MkExprLet generics ann { HLIR.value = Identity ty } expr' body', ty')
 synthesize (HLIR.MkExprMut expr) = do
   expectedTy <- M.fresh
   (expr', ty) <- synthesize expr
@@ -223,7 +224,6 @@ synthesize (HLIR.MkExprMatch scrut cases) = do
   forM_ exprTys $ U.unifiesWith exprTy
 
   pure (HLIR.MkExprMatch scrut' cases', exprTy)
-
 synthesize (HLIR.MkExprData ann constrs) = do
   let name = ann.name
       generics = ann.value
@@ -271,14 +271,17 @@ check (HLIR.MkExprLambda args ret body) (argsTys HLIR.:->: retTy) = do
   let wfArgs = map (uncurry HLIR.MkAnnotation . second Identity) args'
 
   pure (HLIR.MkExprLambda wfArgs (Identity retTy) body')
-check (HLIR.MkExprLet generics ann expr) ty = do
+check (HLIR.MkExprLet generics ann expr body) ty = do
   M.enterLevel
-  let scheme = HLIR.Forall (toList generics) ty
+  preExprTy <- M.fresh
+  let scheme = HLIR.Forall (toList generics) preExprTy
 
-  expr' <- M.with
+  (expr', exprTy) <- M.with
     M.checkerState
     (\st -> st { M.variables = Map.insert ann.name scheme st.variables })
-    $ check expr ty
+    $ synthesize expr
+
+  preExprTy `U.unifiesWith` exprTy
 
   M.exitLevel
 
@@ -290,7 +293,9 @@ check (HLIR.MkExprLet generics ann expr) ty = do
 
   modifyIORef' M.checkerState $ \st -> st { M.variables = Map.insert ann.name newScheme st.variables, M.varPos = (ann.name, (newScheme, pos)) : M.varPos st }
 
-  pure (HLIR.MkExprLet generics ann { HLIR.value = Identity ty } expr')
+  body' <- check body ty
+
+  pure (HLIR.MkExprLet generics ann { HLIR.value = Identity ty } expr' body')
 check (HLIR.MkExprMut expr) (HLIR.MkTyMutable ty) = do
   expr' <- check expr ty
   pure (HLIR.MkExprMut expr')
@@ -502,7 +507,7 @@ runTypechecking es = do
 
 -- | Get the binding name of an expression
 getName :: HLIR.HLIR "expression" -> Text
-getName (HLIR.MkExprLet _ ann _) = ann.name
+getName (HLIR.MkExprLet _ ann _ _) = ann.name
 getName (HLIR.MkExprLoc e _) = getName e
 getName e = compilerError $ "typecheck: event block should only contain let bindings or events, received " <> toText e
 
