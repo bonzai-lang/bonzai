@@ -1,4 +1,5 @@
-cabal-version:      3.0
+cabal-version:   3.0
+
 -- The cabal-version field refers to the version of the .cabal specification,
 -- and can be different from the cabal-install (the tool) version and the
 -- Cabal (the library) version you are using. As such, the Cabal (the library)
@@ -11,7 +12,7 @@ cabal-version:      3.0
 --   http://haskell.org/cabal/users-guide/
 --
 -- The name of the package.
-name:               bonzai
+name:            bonzai
 
 -- The package version.
 -- See the Haskell package versioning policy (PVP) for standards
@@ -20,7 +21,7 @@ name:               bonzai
 -- PVP summary:     +-+------- breaking API changes
 --                  | | +----- non-breaking API additions
 --                  | | | +--- code changes with no API change
-version:            0.1.0.0
+version:         0.1.0.0
 
 -- A short (one-line) description of the package.
 -- synopsis:
@@ -29,216 +30,192 @@ version:            0.1.0.0
 -- description:
 
 -- The license under which the package is released.
-license:            MIT
+license:         MIT
 
 -- The file containing the license text.
-license-file:       LICENSE
+license-file:    LICENSE
 
 -- The package author(s).
-author:             Thomas Vergne
+author:          Thomas Vergne
 
 -- An email address to which users can send suggestions, bug reports, and patches.
-maintainer:         contact@thomas-vergne.fr
+maintainer:      contact@thomas-vergne.fr
 
 -- A copyright notice.
 -- copyright:
-category:           Language
-build-type:         Simple
+category:        Language
+build-type:      Simple
 
 -- Extra doc files to be distributed with the package, such as a CHANGELOG or a README.
-extra-doc-files:    CHANGELOG.md
+extra-doc-files: CHANGELOG.md
 
 -- Extra source files to be distributed with the package, such as examples, or a tutorial module.
 -- extra-source-files:
 
 common warnings
-    ghc-options: -Wall
+  ghc-options: -Wall
 
 library
-    -- Import common warning flags.
-    import:           warnings
+  -- Import common warning flags.
+  import:             warnings
 
-    -- Modules exported by the library.
-    exposed-modules:
-        MyLib
-        Language.Bonzai.Syntax.HLIR
-        Language.Bonzai.Syntax.MLIR
-        Language.Bonzai.Syntax.LLIR
-        Language.Bonzai.Syntax.TMLIR
-        Language.Bonzai.Syntax.Bytecode
-        Language.Bonzai.Syntax.CLang
+  -- Modules exported by the library.
+  exposed-modules:
+    Control.Color
+    Control.Monad.Parser
+    Control.Monad.Result
+    Language.Bonzai.Backend.ANF.Conversion
+    Language.Bonzai.Backend.Bytecode.Conversion
+    Language.Bonzai.Backend.Bytecode.Serialize
+    Language.Bonzai.Backend.Closure.Conversion
+    Language.Bonzai.Backend.Closure.Free
+    Language.Bonzai.Backend.Closure.Hoisting
+    Language.Bonzai.Backend.LLIR.Conversion
+    Language.Bonzai.Backend.LLIR.Free
+    Language.Bonzai.Backend.TypeErasure.Conversion
+    Language.Bonzai.Frontend.Module.Conversion
+    Language.Bonzai.Frontend.Module.Solver
+    Language.Bonzai.Frontend.Parser
+    Language.Bonzai.Frontend.Parser.Expression
+    Language.Bonzai.Frontend.Parser.Internal.Literal
+    Language.Bonzai.Frontend.Parser.Internal.Type
+    Language.Bonzai.Frontend.Parser.Lexer
+    Language.Bonzai.Frontend.Typechecking.Checker
+    Language.Bonzai.Frontend.Typechecking.Monad
+    Language.Bonzai.Frontend.Typechecking.Unification
+    Language.Bonzai.Syntax.Bytecode
+    Language.Bonzai.Syntax.HLIR
+    Language.Bonzai.Syntax.Internal.Annotation
+    Language.Bonzai.Syntax.Internal.Literal
+    Language.Bonzai.Syntax.Internal.Position
+    Language.Bonzai.Syntax.Internal.Type
+    Language.Bonzai.Syntax.LLIR
+    Language.Bonzai.Syntax.MLIR
+    MyLib
 
-        Control.Monad.Parser
-        Control.Monad.Result
-        Control.Color
+  -- Untyped conversion
+  -- Modules included in this library but not exported.
+  -- other-modules:
 
-        Language.Bonzai.Frontend.Parser
-        Language.Bonzai.Frontend.Parser.Expression
-        Language.Bonzai.Frontend.Parser.Internal.Literal
-        Language.Bonzai.Frontend.Parser.Internal.Type
-        Language.Bonzai.Frontend.Parser.Lexer
+  -- LANGUAGE extensions used by modules in this package.
+  -- other-extensions:
 
-        Language.Bonzai.Frontend.Module.Conversion
+  build-depends:
+    , aeson
+    , base
+    , binary
+    , containers
+    , diagnose
+    , directory
+    , filepath
+    , megaparsec
+    , mtl
+    , parser-combinators
+    , relude
+    , vector
 
-        Language.Bonzai.Frontend.Typechecking.Checker
-        Language.Bonzai.Frontend.Typechecking.Monad
-        Language.Bonzai.Frontend.Typechecking.Unification
+  mixins:
+    base hiding (Prelude),
+    relude (Relude as Prelude),
+    relude
 
-        -- Untyped conversion
-        Language.Bonzai.Backend.TypeErasure.Conversion
+  -- Directories containing source files.
+  hs-source-dirs:     src
 
-        -- Typed conversion
-        Language.Bonzai.Backend.TypeConversion.Conversion
-        Language.Bonzai.Backend.TypeConversion.Actor
-
-        Language.Bonzai.Backend.Closure.Conversion
-        Language.Bonzai.Backend.Closure.Hoisting
-        Language.Bonzai.Backend.Closure.Free
-        Language.Bonzai.Backend.Closure.Typed
-        Language.Bonzai.Backend.Closure.HoistTyped
-
-        Language.Bonzai.Backend.Monomorphization.Conversion
-
-        Language.Bonzai.Backend.ANF.Conversion
-        Language.Bonzai.Backend.ANF.Typed
-
-        Language.Bonzai.Backend.CLang.Generation
-        Language.Bonzai.Backend.CLang.CFG
-
-        Language.Bonzai.Backend.LLIR.Conversion
-        Language.Bonzai.Backend.LLIR.Free
-
-        Language.Bonzai.Backend.Bytecode.Conversion
-        Language.Bonzai.Backend.Bytecode.Serialize
-
-        Language.Bonzai.Syntax.Internal.Literal
-        Language.Bonzai.Syntax.Internal.Type
-        Language.Bonzai.Syntax.Internal.Position
-        Language.Bonzai.Syntax.Internal.Annotation
-
-    -- Modules included in this library but not exported.
-    -- other-modules:
-
-    -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
-
-    build-depends:
-        base,
-        relude,
-        megaparsec,
-        parser-combinators,
-        containers,
-        mtl,
-        directory,
-        filepath,
-        diagnose,
-        binary,
-        aeson
-
-    mixins:
-        base hiding (Prelude),
-        relude (Relude as Prelude),
-        relude
-
-    -- Directories containing source files.
-    hs-source-dirs:   src
-
-    -- Base language which the package is written in.
-    default-language: GHC2021
-
-    default-extensions:
-        DataKinds
-        OverloadedRecordDot
-        OverloadedStrings
-        TemplateHaskell
-        DuplicateRecordFields
+  -- Base language which the package is written in.
+  default-language:   GHC2021
+  default-extensions:
+    DataKinds
+    DuplicateRecordFields
+    OverloadedRecordDot
+    OverloadedStrings
+    TemplateHaskell
 
 executable bonzai
-    -- Import common warning flags.
-    import:           warnings
+  -- Import common warning flags.
+  import:             warnings
 
-    -- .hs or .lhs file containing the Main module.
-    main-is:          Main.hs
+  -- .hs or .lhs file containing the Main module.
+  main-is:            Main.hs
 
-    -- Modules included in this executable, other than Main.
-    -- other-modules:
+  -- Modules included in this executable, other than Main.
+  -- other-modules:
 
-    -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
+  -- LANGUAGE extensions used by modules in this package.
+  -- other-extensions:
 
-    -- Other library packages from which modules are imported.
-    build-depends:
-        base ^>=4.17.2.1,
-        bonzai,
-        relude,
-        filepath,
-        directory,
-        optparse-applicative,
-        aeson
+  -- Other library packages from which modules are imported.
+  build-depends:
+    , aeson
+    , base                  ^>=4.17.2.1
+    , bonzai
+    , directory
+    , filepath
+    , optparse-applicative
+    , relude
 
-    mixins:
-        base hiding (Prelude),
-        relude (Relude as Prelude),
-        relude
+  mixins:
+    base hiding (Prelude),
+    relude (Relude as Prelude),
+    relude
 
-    default-extensions:
-        DataKinds
-        OverloadedRecordDot
-        OverloadedStrings
-        TemplateHaskell
-        DuplicateRecordFields
+  default-extensions:
+    DataKinds
+    DuplicateRecordFields
+    OverloadedRecordDot
+    OverloadedStrings
+    TemplateHaskell
 
-    -- Directories containing source files.
-    hs-source-dirs:   app
+  -- Directories containing source files.
+  hs-source-dirs:     app
 
-    -- Base language which the package is written in.
-    default-language: GHC2021
+  -- Base language which the package is written in.
+  default-language:   GHC2021
 
 test-suite bonzai-test
-    -- Import common warning flags.
-    import:           warnings
+  -- Import common warning flags.
+  import:             warnings
 
-    -- Base language which the package is written in.
-    default-language: GHC2021
+  -- Base language which the package is written in.
+  default-language:   GHC2021
+  default-extensions:
+    DataKinds
+    DuplicateRecordFields
+    OverloadedRecordDot
+    OverloadedStrings
+    TemplateHaskell
 
-    default-extensions:
-        DataKinds
-        OverloadedRecordDot
-        OverloadedStrings
-        TemplateHaskell
-        DuplicateRecordFields
+  -- Modules included in this executable, other than Main.
+  other-modules:
+    Internal.Module
+    Internal.Parser
+    Internal.Typechecking
+    Internal.Utils
 
-    -- Modules included in this executable, other than Main.
-    other-modules:
-      Internal.Utils
-      Internal.Module
-      Internal.Parser
-      Internal.Typechecking
+  -- LANGUAGE extensions used by modules in this package.
+  -- other-extensions:
 
-    -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
+  -- The interface type and version of the test suite.
+  type:               exitcode-stdio-1.0
 
-    -- The interface type and version of the test suite.
-    type:             exitcode-stdio-1.0
+  -- Directories containing source files.
+  hs-source-dirs:     test
 
-    -- Directories containing source files.
-    hs-source-dirs:   test
+  -- The entrypoint to the test suite.
+  main-is:            Main.hs
 
-    -- The entrypoint to the test suite.
-    main-is:          Main.hs
+  -- Test dependencies.
+  build-depends:
+    , base              ^>=4.17.2.1
+    , bonzai
+    , containers
+    , directory
+    , filepath
+    , hspec
+    , hspec-megaparsec
+    , relude
 
-    -- Test dependencies.
-    build-depends:
-        base ^>=4.17.2.1,
-        bonzai,
-        hspec,
-        hspec-megaparsec,
-        relude,
-        filepath,
-        directory,
-        containers,
-
-    mixins:
-        base hiding (Prelude),
-        relude (Relude as Prelude),
-        relude
+  mixins:
+    base hiding (Prelude),
+    relude (Relude as Prelude),
+    relude
