@@ -129,7 +129,14 @@ resolve path isPublic = do
     -- the module unit from the resolved map.
     Just Visited -> do
       case Map.lookup newModuleName st.resolved of
-        Just m -> pure m { public = isPublic }
+        Just m -> do
+          modifyIORef moduleState $ \st' -> 
+            st' {
+                initialPath= st.initialPath
+              , currentDirectory = st.currentDirectory
+              }
+
+          pure m { public = isPublic }
         Nothing -> throw (ModuleNotFound newPath [])
 
     -- If the module has not been visited yet, then we need to visit it.
@@ -178,7 +185,10 @@ resolve path isPublic = do
                     (fromString newModuleName)
                     Visited
                     st'.visitStateModules
+              , initialPath = st.initialPath
+              , currentDirectory = st.currentDirectory
               }
+              
           
           -- Update the result state with the new AST
           modifyIORef' resultState (<> ast)
@@ -195,7 +205,7 @@ getPublicVariables = foldl' getPublicVariables' mempty
   getPublicVariables' :: Set Text -> HLIR.HLIR "expression" -> Set Text
   getPublicVariables' s (HLIR.MkExprLoc e _) = getPublicVariables' s e
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLoc e _)) = getPublicVariables' s (HLIR.MkExprPublic e)
-  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLet _ name _)) = Set.insert name.name s
+  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLet _ name _ _)) = Set.insert name.name s
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprNative ann _)) = Set.insert ann.name s
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprData _ cs)) = foldl' getPublicVariablesDataConstr s cs
   getPublicVariables' s _ = s
@@ -235,10 +245,10 @@ resolveImports m (HLIR.MkExprLambda args _ body) = do
   writeIORef moduleState old
 
   return m'
-resolveImports m (HLIR.MkExprLet _ name expr) = do
+resolveImports m (HLIR.MkExprLet _ name expr b) = do
   let m' = m {variables = Set.singleton name.name <> variables m}
   void $ resolveImports m' expr
-  pure m'
+  resolveImports m' b
 resolveImports m (HLIR.MkExprBlock exprs) = do
   void $ foldlM resolveImports m exprs
   pure m

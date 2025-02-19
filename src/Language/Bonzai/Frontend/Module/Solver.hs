@@ -79,11 +79,12 @@ solveExpression (HLIR.MkExprUpdate u e) = do
   e' <- solveExpression e
 
   pure $ HLIR.MkExprUpdate u' e'
-solveExpression (HLIR.MkExprLet g a e) = do
+solveExpression (HLIR.MkExprLet g a e b) = do
   a' <- freshSymbol a
   e' <- solveExpression e
+  b' <- solveExpression b
 
-  pure $ HLIR.MkExprLet g a' e'
+  pure $ HLIR.MkExprLet g a' e' b'
 solveExpression (HLIR.MkExprMut e) = do
   e' <- solveExpression e
 

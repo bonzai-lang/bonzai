@@ -182,8 +182,11 @@ parseLet = localize $ do
   void $ Lex.reserved "let"
   name <- Lex.identifier <|> Lex.parens Lex.operator
   void $ Lex.reserved "="
+  expr <- parseExpression
+  
+  body <- P.option (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing)) $ Lex.reserved "in" *> parseExpression
 
-  HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing) <$> parseExpression
+  pure $ HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing) expr body
 
 -- | PARSE MUTABLE DECLARATION
 -- | Parse a mutable declaration. A mutable declaration is used to declare a mutable
@@ -196,8 +199,11 @@ parseMut = localize $ do
   void $ Lex.reserved "mut"
   name <- Lex.identifier <|> Lex.parens Lex.operator
   void $ Lex.reserved "="
+  expr <- parseExpression
 
-  HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing) . HLIR.MkExprMut <$> parseExpression
+  body <- P.option (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing)) $ Lex.reserved "in" *> parseExpression
+
+  pure $ HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing) (HLIR.MkExprMut expr) body
 
 -- | PARSE MUTABLE EXPRESSION
 -- | Parse a mutable expression. A mutable expression is an expression that consists
@@ -390,7 +396,7 @@ parseWhile = localize $ do
   cond <- parseExpression
 
   void $ Lex.symbol "{"
-  body <- P.many parseExpression
+  body <- P.sepEndBy parseStatement (P.optional (Lex.symbol ";"))
   void $ Lex.symbol "}"
 
   pure $ HLIR.MkExprWhile cond (HLIR.MkExprBlock body)
@@ -404,10 +410,11 @@ parseWhile = localize $ do
 parseBlock :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseBlock = localize $ do
   void $ Lex.symbol "{"
-  exprs <- P.many parseExpression
+  exprs <- P.sepEndBy parseStatement (P.optional (Lex.symbol ";"))
   void $ Lex.symbol "}"
 
   pure $ HLIR.MkExprBlock exprs
+
 
 -- | PARSE FUNCTION EXPRESSION
 -- | Parse a function expression. A function expression is an expression that consists
@@ -427,7 +434,9 @@ parseFunction = localize $ do
 
   let funTy = (HLIR.:->:) <$> mapM HLIR.value args <*> ret
 
-  HLIR.MkExprLet (fromList generics) (HLIR.MkAnnotation name funTy) . HLIR.MkExprLambda args ret <$> parseExpression
+  expr <- parseExpression
+
+  pure $ HLIR.MkExprLet (fromList generics) (HLIR.MkAnnotation name funTy) (HLIR.MkExprLambda args ret expr) (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
 
 -- | PARSE LAMBDA EXPRESSION
 -- | Parse a lambda expression. A lambda expression is an expression that consists
@@ -504,8 +513,6 @@ parseRequire = localize $ do
 parseTerm :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseTerm =
   localize $ P.choice [
-    parseWhile,
-    P.try parseFunction,
     parseLambda,
     parseLet,
     P.try parseMut,
@@ -517,9 +524,16 @@ parseTerm =
     parseBlock,
     parseList,
     P.try parseTuple,
-    P.try parseUpdate,
     parseVariable,
     Lex.parens parseExpression
+  ]
+
+parseStatement :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseStatement = P.choice [
+    parseWhile,
+    parseFunction,
+    P.try parseUpdate,
+    parseExpression
   ]
 
 -- | PARSE EXPRESSION
@@ -659,7 +673,7 @@ parseModule :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseModule = localize $ do
   void $ Lex.reserved "module"
   name <- Lex.identifier
-  body <- Lex.braces (P.many parseToplevel)
+  body <- Lex.braces (P.sepEndBy parseToplevel (P.optional (Lex.symbol ";")))
 
   pure $ HLIR.MkExprModule name body
 
@@ -676,7 +690,7 @@ parseToplevel =
     parseDirectData,
     parseRequire,
     parseExtern,
-    parseExpression
+    parseStatement
   ]
 
 -- | PARSE PROGRAM

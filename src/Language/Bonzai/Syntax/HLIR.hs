@@ -55,7 +55,7 @@ data Expression f t
   | MkExprLambda [Annotation (f t)] (f t) (Expression f t)
   | MkExprTernary (Expression f t) (Expression f t) (Expression f t)
   | MkExprUpdate (Update f t) (Expression f t)
-  | MkExprLet (Set Text) (Annotation (f t)) (Expression f t)
+  | MkExprLet (Set Text) (Annotation (f t)) (Expression f t) (Expression f t)
   | MkExprMut (Expression f t)
   | MkExprBlock [Expression f t]
   | MkExprRequire Text (Set Text)
@@ -140,10 +140,10 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprLambda as ret e) = T.concat ["(", T.intercalate ", " (map toText as), "): ", toText ret, " => ", toText e]
   toText (MkExprTernary c t e) = T.concat [toText c, " ? ", toText t, " : ", toText e]
   toText (MkExprUpdate u e) = T.concat [toText u, " = ", toText e]
-  toText (MkExprLet _ a e) = T.concat ["let ", toText a, " = ", toText e]
+  toText (MkExprLet _ a e b) = T.concat ["let ", toText a, " = ", toText e, " in ", toText b]
   toText (MkExprBlock es) = "{" <> T.concat [T.intercalate "; " (map toText es)] <> "}"
   toText (MkExprRequire n vars) = T.concat ["require ", n, ": ", T.intercalate ", " (toList vars)]
-  toText (MkExprLoc e _) = "@" <> toText e
+  toText (MkExprLoc e _) = toText e
   toText (MkExprList es) = T.concat ["[", T.intercalate ", " (map toText es), "]"]
   toText (MkExprNative ann ty) = T.concat ["native ", toText ann.name, "<", T.intercalate ", " ann.value, "> ", toText ty]
   toText (MkExprMut e) = T.concat ["mut ", toText e]
@@ -193,7 +193,7 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprLambda as ret e == MkExprLambda as' ret' e' = as == as' && ret == ret' && e == e'
   MkExprTernary c t e == MkExprTernary c' t' e' = c == c' && t == t' && e == e'
   MkExprUpdate u e == MkExprUpdate u' e' = u == u' && e == e'
-  MkExprLet g a e == MkExprLet g' a' e' = a == a' && e == e' && g == g'
+  MkExprLet g a e b == MkExprLet g' a' e' b' = a == a' && e == e' && g == g' && b == b'
   MkExprMut e == MkExprMut e'= e == e'
   MkExprBlock es == MkExprBlock es' = es == es'
   MkExprRequire n v == MkExprRequire n' v' = n == n' && v == v'
