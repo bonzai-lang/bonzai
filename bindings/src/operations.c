@@ -10,7 +10,7 @@ void print_map_values(Value map) {
   if (!IS_PTR(map)) return;
 
   HeapValue* map_ptr = GET_PTR(map);
-  
+
   if (map_ptr->type != TYPE_LIST) return;
 
   if (map_ptr->length == 0) {
@@ -361,7 +361,7 @@ Value toString(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "toString", argc, 1);
 
   ValueType ty = get_type(args[0]);
-  
+
   switch (ty) {
     case TYPE_INTEGER: {
       char* str = malloc(12);
@@ -382,7 +382,7 @@ Value toString(Module* mod, Value* args, int argc) {
       str[0] = '[';
 
       for (uint32_t i = 0; i < list->length; i++) {
-        char* item = GET_STRING(toString(mod, (Value[]) {list->as_ptr[i]}, 1));
+        char* item = GET_STRING(toString(mod, (Value[]){list->as_ptr[i]}, 1));
 
         str = realloc(str, strlen(str) + strlen(item) + 3);
 
@@ -408,7 +408,8 @@ Value toString(Module* mod, Value* args, int argc) {
       HeapValue* mut = GET_PTR(args[0]);
       return toString(mod, mut->as_ptr, 1);
     }
-    case TYPE_UNKNOWN: default: {
+    case TYPE_UNKNOWN:
+    default: {
       char* str = malloc(10);
       sprintf(str, "<unknown>");
 
