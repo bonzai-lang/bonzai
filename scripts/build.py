@@ -51,7 +51,13 @@ bonzai $BONZAI_PATH/packages/bpm/main.bzi.bin -l $BONZAI_PATH/bindings/bin/bindi
 """
 
 bonzai_script = f"""#!/bin/sh
-{executable_out} build "$@" && {runtime_executable_out} "$@".bin -l $BONZAI_PATH/bindings/bin/bindings.dylib
+
+first_arg=$1
+shift
+args=$*
+
+bonzaic build "$first_arg"
+bonzai-runtime "$first_arg".bin -l "$BONZAI_PATH/bindings/bin/bindings.dylib" "$args"
 """
 
 with open('bin/bpm', 'w') as f:
