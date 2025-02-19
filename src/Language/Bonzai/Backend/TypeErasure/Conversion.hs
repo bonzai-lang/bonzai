@@ -44,7 +44,7 @@ convert :: HLIR.TLIR "expression" -> MLIR.MLIR "expression"
 convert (HLIR.MkExprLiteral l) = MLIR.MkExprLiteral l
 convert (HLIR.MkExprVariable a) = MLIR.MkExprVariable a.name
 convert (HLIR.MkExprApplication f args) = MLIR.MkExprApplication (convert f) (map convert args)
-convert (HLIR.MkExprLet _ ann e b) = case convert b of
+convert (HLIR.MkExprLet _ (Left ann) e b) = case convert b of
   MLIR.MkExprVariable "unit" -> MLIR.MkExprLet ann.name (convert e)
   b' -> MLIR.MkExprUnpack ann.name (convert e) b'
 convert (HLIR.MkExprBlock es) = MLIR.MkExprBlock (map convert es)
@@ -99,7 +99,7 @@ createIfs [] = MLIR.MkExprApplication (MLIR.MkExprVariable "panic") [MLIR.MkExpr
 createFinalCondition :: [MLIR.MLIR "expression"] -> MLIR.MLIR "expression"
 createFinalCondition [] = MLIR.MkExprLiteral (MLIR.MkLitInt 1)
 createFinalCondition [x] = x
-createFinalCondition (x : xs) = MLIR.MkExprApplication (MLIR.MkExprVariable "&&") [x, createFinalCondition xs]
+createFinalCondition (x : xs) = MLIR.MkExprTernary x (createFinalCondition xs) (MLIR.MkExprLiteral (HLIR.MkLitInt 0))
 
 -- | Create a sequence of let expressions based on a list of variables and expressions
 createLets
