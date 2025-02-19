@@ -1,0 +1,3 @@
+pub type unit { unit }
+
+pub fn make_unit(): unit => unit

@@ -1,3 +1,5 @@
+require "std:datatypes/unit"
+
 pub type Throwable<A> {
   Ok(x: A),
   Error(err: string)

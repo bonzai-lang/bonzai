@@ -1,5 +1,6 @@
 require "std:math"
 require "std:datatypes/optional"
+require "std:datatypes/unit"
 
 pub extern fn length<A>(xs: list<A>): int
 pub extern fn sliceFrom<A>(xs: list<A>, i: int): list<A>
@@ -14,6 +15,12 @@ pub fn List::map<A, B>(xs: list<A>, f: fn(A): B): list<B> =>
   match xs {
     case [] => []
     case [y .. ys] => [f(y)] + List::map(ys, f)
+  }
+
+pub fn List::concat<A>(xs: list<list<A>>): list<A> =>
+  match xs {
+    case [] => []
+    case [y .. ys] => y + List::concat(ys)
   }
 
 pub let map = List::map

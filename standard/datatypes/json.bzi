@@ -11,6 +11,7 @@ require "std:datatypes/map"
 require "std:datatypes/string"
 require "std:math"
 require "std:datatypes/error"
+require "std:datatypes/unit"
 
 pub type JSON {
   Object(fields: list<(string, JSON)>),

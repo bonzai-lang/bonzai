@@ -1,5 +1,6 @@
 require "std:datatypes/error"
 require "std:datatypes/list"
+require "std:datatypes/unit"
 require "std:math"
 
 pub type Tuple<A, B> {

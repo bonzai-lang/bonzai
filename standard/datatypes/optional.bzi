@@ -1,3 +1,5 @@
+require "std:datatypes/unit"
+
 pub type Optional<A> {
   Some(value: A),
   None

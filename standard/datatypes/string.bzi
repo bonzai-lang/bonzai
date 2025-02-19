@@ -1,5 +1,6 @@
 require "std:datatypes/list"
 require "std:math"
+require "std:datatypes/unit"
 
 pub extern fn toString<A>(x: A): string
 

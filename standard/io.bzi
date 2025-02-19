@@ -1,3 +1,5 @@
+require "std:datatypes/unit"
+
 extern fn exit_with<A>(code: int): A
 pub extern fn print<A>(x: A): unit
 extern fn panic_<A>(msg: string): A
