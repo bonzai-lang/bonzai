@@ -15,13 +15,13 @@ extern fn toInt(s: string): int
 extern fn toFloat(s: string): float
 
 type Result<A> {
-  ParseResult(x: A, rest: string),
-  ParseError(err: string, rest: string)
+  ParseResult(x: A, rest: list<char>),
+  ParseError(err: string, rest: list<char>)
 }
 
-type Parser<A> { Parser(p: fn(string): Result<A>) }
+type Parser<A> { Parser(p: fn(list<char>): Result<A>) }
 
-fn runParser<A>(parser: Parser<A>, input: string): Result<A> => 
+fn runParser<A>(parser: Parser<A>, input: list<char>): Result<A> => 
   match parser {
     case Parser(f) => f(input)
   }
@@ -66,10 +66,10 @@ fn Parser::pure<A>(x: A): Parser<A> =>
 
 fn satisfy(pred: fn(char): bool): Parser<char> => {
   Parser(fn(input) => {
-    match input.explode() {
+    match input {
       case [] => ParseError("Unexpected end of input", input)
       case [c .. cs] => if pred(c) 
-        then ParseResult(c, cs.implode()) 
+        then ParseResult(c, cs) 
         else ParseError("Unexpected character $c", input)
     }
   })
@@ -80,9 +80,9 @@ fn char(c: char): Parser<char> =>
 
 fn string(s: string): Parser<string> => 
   Parser(fn(input) => {
-    let len = length(s.explode())
-    let str = slice(input.explode(), 0, len).implode()
-    if str == s then ParseResult(s, input.explode.sliceFrom(len).implode) else ParseError("Unexpected string $s", input)
+    let len = String::length(s)
+    let str = slice(input, 0, len)
+    if str.implode == s then ParseResult(s, input.sliceFrom(len)) else ParseError("Unexpected string $s", input)
   })
 
 let and = Parser::andThen
@@ -97,7 +97,7 @@ fn oneOf(cs: list<char>): Parser<char> =>
 
 fn many<A>(parser: Parser<A>): Parser<list<A>> =>
   Parser(fn(input) => {
-    fn loop(input: string, acc: list<A>): Result<list<A>> => {
+    fn loop(input, acc: list<A>): Result<list<A>> => {
       match runParser(parser, input) {
         case ParseResult(x, rest) => loop(rest, acc + [x])
         case ParseError(_, rest) => ParseResult(acc, rest)
@@ -113,7 +113,7 @@ fn many1<A>(parser: Parser<A>): Parser<list<A>> =>
 
 fn sepBy<A, B>(parser: Parser<A>, sep: Parser<B>): Parser<list<A>> =>
   Parser(fn(input) => {
-    fn loop(input: string, acc: list<A>): Result<list<A>> => {
+    fn loop(input, acc: list<A>): Result<list<A>> => {
       match runParser(parser, input) {
         case ParseResult(x, rest) => 
           match runParser(sep, rest) {
@@ -160,7 +160,7 @@ fn lazy<A>(f: fn(): Parser<A>): Parser<A> =>
 
 fn manyTill<A, B>(parser: Parser<A>, end: Parser<B>): Parser<list<A>> =>
   Parser(fn(input) => {
-    fn loop(input: string, acc: list<A>): Result<list<A>> => {
+    fn loop(input, acc: list<A>): Result<list<A>> => {
       match runParser(end, input) {
         case ParseResult(_, rest) => ParseResult(acc, rest)
         case ParseError(_, _) => {
@@ -177,7 +177,7 @@ fn manyTill<A, B>(parser: Parser<A>, end: Parser<B>): Parser<list<A>> =>
 
 fn manyN<A>(parser: Parser<A>, n: int): Parser<list<A>> =>
   Parser(fn(input) => {
-    fn loop(input: string, acc: list<A>, n: int): Result<list<A>> => {
+    fn loop(input, acc: list<A>, n: int): Result<list<A>> => {
       if n == 0 then ParseResult(acc, input)
       else {
         match runParser(parser, input) {

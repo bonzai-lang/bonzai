@@ -3,7 +3,8 @@ require "std:language/parser":
   Parser::pure, many, satisfy, is_whitespace, 
   left, Parser::map, or, implode, many1, 
   is_digit, toInt, Parser::andThen, toFloat, 
-  string, sepBy, lazy, runParser, is_alphanumeric, try_
+  string, sepBy, lazy, runParser, is_alphanumeric, try_,
+  explode
 require "std:datatypes/tuple"
 require "std:datatypes/error"
 require "std:datatypes/list"
@@ -92,7 +93,7 @@ fn renderHTML(html: HTML): string =>
   }
 
 fn parseHTML(input: string): Throwable<HTML> =>
-  match runParser(HTMLParser(), input) {
+  match runParser(HTMLParser(), input.explode) {
     case ParseResult(html, _) => Ok(html)
     case ParseError(err, _) => Error("Parse error: " + err)
   }

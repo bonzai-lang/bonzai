@@ -18,17 +18,18 @@ pub extern fn fetch(url: string): Throwable<(string, string)>
 extern fn fetch_with(url: string, headers: string): Throwable<(string, string)>
 extern fn redirect_to(req: Request, url: string): unit
 extern fn get_path(req: Request): string
-extern fn make_unit(): unit
+pub extern fn make_unit(): unit
+pub extern fn post_data(url: string, data: string, headers: string): Throwable<(string, string)>
 
 type Header {
   Header(code: int, reason: string)
 }
 
-fn Header::show(header: Header): string => match header {
+pub fn Header::show(header: Header): string => match header {
   case Header(code, reason) => "HTTP/1.1 $code $reason"
 }
 
-fn Map::mapToHeaders(headers: Map<string>): string => {
+pub fn Map::mapToHeaders(headers: Map<string>): string => {
   mut headersString = ""
   mut i = 0
   
@@ -65,56 +66,9 @@ fn respondText(req: Request, ty: string, content: string) =>
     "Connection": "close"
   }, content)
 
-fn fetchWithHeaders(url: string, headers: Map<string>): Throwable<(string, string)> => {
+pub fn fetchWithHeaders(url: string, headers: Map<string>): Throwable<(string, string)> => {
   match fetch_with(url, Map::mapToHeaders(headers)) {
     case Ok(Tuple(buffer, content)) => Ok(Tuple(buffer, content))
     case Error(e) => Error(e)
-  }
-}
-
-interface HTTPWrapper {
-  fn listen(handler: fn(Request): unit)
-  fn close()
-}
-
-interface RequestIntercept {
-  fn intercept(server: HTTP, handler: fn(Request): unit, isClosed: mut bool)
-  fn close()
-}
-
-fn Request() => {
-  actor < RequestIntercept {
-    on intercept(server: HTTP, handler, isClosed) => {
-      while !isClosed.value {
-        let req = accept_request(server)
-
-        handler(req)
-
-        close_client(req)
-      }
-
-      exit()
-    }
-
-    on close() => exit()
-  }
-}
-
-pub fn HTTPServer(port: int) => {
-  let http = start_http_server(port)
-  mut isClosed = false
-
-  actor < HTTPWrapper {
-    on listen(handler) => {
-      let i1 = spawn Request()
-      i1->intercept(http, handler, isClosed)
-    }
-    
-    on close() => {
-      isClosed = true
-      close_server(http)
-
-      exit()
-    }
   }
 }
