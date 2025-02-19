@@ -1,19 +1,20 @@
 #ifndef VALUE_H
 #define VALUE_H
 
+#include <error.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
-#include <stdbool.h>
-#include <error.h>
-#include <stdatomic.h>
 
 typedef uint64_t Value;
 
 #define INIT_POS 512
 #define INIT_OBJECTS 32
+#define MAX_OBJECTS 4096
 #define GLOBALS_SIZE 1024
 #define MAX_STACK_SIZE GLOBALS_SIZE * 32
 #define VALUE_STACK_SIZE MAX_STACK_SIZE - GLOBALS_SIZE
@@ -83,43 +84,43 @@ typedef enum {
 #define GET_NATIVE(x) GET_PTR(x)->as_native
 #define GET_NTH_ELEMENT(x, n) ((x >> (n * 16)) & MASK_PAYLOAD_INT)
 
-typedef struct Message {
-    int name;
-    Value* args;
-    int argc;
-    struct Message *next;   // Pointer to the next message in the queue
-} Message;
-
-typedef struct MessageQueue {
-    Message *head;   // Head of the message queue
-    Message *tail;   // Tail of the message queue
-    pthread_mutex_t mutex;  // Mutex to protect access to the queue
-    pthread_cond_t cond;    // Condition variable to notify waiting threads
-} MessageQueue;
-
-
-void enqueue(MessageQueue *queue, Message *msg);
-Message* dequeue(MessageQueue *queue);
-MessageQueue* create_message_queue();
-void print_message_queue(MessageQueue *queue);
-
 struct Event {
   int ons_count;
   Value ons[256];
 
   int ipc;
 
-  struct Module *mod;
+  struct Module* mod;
   struct Actor* actor;
 };
 
+typedef struct Message {
+  int name;
+  Value* args;
+  int argc;
+  struct Event event;
+  struct Message* next;  // Pointer to the next message in the queue
+} Message;
+
+typedef struct MessageQueue {
+  Message* head;          // Head of the message queue
+  Message* tail;          // Tail of the message queue
+  pthread_mutex_t mutex;  // Mutex to protect access to the queue
+  pthread_cond_t cond;    // Condition variable to notify waiting threads
+} MessageQueue;
+
+void enqueue(MessageQueue* queue, Message* msg);
+Message* dequeue(MessageQueue* queue);
+MessageQueue* create_message_queue();
+void print_message_queue(MessageQueue* queue);
+
 typedef struct Stack {
-  Value *values;
+  Value* values;
   int32_t stack_pointer;
   int32_t stack_capacity;
 } Stack;
 
-#define MAX_FRAMES 1024
+#define MAX_FRAMES 16384
 
 typedef struct {
   reg instruction_pointer;
@@ -171,12 +172,10 @@ typedef struct {
 } stacks_t;
 
 typedef struct {
-  stacks_t stacks;
   HeapValue* first_object;
   int num_objects, max_objects;
   bool gc_enabled;
   bool gc_running;
-  bool gc_requested;
 
   pthread_cond_t gc_cond;
   pthread_mutex_t gc_mutex;
@@ -198,11 +197,12 @@ Value MAKE_STRING_MULTIPLE(struct Module* mod, ...);
 Value MAKE_LIST(struct Module* mod, Value* x, uint32_t len);
 Value MAKE_EVENT(struct Module* mod, uint32_t ons_count, uint32_t ipc);
 Value MAKE_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp);
-Value MAKE_EVENT_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp, int32_t ons_count, int function_ipc);
+Value MAKE_EVENT_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp,
+                       int32_t ons_count, int function_ipc);
 Value MAKE_NATIVE(struct Module* mod, char* name, int addr);
 Value MAKE_EVENT_ON(struct Module* mod, int id, Value func);
 Value MAKE_STRING_NON_GC(struct Module* mod, char* x);
-Value MAKE_FUNCTION(struct Module* mod, uint32_t ip, uint16_t local_space);
+Value MAKE_FUNCTION(struct Module* mod, int32_t ip, uint16_t local_space);
 void gc(struct Module* vm);
 void force_sweep(struct Module* vm);
 HeapValue* allocate(struct Module* mod, ValueType type);
@@ -219,16 +219,18 @@ int value_eq(struct Module* mod, Value a, Value b);
 
 void debug_value(Value v);
 
-#define stack_push(module, value) \
-  do {                            \
+#define stack_push(module, value)                                        \
+  do {                                                                   \
     if (module->stack->stack_pointer >= module->stack->stack_capacity) { \
-      module->stack->stack_capacity *= 2; \
-      module->stack->values = realloc(module->stack->values, module->stack->stack_capacity * sizeof(Value)); \
-      if (!module->stack->values) { \
-        THROW(module, "Failed to allocate memory for stack"); \
-      } \
-    } \
-    module->stack->values[module->stack->stack_pointer++] = value; \
+      module->stack->stack_capacity *= 2;                                \
+      module->stack->values =                                            \
+          realloc(module->stack->values,                                 \
+                  module->stack->stack_capacity * sizeof(Value));        \
+      if (!module->stack->values) {                                      \
+        THROW(module, "Failed to allocate memory for stack");            \
+      }                                                                  \
+    }                                                                    \
+    module->stack->values[module->stack->stack_pointer++] = value;       \
   } while (0)
 
 #define stack_pop(module) \

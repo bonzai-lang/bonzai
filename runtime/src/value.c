@@ -1,12 +1,13 @@
-#include <debug.h>
 #include <error.h>
-#include <math.h>
 #include <module.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <threading.h>
 #include <value.h>
-#include <stdarg.h>
+
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 void mark_value(Value value) {
   if (!IS_PTR(value)) return;
@@ -34,70 +35,49 @@ void mark_value(Value value) {
 void mark_all(struct Module* vm) {
   gc_t* gc = vm->gc;
 
-  // Mark messages being sent
-  for (int i = 0; i < vm->event_count; i++) {
-    struct Actor* actor = vm->events[i];
-
-    MessageQueue* queue = actor->queue;
-
-    for (Message* pending = queue->head; pending != NULL;
-         pending = pending->next) {
-      for (int arg_index = 0; arg_index < pending->argc; arg_index++) {
-        mark_value(pending->args[arg_index]);
-      }
-    }
-  }
-
-  // Traverse the stacks by the end
-  for (int stack_id = 0; stack_id < gc->stacks.stack_count; stack_id++) {
-    Stack* stack = gc->stacks.stacks[stack_id];
-    for (int i = 0; i < stack->stack_pointer; i++) {
-      mark_value(stack->values[i]);
-    }
+  for (int i = 0; i < vm->stack->stack_capacity; i++) {
+    mark_value(vm->stack->values[i]);
   }
 }
 
-void sweep(struct Module* vm) {
-  gc_t* gc = vm->gc;
-  HeapValue** object = &gc->first_object;
-  while (*object) {
-    if (!(*object)->is_marked && !(*object)->is_constant) {
-      /* This object wasn't reached, so remove it from the list
-         and free it. */
-      HeapValue* unreached = *object;
+void free_value(HeapValue* unreached) {
+  if (unreached->type == TYPE_LIST || unreached->type == TYPE_MUTABLE) {
+    free(unreached->as_ptr);
+  } else if (unreached->type == TYPE_STRING) {
+    if (!unreached->is_constant) {
+      free(unreached->as_string);
+    }
+  }
+  free(unreached);
+}
 
-      switch (unreached->type) {
-        case TYPE_LIST: case TYPE_MUTABLE: {
-          free(unreached->as_ptr);
-          break;
-        }
-
-        case TYPE_STRING: {
-          if (!unreached->is_constant) {
-            free(unreached->as_string);
-          }
-          break;
-        }
-
-        default: break;
-      }
-
-      free(unreached);
-
-      *object = unreached->next;
-      gc->num_objects--;
+static void sweep(struct Module* vm) {
+  HeapValue* previous = NULL;
+  HeapValue* object = vm->gc->first_object;
+  while (object != NULL) {
+    if (object->is_marked == true) {
+      object->is_marked = false;
+      previous = object;
+      object = object->next;
     } else {
-      /* This object was reached, so unmark it (for the next GC)
-         and move on to the next. */
-      (*object)->is_marked = 0;
-      object = &(*object)->next;
+      HeapValue* unreached = object;
+      object = object->next;
+      if (previous != NULL) {
+        previous->next = object;
+      } else {
+        vm->gc->first_object = object;
+      }
+
+      free_value(unreached);
+      vm->gc->num_objects--;
     }
   }
 }
+
 void gc(struct Module* vm) {
   gc_t* gc_ = vm->gc;
   vm->gc->gc_running = true;
-  // int numObjects = vm->num_objects;
+  int numObjects = gc_->num_objects;
 
   mark_all(vm);
   sweep(vm);
@@ -105,9 +85,10 @@ void gc(struct Module* vm) {
   gc_->max_objects =
       gc_->num_objects < INIT_OBJECTS ? INIT_OBJECTS : gc_->num_objects * 2;
 
+  // printf("Collected %d objects, %d max objects\n",
+  //        numObjects - gc_->num_objects, gc_->max_objects);
+
   vm->gc->gc_running = false;
-  // printf("Collected %d objects, %d remaining.\n", numObjects - vm->num_objects,
-  //        vm->num_objects);
 }
 
 void force_sweep(struct Module* vm) {
@@ -116,7 +97,8 @@ void force_sweep(struct Module* vm) {
   while (object) {
     HeapValue* next = object->next;
     switch (object->type) {
-      case TYPE_LIST: case TYPE_MUTABLE: {
+      case TYPE_LIST:
+      case TYPE_MUTABLE: {
         free(object->as_ptr);
         break;
       }
@@ -128,7 +110,8 @@ void force_sweep(struct Module* vm) {
         break;
       }
 
-      default: break;
+      default:
+        break;
     }
     free(object);
     object = next;
@@ -142,18 +125,20 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
   // pthread_mutex_lock(&gc_->gc_mutex);
   // if (gc_->gc_running) {
   //   pthread_cond_wait(&gc_->gc_cond, &gc_->gc_mutex);
-  //   pthread_mutex_unlock(&gc_->gc_mutex);
-  // } else {
-  //   pthread_mutex_unlock(&gc_->gc_mutex);
+  //   //   pthread_mutex_unlock(&gc_->gc_mutex);
   // }
+  // pthread_mutex_unlock(&gc_->gc_mutex);
+  // // }
 
   if (gc_->num_objects == gc_->max_objects) {
     if (gc_->gc_enabled) {
-      // stop_the_world(mod, true);
-      // gc(mod);
-      // stop_the_world(mod, false);
+      stop_the_world(mod, true);
+      gc(mod);
+      stop_the_world(mod, false);
+
+      // mod->gc->max_objects += 2;
     } else {
-      mod->gc->max_objects += 2;
+      mod->gc->max_objects *= 1.5;
     }
   }
 
@@ -176,7 +161,8 @@ Value MAKE_STRING_MULTIPLE(struct Module* mod, ...) {
 
   int len = 0;
 
-  for (char* str = va_arg(args, char*); str != NULL; str = va_arg(args, char*)) {
+  for (char* str = va_arg(args, char*); str != NULL;
+       str = va_arg(args, char*)) {
     len += strlen(str);
   }
 
@@ -263,12 +249,12 @@ Value MAKE_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp) {
   return MAKE_PTR(v);
 }
 
-Value MAKE_FUNCTION(struct Module* mod, uint32_t ip, uint16_t local_space) {
+Value MAKE_FUNCTION(struct Module* mod, int32_t ip, uint16_t local_space) {
   HeapValue* v = allocate(mod, TYPE_FUNCTION);
 
   v->as_func.ip = ip;
   v->as_func.local_space = local_space;
-  
+
   return MAKE_PTR(v);
 }
 
@@ -420,9 +406,9 @@ int value_eq(Module* mod, Value a, Value b) {
 void debug_value(Value v) {
   switch (get_type(v)) {
     case TYPE_INTEGER:
-      printf("%d", (int) GET_INT(v));
+      printf("%d", (int)GET_INT(v));
       break;
-    
+
     case TYPE_FLOAT:
       printf("%f", GET_FLOAT(v));
       break;
@@ -430,7 +416,7 @@ void debug_value(Value v) {
     case TYPE_STRING:
       printf("%s", GET_STRING(v));
       break;
-    
+
     case TYPE_LIST: {
       HeapValue* list = GET_PTR(v);
       printf("[");
@@ -453,15 +439,15 @@ void debug_value(Value v) {
     case TYPE_SPECIAL:
       printf("Special");
       break;
-    
+
     case TYPE_FUNCTION:
       printf("Function");
       break;
-    
+
     case TYPE_FUNCENV:
       printf("FunctionEnv");
       break;
-    
+
     case TYPE_UNKNOWN:
     default:
       printf("Unknown");
@@ -481,7 +467,7 @@ void stop_the_world(Module* mod, bool stop) {
 
   //   for (int i = 0; i < mod->event_count; i++) {
   //     struct Actor* actor = mod->events[i];
-      
+
   //     printf("Actor %d is pausing\n", i);
 
   //     pthread_mutex_lock(&actor->mutex);
@@ -508,8 +494,9 @@ void safe_point(Module* mod) {
   // pthread_cond_signal(&mod->current_actor->cond);
 
   // // mod->gc->stopped_threads++;
-  
-  // printf("reached safe point: %p (%d actors)\n", mod->current_actor, mod->event_count);
+
+  // printf("reached safe point: %p (%d actors)\n", mod->current_actor,
+  // mod->event_count);
 
   // while (mod->gc->gc_running) {}
 

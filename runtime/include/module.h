@@ -40,8 +40,8 @@ typedef struct Module {
   int32_t pc;
   Value (*call_function)(struct Module *m, Value callee, int32_t argc, Value* argv);
   
-  int event_count;
-  struct Actor* events[1024];
+  int event_count, event_capacity;
+  struct Actor** events;
 
   bool is_terminated;
 

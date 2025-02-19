@@ -1,10 +1,10 @@
 #define UGC_IMPLEMENTATION
 #include <deserialize.h>
+#include <error.h>
+#include <interpreter.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <interpreter.h>
-#include <error.h>
 #include <threading.h>
 
 typedef struct LibraryOption {
@@ -64,14 +64,16 @@ int main(int argc, char* argv[]) {
   gc_t* gc = malloc(sizeof(gc_t));
   init_gc(gc, &module);
 
-  if (argc < 2) { THROW_FMT((&module), "Usage: %s <file>", argv[0]); }
+  if (argc < 2) {
+    THROW_FMT((&module), "Usage: %s <file>", argv[0]);
+  }
   FILE* file = fopen(argv[1], "rb");
 
   if (file == NULL) {
     THROW_FMT((&module), "Could not open file %s", argv[1]);
     return 1;
   }
-  
+
   // Loading libraries
   LibraryOption* libraries = get_libraries(argc, argv);
   int num_libs = count_libraries(libraries);
@@ -86,11 +88,12 @@ int main(int argc, char* argv[]) {
   }
 
   module.stack = stack_new();
-  module.gc->stacks.stacks[module.gc->stacks.stack_count++] = module.stack;
   module.handles = libs;
   module.num_handles = num_libs;
   module.current_actor = NULL;
   module.latest_try_catch_count = 0;
+  module.events = malloc(sizeof(struct Actor*) * 1024);
+  module.event_capacity = 1024;
 
   pthread_mutex_init(&module.module_mutex, NULL);
 
@@ -98,7 +101,7 @@ int main(int argc, char* argv[]) {
 
   // Collecting and passing arguments to the module
   module.argc = argc;
-  Value* args = /*test*/malloc(argc * sizeof(Value));
+  Value* args = /*test*/ malloc(argc * sizeof(Value));
   for (int i = 0; i < argc; i++) {
     args[i] = MAKE_STRING_NON_GC((&module), argv[i]);
   }
@@ -121,7 +124,7 @@ int main(int argc, char* argv[]) {
   free(module.instrs);
   free(module.constants.values);
   free(module.native_handles);
-  free(gc->stacks.stacks);
+  free(module.events);
   free(gc);
 
   free(args);

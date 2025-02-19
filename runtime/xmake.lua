@@ -27,7 +27,7 @@ target("bonzai-runtime-test")
   add_files("src/**.c")
   add_includedirs("include")
   
-  -- Setting up the target
+  -- Setting up the target  
   set_targetdir("bin")
   set_kind("binary")
   set_symbols("debug")

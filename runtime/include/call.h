@@ -6,6 +6,7 @@
 
 void op_call(Module *module, Value callee, int32_t argc);
 void op_native_call(Module *module, Value callee, int32_t argc);
+void direct_native_call(Module *module, struct Native fun, int32_t argc);
 typedef void (*InterpreterFunc)(Module*, Value, int32_t);
 
 extern InterpreterFunc interpreter_table[2];

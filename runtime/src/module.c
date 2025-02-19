@@ -1,8 +1,8 @@
+#include <debug.h>
 #include <error.h>
 #include <module.h>
-#include <value.h>
 #include <stdatomic.h>
-#include <debug.h>
+#include <value.h>
 
 __attribute__((always_inline)) inline Frame pop_frame(Module* mod) {
   Value pc = mod->stack->values[mod->base_pointer];
@@ -14,9 +14,9 @@ __attribute__((always_inline)) inline Frame pop_frame(Module* mod) {
   ASSERT_TYPE(mod, "pop_frame", bp, TYPE_INTEGER);
 
   Frame frame = {
-    .instruction_pointer = GET_INT(pc),
-    .stack_pointer = GET_INT(sp),
-    .base_ptr = GET_INT(bp),
+      .instruction_pointer = GET_INT(pc),
+      .stack_pointer = GET_INT(sp),
+      .base_ptr = GET_INT(bp),
   };
 
   mod->callstack--;
@@ -36,11 +36,11 @@ __attribute__((always_inline)) inline Frame pop_event_frame(Module* mod) {
   ASSERT_TYPE(mod, "pop_event_frame", bp, TYPE_INTEGER);
 
   Frame frame = {
-    .instruction_pointer = GET_INT(pc),
-    .stack_pointer = GET_INT(sp),
-    .base_ptr = GET_INT(bp),
-    .ons_count = GET_PTR(ev)->as_event.ons_count,
-    .function_ipc = GET_PTR(ev)->as_event.ipc,
+      .instruction_pointer = GET_INT(pc),
+      .stack_pointer = GET_INT(sp),
+      .base_ptr = GET_INT(bp),
+      .ons_count = GET_PTR(ev)->as_event.ons_count,
+      .function_ipc = GET_PTR(ev)->as_event.ipc,
   };
 
   mod->callstack--;
@@ -56,14 +56,6 @@ void init_gc(gc_t* gc, Module* mod) {
   gc->num_objects = 0;
   gc->gc_enabled = true;
   gc->gc_running = false;
-  gc->stacks.stack_capacity = STACKS_SIZE;  // Example stack capacity
-  gc->stacks.stacks = malloc(sizeof(void*) * gc->stacks.stack_capacity);
-
-  // Handle memory allocation failure
-  if (gc->stacks.stacks == NULL) {
-    perror("Failed to allocate memory for stacks");
-    exit(EXIT_FAILURE);
-  }
 
   pthread_cond_init(&gc->gc_cond, NULL);
   pthread_mutex_init(&gc->gc_mutex, NULL);
