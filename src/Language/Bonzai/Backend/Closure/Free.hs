@@ -1,51 +1,7 @@
 module Language.Bonzai.Backend.Closure.Free where
 
 import qualified Language.Bonzai.Syntax.MLIR as MLIR
-import qualified Language.Bonzai.Syntax.TMLIR as TMLIR
 import qualified Data.Set as Set
-import qualified Data.Map as Map
-
-class TypedFree a where
-  tFree :: a -> Map Text MLIR.Type
-
-instance TypedFree a => TypedFree [a] where
-  tFree = foldMap tFree
-
-instance TypedFree a => TypedFree (Maybe a) where
-  tFree = foldMap tFree
-
-instance TypedFree TMLIR.Expression where
-  tFree (TMLIR.MkExprVariable a t) = Map.singleton a t
-  tFree (TMLIR.MkExprApplication f args _) = tFree f <> tFree args
-  tFree (TMLIR.MkExprLambda as _ e) = tFree e Map.\\ Map.fromList (map (\a -> (a.name, a.value)) as)
-  tFree (TMLIR.MkExprTernary c t e _) = tFree c <> tFree t <> tFree e
-  tFree (TMLIR.MkExprUpdate u e) = tFree u <> tFree e
-  tFree (TMLIR.MkExprLet _ a t e) = tFree e Map.\\ Map.singleton a t
-  tFree (TMLIR.MkExprBlock es _) = freeBlock es
-    where
-      freeBlock :: [TMLIR.Expression] -> Map Text TMLIR.Type
-      freeBlock [] = mempty
-      freeBlock (TMLIR.MkExprLet _ a t e : es') = 
-        (tFree e <> freeBlock es') Map.\\ Map.singleton a t
-      freeBlock (e:es') = tFree e <> freeBlock es'
-  tFree (TMLIR.MkExprActor _ es) = tFree es
-  tFree (TMLIR.MkExprOn _ as e) = tFree e Map.\\ Map.fromList (map (\a -> (a.name, a.value)) as)
-  tFree (TMLIR.MkExprSend e _ es _) = tFree e <> tFree es
-  tFree (TMLIR.MkExprSpawn e) = tFree e
-  tFree (TMLIR.MkExprList es) = tFree es
-  tFree (TMLIR.MkExprNative n t) = Map.singleton n.name t
-  tFree (TMLIR.MkExprIndex e i) = tFree e <> tFree i
-  tFree (TMLIR.MkExprLiteral _) = Map.empty
-  tFree (TMLIR.MkExprUnpack n t e e') = tFree e <> (tFree e' Map.\\ Map.singleton n t)
-  tFree (TMLIR.MkExprWhile c e) = tFree c <> tFree e
-  tFree (TMLIR.MkExprField e _) = tFree e
-  tFree _ = mempty
-
-instance TypedFree TMLIR.Update where
-  tFree (TMLIR.MkUpdtVariable a t) = Map.singleton a t
-  tFree (TMLIR.MkUpdtField u _) = tFree u
-  tFree (TMLIR.MkUpdtIndex u e) = tFree u <> tFree e
-  tFree (TMLIR.MkUpdtUnref u) = tFree u
 
 class Free a where
   free :: a -> Set Text

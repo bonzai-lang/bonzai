@@ -43,33 +43,26 @@ import qualified Data.List as List
 convert :: HLIR.TLIR "expression" -> MLIR.MLIR "expression"
 convert (HLIR.MkExprLiteral l) = MLIR.MkExprLiteral l
 convert (HLIR.MkExprVariable a) = MLIR.MkExprVariable a.name
-convert (HLIR.MkExprApplication f args _) = MLIR.MkExprApplication (convert f) (map convert args)
+convert (HLIR.MkExprApplication f args) = MLIR.MkExprApplication (convert f) (map convert args)
 convert (HLIR.MkExprLet _ ann e) = MLIR.MkExprLet ann.name (convert e)
-convert (HLIR.MkExprBlock es _) = MLIR.MkExprBlock (map convert es)
-convert (HLIR.MkExprActor _ es) = MLIR.MkExprEvent (map convert es)
-convert (HLIR.MkExprOn ev as e) = MLIR.MkExprOn ev (map (.name) as) (convert e)
-convert (HLIR.MkExprSend e ev es _) = MLIR.MkExprSend (convert e) ev (map convert es)
+convert (HLIR.MkExprBlock es) = MLIR.MkExprBlock (map convert es)
 convert (HLIR.MkExprRequire _ _) = compilerError "require is not supported in MLIR"
 convert (HLIR.MkExprLoc e p) = MLIR.MkExprLoc p (convert e)
-convert (HLIR.MkExprSpawn e) = MLIR.MkExprSpawn (convert e)
 convert (HLIR.MkExprLambda as _ e) = MLIR.MkExprLambda (map (.name) as) (convert e)
-convert (HLIR.MkExprTernary c t e _) = MLIR.MkExprTernary (convert c) (convert t) (convert e)
+convert (HLIR.MkExprTernary c t e) = MLIR.MkExprTernary (convert c) (convert t) (convert e)
 convert (HLIR.MkExprUpdate u e) = MLIR.MkExprUpdate (convertUpdate u) (convert e)
 convert (HLIR.MkExprList es) = MLIR.MkExprList (map convert es)
 convert (HLIR.MkExprNative n ty) = MLIR.MkExprNative n ty
 convert (HLIR.MkExprInterface {}) = MLIR.MkExprLiteral (HLIR.MkLitInt 0)
 convert (HLIR.MkExprWhile c e) = MLIR.MkExprWhile (convert c) (convert e)
 convert (HLIR.MkExprIndex e e') = MLIR.MkExprIndex (convert e) (convert e')
-convert (HLIR.MkExprMatch e _ cs _) = do
+convert (HLIR.MkExprMatch e cs) = do
   let e' = convert e
   let scrut = MLIR.MkExprVariable "scrut"
   let cases' = map (\(p, b, _) -> (createCondition scrut p, convert b)) cs
 
   MLIR.MkExprUnpack "scrut" e' (createIfs cases')
-convert (HLIR.MkExprUnwrapLive e _) = MLIR.MkExprApplication (convert e) []
-convert (HLIR.MkExprWrapLive e _) = MLIR.MkExprLambda [] (convert e)
-convert (HLIR.MkExprMut e _) = MLIR.MkExprMut (convert e)
-convert (HLIR.MkExprTryCatch e n e') = MLIR.MkExprTryCatch (convert e) n.name (convert e')
+convert (HLIR.MkExprMut e) = MLIR.MkExprMut (convert e)
 convert _ = compilerError "impossible"
 
 -- | Create a function bsaed on a datatype constructor, the function will return a
