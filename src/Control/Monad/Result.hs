@@ -51,11 +51,11 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
         Nothing
           ("BONZAI INTERNAL ERROR: " <> show msg, Just "report the issue to Bonzai developers", pos)
           "Resolution"
-    UnificationFail t1 t2 ->
+    UnificationFail got expected ->
       printErrorFromString
         Nothing
-        ("Unification failed between " <> toString (toText t1) <> " and " <> toString (toText t2), Nothing, pos)
-        "Unification"
+        ("Expected " <> toString (toText expected) <> ", but got " <> toString (toText got), Nothing, pos)
+        ("Expected type " <> toString (toText expected))
 
     ActorNotFound name ->
       printErrorFromString
@@ -117,6 +117,12 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
         ("Invalid header " <> show (toText ty), Just "try adding explicit annotations", pos)
         "Resolution"
 
+    InvalidUpdate ->
+      printErrorFromString
+        Nothing
+        ("Expected mutable type", Nothing, pos)
+        "Resolution"
+
 
 type ImportStack = [FilePath]
 
@@ -146,6 +152,7 @@ data BonzaiError
   | EmptyMatch
   | InvalidPatternUnion (Set Text) (Set Text)
   | InvalidHeader HLIR.Type
+  | InvalidUpdate
   deriving (Eq, Generic)
 
 instance Show BonzaiError where
@@ -166,6 +173,7 @@ instance Show BonzaiError where
   show EmptyMatch = "Empty match statement"
   show (InvalidPatternUnion env1 env2) = "Invalid pattern union between " <> show env1 <> " and " <> show env2
   show (InvalidHeader ty) = "Invalid header " <> show (toText ty)
+  show InvalidUpdate = "Invalid update"
 
 instance ToJSON BonzaiError where
   toJSON e = toJSON (show e :: String)
