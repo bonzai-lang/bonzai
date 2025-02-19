@@ -55,7 +55,7 @@ data Expression f t
   | MkExprLambda [Annotation (f t)] (f t) (Expression f t)
   | MkExprTernary (Expression f t) (Expression f t) (Expression f t)
   | MkExprUpdate (Update f t) (Expression f t)
-  | MkExprLet (Set Text) (Annotation (f t)) (Expression f t) (Expression f t)
+  | MkExprLet (Set Text) (Either (Annotation (f t)) (Pattern f t)) (Expression f t) (Expression f t)
   | MkExprMut (Expression f t)
   | MkExprBlock [Expression f t]
   | MkExprRequire Text (Set Text)
@@ -66,7 +66,7 @@ data Expression f t
   | MkExprWhile (Expression f t) (Expression f t)
   | MkExprIndex (Expression f t) (Expression f t)
   | MkExprData (Annotation [Text]) [DataConstructor t]
-  | MkExprMatch (Expression f t) [(Pattern f t, Expression f t, Position)]
+  | MkExprMatch (Expression f t) [(Pattern f t, Expression f t, Maybe Position)]
   | MkExprPublic (Expression f t)
   | MkExprModule Text [Expression f t]
   deriving Generic
@@ -140,7 +140,8 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprLambda as ret e) = T.concat ["(", T.intercalate ", " (map toText as), "): ", toText ret, " => ", toText e]
   toText (MkExprTernary c t e) = T.concat [toText c, " ? ", toText t, " : ", toText e]
   toText (MkExprUpdate u e) = T.concat [toText u, " = ", toText e]
-  toText (MkExprLet _ a e b) = T.concat ["let ", toText a, " = ", toText e, " in ", toText b]
+  toText (MkExprLet _ (Left a) e b) = T.concat ["let ", toText a, " = ", toText e, " in ", toText b]
+  toText (MkExprLet _ (Right p) e b) = T.concat ["let ", toText p, " = ", toText e, " in ", toText b]
   toText (MkExprBlock es) = "{" <> T.concat [T.intercalate "; " (map toText es)] <> "}"
   toText (MkExprRequire n vars) = T.concat ["require ", n, ": ", T.intercalate ", " (toList vars)]
   toText (MkExprLoc e _) = toText e

@@ -205,7 +205,7 @@ getPublicVariables = foldl' getPublicVariables' mempty
   getPublicVariables' :: Set Text -> HLIR.HLIR "expression" -> Set Text
   getPublicVariables' s (HLIR.MkExprLoc e _) = getPublicVariables' s e
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLoc e _)) = getPublicVariables' s (HLIR.MkExprPublic e)
-  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLet _ name _ _)) = Set.insert name.name s
+  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLet _ (Left name) _ _)) = Set.insert name.name s
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprNative ann _)) = Set.insert ann.name s
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprData _ cs)) = foldl' getPublicVariablesDataConstr s cs
   getPublicVariables' s _ = s
@@ -245,10 +245,11 @@ resolveImports m (HLIR.MkExprLambda args _ body) = do
   writeIORef moduleState old
 
   return m'
-resolveImports m (HLIR.MkExprLet _ name expr b) = do
+resolveImports m (HLIR.MkExprLet _ (Left name) expr b) = do
   let m' = m {variables = Set.singleton name.name <> variables m}
   void $ resolveImports m' expr
   resolveImports m' b
+resolveImports _ (HLIR.MkExprLet _ (Right _) _ _) = compilerError "impossible"
 resolveImports m (HLIR.MkExprBlock exprs) = do
   void $ foldlM resolveImports m exprs
   pure m

@@ -8,6 +8,8 @@ import qualified Language.Bonzai.Frontend.Parser.Internal.Type as Typ
 import qualified Control.Monad.Combinators.Expr as P
 import qualified Text.Megaparsec.Char as P
 import qualified Data.Text as Text
+import qualified Data.Foldable as List
+import qualified GHC.IO as IO
 
 -- | PARSE ANNOTATION
 -- | Parse an annotation. An annotation is used to attach metadata to an AST node.
@@ -56,6 +58,20 @@ parseLiteral = localize . Lex.lexeme $ P.choice [
     HLIR.MkExprLiteral <$> Lit.parseLiteral,
     parseInterpolatedString
   ]
+
+-- | SYMBOL COUNTER
+-- | Used to generate unique symbols for the parser, especially for the lambda
+-- | parser.
+symbolCounter :: IORef Int
+symbolCounter = IO.unsafePerformIO $ newIORef 0
+
+-- | FRESH SYMBOL
+-- | Generate a fresh symbol for the parser.
+freshSymbol :: MonadIO m => m Text
+freshSymbol = do
+  i <- atomicModifyIORef symbolCounter (\i -> (i + 1, i))
+
+  pure $ Text.pack ("$symbol_" <> show i)
 
 -- | PARSE INTERPOLATED STRING
 -- | Parse an interpolated string. An interpolated string is a string that contains
@@ -180,13 +196,16 @@ parseVariable = localize $ do
 parseLet :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseLet = localize $ do
   void $ Lex.reserved "let"
-  name <- Lex.identifier <|> Lex.parens Lex.operator
+  name <- (Right <$> P.try parsePattern) <|> (Left <$> (Lex.identifier <|> Lex.parens Lex.operator))
   void $ Lex.reserved "="
   expr <- parseExpression
-  
+
   body <- P.option (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing)) $ Lex.reserved "in" *> parseExpression
 
-  pure $ HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing) expr body
+  pure $ HLIR.MkExprLet mempty (case name of
+    Left n -> Left (HLIR.MkAnnotation n Nothing)
+    Right pat | isPatVar pat, name' <- getPatVar pat -> Left (HLIR.MkAnnotation name' Nothing)
+    Right pat -> Right pat) expr body
 
 -- | PARSE MUTABLE DECLARATION
 -- | Parse a mutable declaration. A mutable declaration is used to declare a mutable
@@ -197,13 +216,26 @@ parseLet = localize $ do
 parseMut :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseMut = localize $ do
   void $ Lex.reserved "mut"
-  name <- Lex.identifier <|> Lex.parens Lex.operator
+  name <- (Right <$> P.try parsePattern) <|> (Left <$> (Lex.identifier <|> Lex.parens Lex.operator))
   void $ Lex.reserved "="
   expr <- parseExpression
 
   body <- P.option (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing)) $ Lex.reserved "in" *> parseExpression
 
-  pure $ HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing) (HLIR.MkExprMut expr) body
+  pure $ HLIR.MkExprLet mempty (case name of
+    Left n -> Left (HLIR.MkAnnotation n Nothing)
+    Right pat | isPatVar pat, name' <- getPatVar pat -> Left (HLIR.MkAnnotation name' Nothing)
+    Right pat -> Right pat) (HLIR.MkExprMut expr) body
+
+isPatVar :: HLIR.HLIR "pattern" -> Bool
+isPatVar (HLIR.MkPatVariable _ _) = True
+isPatVar (HLIR.MkPatLocated p _) = isPatVar p
+isPatVar _ = False
+
+getPatVar :: HLIR.HLIR "pattern" -> Text
+getPatVar (HLIR.MkPatVariable n _) = n
+getPatVar (HLIR.MkPatLocated p _) = getPatVar p
+getPatVar _ = ""
 
 -- | PARSE MUTABLE EXPRESSION
 -- | Parse a mutable expression. A mutable expression is an expression that consists
@@ -316,60 +348,59 @@ parseMatch = localize $ do
   pure $ HLIR.MkExprMatch expr cases
 
   where
-    parseCase :: MonadIO m => P.Parser m (HLIR.HLIR "pattern", HLIR.HLIR "expression", HLIR.Position)
+    parseCase :: MonadIO m => P.Parser m (HLIR.HLIR "pattern", HLIR.HLIR "expression", Maybe HLIR.Position)
     parseCase = do
       start <- P.getSourcePos
       void $ Lex.reserved "case"
       pat <- parsePattern
+      end <- P.getSourcePos
 
       void $ Lex.symbol "=>"
       expr <- parseExpression
 
-      end <- P.getSourcePos
+      pure (pat, expr, Just (start, end))
 
-      pure (pat, expr, (start, end))
+-- | PARSE PATTERN
+-- | Parse a pattern. A pattern is used to match a value against a set of patterns.
+-- | It is used to match a value against a set of patterns in Bonzai.
+-- | The syntax of a pattern is as follows:
+-- |
+-- | - identifier
+-- | - literal
+-- | - "_" : wildcard
+-- | - "[" pattern ("," pattern)* "]"
+-- | - identifier "(" pattern ("," pattern)* ")"
+-- | - "[" pattern ".." pattern "]"
+parsePatternTerm :: MonadIO m => P.Parser m (HLIR.HLIR "pattern")
+parsePatternTerm = localize $ P.choice [
+    Lex.brackets $ do
+      pats <- P.sepBy parsePattern Lex.comma
+      slice <- P.optional (localize $ Lex.symbol ".." *> parsePattern)
 
-    -- | PARSE PATTERN
-    -- | Parse a pattern. A pattern is used to match a value against a set of patterns.
-    -- | It is used to match a value against a set of patterns in Bonzai.
-    -- | The syntax of a pattern is as follows:
-    -- |
-    -- | - identifier
-    -- | - literal
-    -- | - "_" : wildcard
-    -- | - "[" pattern ("," pattern)* "]"
-    -- | - identifier "(" pattern ("," pattern)* ")"
-    -- | - "[" pattern ".." pattern "]"
-    parsePatternTerm :: MonadIO m => P.Parser m (HLIR.HLIR "pattern")
-    parsePatternTerm = localize $ P.choice [
-        Lex.brackets $ do
-          pats <- P.sepBy parsePattern Lex.comma
-          slice <- P.optional (localize $ Lex.symbol ".." *> parsePattern)
+      pure (HLIR.MkPatList pats slice Nothing),
+    P.try $ HLIR.MkPatConstructor <$> Lex.identifier <*> Lex.parens (P.sepBy1 parsePattern Lex.comma),
+    HLIR.MkPatLiteral <$> Lex.lexeme (P.choice [Lit.parseLiteral, HLIR.MkLitString <$> Lit.parseString]),
+    HLIR.MkPatWildcard <$ Lex.symbol "_",
+    HLIR.MkPatVariable <$> Lex.identifier <*> pure Nothing
+  ]
 
-          pure (HLIR.MkPatList pats slice Nothing),
-        P.try $ HLIR.MkPatConstructor <$> Lex.identifier <*> Lex.parens (P.sepBy1 parsePattern Lex.comma),
-        HLIR.MkPatLiteral <$> Lex.lexeme (P.choice [Lit.parseLiteral, HLIR.MkLitString <$> Lit.parseString]),
-        HLIR.MkPatWildcard <$ Lex.symbol "_",
-        HLIR.MkPatVariable <$> Lex.identifier <*> pure Nothing
+-- | PARSE PATTERN
+-- | Parse a pattern. A pattern is used to match a value against a set of patterns.
+-- | It is used to match a value against a set of patterns in Bonzai.
+-- | The syntax of a pattern is as follows:
+-- |
+-- | - pattern_term
+-- | - pattern "|" pattern
+parsePattern :: MonadIO m => P.Parser m (HLIR.HLIR "pattern")
+parsePattern = localize $ P.makeExprParser parsePatternTerm table
+  where
+    table = [
+        [
+          P.InfixL $ do
+            void $ Lex.symbol "|"
+            pure $ \a b -> HLIR.MkPatOr a b
+        ]
       ]
-
-    -- | PARSE PATTERN
-    -- | Parse a pattern. A pattern is used to match a value against a set of patterns.
-    -- | It is used to match a value against a set of patterns in Bonzai.
-    -- | The syntax of a pattern is as follows:
-    -- |
-    -- | - pattern_term
-    -- | - pattern "|" pattern
-    parsePattern :: MonadIO m => P.Parser m (HLIR.HLIR "pattern")
-    parsePattern = localize $ P.makeExprParser parsePatternTerm table
-      where
-        table = [
-            [
-              P.InfixL $ do
-                void $ Lex.symbol "|"
-                pure $ \a b -> HLIR.MkPatOr a b
-            ]
-          ]
 
 -- | PARSE TUPLE EXPRESSION
 -- | Parse a tuple expression. A tuple expression is an expression that consists of
@@ -436,7 +467,7 @@ parseFunction = localize $ do
 
   expr <- parseExpression
 
-  pure $ HLIR.MkExprLet (fromList generics) (HLIR.MkAnnotation name funTy) (HLIR.MkExprLambda args ret expr) (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
+  pure $ HLIR.MkExprLet (fromList generics) (Left (HLIR.MkAnnotation name funTy)) (HLIR.MkExprLambda args ret expr) (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
 
 -- | PARSE LAMBDA EXPRESSION
 -- | Parse a lambda expression. A lambda expression is an expression that consists
@@ -448,12 +479,21 @@ parseFunction = localize $ do
 parseLambda :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseLambda = localize $ do
   void $ Lex.reserved "fn"
-  args <- Lex.parens (P.sepBy (parseAnnotation Typ.parseType) Lex.comma)
+  args <- Lex.parens (P.sepBy (Right <$> parsePattern <|> Left <$> parseAnnotation Typ.parseType) Lex.comma)
   ret <- P.option Nothing $ Just <$> (Lex.symbol ":" *> Typ.parseType)
 
   void $ Lex.symbol "=>"
 
-  HLIR.MkExprLambda args ret <$> parseExpression
+  body <- parseExpression
+
+  (args', body') <- List.foldlM (\(vars, acc) x -> case x of
+      Left a -> pure (vars <> [a], acc)
+      Right p -> do
+        name <- freshSymbol
+        pure (vars <> [HLIR.MkAnnotation name Nothing], HLIR.MkExprMatch (HLIR.MkExprVariable (HLIR.MkAnnotation name Nothing)) [(p, acc, Nothing)])
+    ) (mempty, body) args
+
+  pure $ HLIR.MkExprLambda args' ret body'
 
 -- | PARSE UPDATE EXPRESSION
 -- | Parse an update expression. An update expression is an expression that consists
@@ -573,7 +613,7 @@ parseExpression = localize $ P.makeExprParser parseTerm table
           P.InfixN $ Lex.symbol "|=" $> HLIR.MkExprMutableOperation "|=",
           P.InfixN $ Lex.symbol "^=" $> HLIR.MkExprMutableOperation "^=",
           P.InfixN $ Lex.symbol "<<=" $> HLIR.MkExprMutableOperation "<<=",
-          P.InfixN $ Lex.symbol ">>=" $> HLIR.MkExprMutableOperation ">>=" 
+          P.InfixN $ Lex.symbol ">>=" $> HLIR.MkExprMutableOperation ">>="
         ],
         [
           P.Postfix . Lex.makeUnaryOp $ do
@@ -677,6 +717,28 @@ parseModule = localize $ do
 
   pure $ HLIR.MkExprModule name body
 
+parseTopLet :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseTopLet = localize $ do
+  void $ Lex.reserved "let"
+  name <- Lex.identifier <|> Lex.parens Lex.operator
+  void $ Lex.reserved "="
+  expr <- parseExpression
+
+  body <- P.option (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing)) $ Lex.reserved "in" *> parseExpression
+
+  pure $ HLIR.MkExprLet mempty (Left (HLIR.MkAnnotation name Nothing)) expr body
+
+parseTopMut :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseTopMut = localize $ do
+  void $ Lex.reserved "mut"
+  name <- Lex.identifier <|> Lex.parens Lex.operator
+  void $ Lex.reserved "="
+  expr <- parseExpression
+
+  body <- P.option (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing)) $ Lex.reserved "in" *> parseExpression
+
+  pure $ HLIR.MkExprLet mempty (Left (HLIR.MkAnnotation name Nothing)) (HLIR.MkExprMut expr) body
+
 -- | PARSE TOPLEVEL
 -- | Parse a toplevel expression. A toplevel expression is an expression that is
 -- | at the top level of a module. It is used to define a module in Bonzai.
@@ -690,6 +752,8 @@ parseToplevel =
     parseDirectData,
     parseRequire,
     parseExtern,
+    parseTopLet,
+    parseTopMut,
     parseStatement
   ]
 

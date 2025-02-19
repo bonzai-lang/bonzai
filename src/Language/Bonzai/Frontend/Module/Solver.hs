@@ -53,6 +53,33 @@ fetchVar a = do
 
   if Set.member a.name vars then freshSymbol a else pure a
 
+solveBlock :: MonadIO m => [HLIR.HLIR "expression"] -> m [HLIR.HLIR "expression"]
+solveBlock (HLIR.MkExprLet g a e b : xs) = do
+  a' <- case a of
+    Left ann -> Left <$> freshSymbol ann
+    _ -> pure a
+  e' <- solveExpression e
+  b' <- solveExpression b
+
+  xs' <- solveBlock xs
+
+  case a of
+    Left _ -> pure $ HLIR.MkExprLet g a' e' b' : xs'
+    Right p -> pure [HLIR.MkExprMatch e' [(p, HLIR.MkExprBlock xs', Nothing)]]
+solveBlock (HLIR.MkExprLoc e p : xs) = do
+  xs' <- solveBlock (e : xs)
+
+  case xs' of
+    [HLIR.MkExprMatch e' cs] -> pure [HLIR.MkExprMatch (HLIR.MkExprLoc e' p) cs]
+    (x : xs'') -> pure (HLIR.MkExprLoc x p : xs'')
+    _ -> pure (HLIR.MkExprLoc <$> xs' <*> pure p)
+solveBlock (x : xs) = do
+  x' <- solveExpression x
+  xs' <- solveBlock xs
+
+  pure (x' : xs')
+solveBlock [] = pure []
+
 -- | SOLVE EXPRESSION
 -- | Solve an expression by renaming all the variables in the expression with unique names.
 solveExpression :: MonadIO m => HLIR.HLIR "expression" -> m (HLIR.HLIR "expression")
@@ -80,7 +107,9 @@ solveExpression (HLIR.MkExprUpdate u e) = do
 
   pure $ HLIR.MkExprUpdate u' e'
 solveExpression (HLIR.MkExprLet g a e b) = do
-  a' <- freshSymbol a
+  a' <- case a of
+    Left ann -> Left <$> freshSymbol ann
+    _ -> pure a
   e' <- solveExpression e
   b' <- solveExpression b
 
@@ -90,7 +119,7 @@ solveExpression (HLIR.MkExprMut e) = do
 
   pure $ HLIR.MkExprMut e' 
 solveExpression (HLIR.MkExprBlock es) = do
-  es' <- mapM solveExpression es
+  es' <- solveBlock es
   pure $ HLIR.MkExprBlock es' 
 solveExpression (HLIR.MkExprLiteral l) = pure $ HLIR.MkExprLiteral l
 solveExpression (HLIR.MkExprRequire a t) = pure $ HLIR.MkExprRequire a t
@@ -138,7 +167,7 @@ solveUpdate (HLIR.MkUpdtIndex u e) = do
 
 -- | SOLVE CASE
 -- | Solve a case by renaming all the variables in the case with unique names.
-solveCase :: MonadIO m => (HLIR.HLIR "pattern", HLIR.HLIR "expression", HLIR.Position) -> m (HLIR.HLIR "pattern", HLIR.HLIR "expression", HLIR.Position)
+solveCase :: MonadIO m => (HLIR.HLIR "pattern", HLIR.HLIR "expression", Maybe HLIR.Position) -> m (HLIR.HLIR "pattern", HLIR.HLIR "expression", Maybe HLIR.Position)
 solveCase (p, b, ps) = do
   b' <- solveExpression b
 

@@ -12,7 +12,7 @@ import qualified Data.Set as Set
 
 mapWithAcc :: (a -> b -> (a, c)) -> a -> [b] -> (a, [c])
 mapWithAcc _ acc [] = (acc, [])
-mapWithAcc f acc (x:xs) = 
+mapWithAcc f acc (x:xs) =
   let (acc', x') = f acc x
       (acc'', xs') = mapWithAcc f acc' xs
   in (acc'', x':xs')
@@ -33,7 +33,7 @@ synthesize (HLIR.MkExprVariable ann) = do
     Just s -> do
       ty <- M.instantiate s
       pure (
-          HLIR.MkExprVariable ann { HLIR.value = Identity ty }, 
+          HLIR.MkExprVariable ann { HLIR.value = Identity ty },
           ty
         )
     Nothing -> throw (M.VariableNotFound ann.name)
@@ -115,7 +115,7 @@ synthesize (HLIR.MkExprTernary c t e) = do
   e' <- check e thenTy
 
   pure (HLIR.MkExprTernary c' t' e', thenTy)
-synthesize (HLIR.MkExprLet generics ann expr body) = do
+synthesize (HLIR.MkExprLet generics (Left ann) expr body) = do
   M.enterLevel
   ty <- M.fresh
   let scheme = HLIR.Forall (toList generics) ty
@@ -138,7 +138,8 @@ synthesize (HLIR.MkExprLet generics ann expr body) = do
 
   (body', ty') <- synthesize body
 
-  pure (HLIR.MkExprLet generics ann { HLIR.value = Identity ty } expr' body', ty')
+  pure (HLIR.MkExprLet generics (Left $ ann { HLIR.value = Identity ty }) expr' body', ty')
+synthesize (HLIR.MkExprLet {}) = compilerError "typecheck: let should have a Left annotation"
 synthesize (HLIR.MkExprMut expr) = do
   expectedTy <- M.fresh
   (expr', ty) <- synthesize expr
@@ -194,24 +195,21 @@ synthesize (HLIR.MkExprIndex e i) = do
 synthesize (HLIR.MkExprMatch scrut cases) = do
   (scrut', scrutTy) <- synthesize scrut
 
-  (_, cs) <- mapMWithAcc (\acc (pat, e, pos) -> do
-      HLIR.pushPosition pos
+  (_, cs) <- mapMWithAcc (\acc (pat, e, p) -> do
+      Foldable.for_ p HLIR.pushPosition
       (pat', patTy, env) <- typecheckPattern pat
       scrutTy `U.unifiesWith` patTy
+      Foldable.for_ p (const HLIR.popPosition)
 
       case acc of
         Just ty -> do
           e' <- M.with M.checkerState (\st -> st { M.variables = env <> st.variables }) $ check e ty
-          
-          void HLIR.popPosition
-          
-          pure (acc, ((pat', e', pos), ty))
+
+          pure (acc, ((pat', e', p), ty))
         Nothing -> do
           (e', eTy) <- M.with M.checkerState (\st -> st { M.variables = env <> st.variables }) $ synthesize e
 
-          void HLIR.popPosition
-
-          pure (Just eTy, ((pat', e', pos), eTy))
+          pure (Just eTy, ((pat', e', p), eTy))
     ) Nothing cases
 
   let (cases', tys) = unzip cs
@@ -237,8 +235,8 @@ synthesize (HLIR.MkExprData ann constrs) = do
             (varName, HLIR.Forall generics header)
         ) constrs
 
-  modifyIORef M.checkerState $ \st -> st { 
-    M.variables = Map.fromList schemes <> st.variables 
+  modifyIORef M.checkerState $ \st -> st {
+    M.variables = Map.fromList schemes <> st.variables
   , M.dataConstructors = Set.fromList (map fst schemes) <> st.dataConstructors
   }
 
@@ -251,7 +249,7 @@ check :: M.MonadChecker m => HLIR.HLIR "expression" -> HLIR.Type -> m (HLIR.TLIR
 check (HLIR.MkExprApplication f args) fTy@(argsTys HLIR.:->: _) = do
   f' <- check f fTy
   args' <- zipWithM check args argsTys
-  
+
   pure (HLIR.MkExprApplication f' args')
 check (HLIR.MkExprLambda args ret body) (argsTys HLIR.:->: retTy) = do
   args' <- zipWithM (\(HLIR.MkAnnotation ann annTy) ty -> case annTy of
@@ -271,7 +269,7 @@ check (HLIR.MkExprLambda args ret body) (argsTys HLIR.:->: retTy) = do
   let wfArgs = map (uncurry HLIR.MkAnnotation . second Identity) args'
 
   pure (HLIR.MkExprLambda wfArgs (Identity retTy) body')
-check (HLIR.MkExprLet generics ann expr body) ty = do
+check (HLIR.MkExprLet generics (Left ann) expr body) ty = do
   M.enterLevel
   preExprTy <- M.fresh
   let scheme = HLIR.Forall (toList generics) preExprTy
@@ -295,7 +293,7 @@ check (HLIR.MkExprLet generics ann expr body) ty = do
 
   body' <- check body ty
 
-  pure (HLIR.MkExprLet generics ann { HLIR.value = Identity ty } expr' body')
+  pure (HLIR.MkExprLet generics (Left $ ann { HLIR.value = Identity ty }) expr' body')
 check (HLIR.MkExprMut expr) (HLIR.MkTyMutable ty) = do
   expr' <- check expr ty
   pure (HLIR.MkExprMut expr')
@@ -317,16 +315,15 @@ check (HLIR.MkExprList es) (HLIR.MkTyList ty) = do
 check (HLIR.MkExprMatch scrut cases) ty = do
   (scrut', scrutTy) <- synthesize scrut
 
-  (cases', _) <- unzip <$> traverse (\(pat, e, pos) -> do
-      HLIR.pushPosition pos
+  (cases', _) <- unzip <$> traverse (\(pat, e, p) -> do
+      Foldable.for_ p HLIR.pushPosition
       (pat', patTy, env) <- typecheckPattern pat
       scrutTy `U.unifiesWith` patTy
+      Foldable.for_ p (const HLIR.popPosition)
 
       e' <- M.with M.checkerState (\st -> st { M.variables = env <> st.variables }) $ check e ty
 
-      void HLIR.popPosition
-
-      pure ((pat', e', pos), ty)
+      pure ((pat', e', p), ty)
     ) cases
 
   pure (HLIR.MkExprMatch scrut' cases')
@@ -436,7 +433,7 @@ typecheckPattern (HLIR.MkPatOr p1 p2) = do
   common <- intersectionWithM U.doesUnifyWith instEnv1 instEnv2
 
   if null common || (Map.size common /= Map.size env1 && Map.size common /= Map.size env2)
-    then throw (M.InvalidPatternUnion (Map.keysSet env1) (Map.keysSet env2)) 
+    then throw (M.InvalidPatternUnion (Map.keysSet env1) (Map.keysSet env2))
     else if and common
       then pure (HLIR.MkPatOr p1' p2', ty, Map.union env1 env2)
       else throw (M.InvalidPatternUnion (Map.keysSet env1) (Map.keysSet env2))
@@ -507,7 +504,7 @@ runTypechecking es = do
 
 -- | Get the binding name of an expression
 getName :: HLIR.HLIR "expression" -> Text
-getName (HLIR.MkExprLet _ ann _ _) = ann.name
+getName (HLIR.MkExprLet _ (Left ann) _ _) = ann.name
 getName (HLIR.MkExprLoc e _) = getName e
 getName e = compilerError $ "typecheck: event block should only contain let bindings or events, received " <> toText e
 
