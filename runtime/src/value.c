@@ -35,7 +35,7 @@ void mark_value(Value value) {
 void mark_all(struct Module* vm) {
   gc_t* gc = vm->gc;
 
-  for (int i = 0; i < vm->stack->stack_capacity; i++) {
+  for (int i = 0; i < vm->stack->stack_pointer; i++) {
     mark_value(vm->stack->values[i]);
   }
 }
@@ -68,8 +68,11 @@ static void sweep(struct Module* vm) {
         vm->gc->first_object = object;
       }
 
-      free_value(unreached);
-      vm->gc->num_objects--;
+      if (!unreached->is_constant) {
+        free_value(unreached);
+
+        vm->gc->num_objects--;
+      }
     }
   }
 }
@@ -200,6 +203,7 @@ Value MAKE_STRING_NON_GC(struct Module* mod, char* x) {
   v->as_string = x;
   v->length = strlen(x);
   v->is_constant = true;
+  v->is_marked = true;
 
   return MAKE_PTR(v);
 }
