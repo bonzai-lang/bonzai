@@ -69,7 +69,7 @@ parseInterpolatedString :: (MonadIO m) => P.Parser m (HLIR.HLIR "expression")
 parseInterpolatedString = removeEmptyStrings . buildString . toString <$> Lit.parseString
   where
     toString' :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
-    toString' x = HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "toString" Nothing)) [x] Nothing
+    toString' x = HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "toString" Nothing)) [x]
 
     buildString :: [Char] -> HLIR.HLIR "expression"
     buildString [] = HLIR.MkExprLiteral (HLIR.MkLitString "")
@@ -110,7 +110,7 @@ parseTernary = localize $ do
 
   void $ Lex.reserved "else"
 
-  HLIR.MkExprTernary cond then' <$> parseExpression <*> pure Nothing
+  HLIR.MkExprTernary cond then' <$> parseExpression
 
 -- | PARSE LIST
 -- | Parse a list expression. A list expression is an expression that consists of
@@ -185,20 +185,6 @@ parseLet = localize $ do
 
   HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing) <$> parseExpression
 
--- | PARSE LIVE DECLARATION
--- | Parse a live declaration. A live declaration is used to declare a live value
--- | in Bonzai. It is used to declare a value that is reactive about mutations.
--- | The syntax of a live declaration is as follows:
--- |
--- | "live" identifier "=" expression
-parseLive :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseLive = localize $ do
-  void $ Lex.reserved "live"
-  name <- Lex.identifier <|> Lex.parens Lex.operator
-  void $ Lex.reserved "="
-
-  HLIR.MkExprLive (HLIR.MkAnnotation name Nothing) <$> parseExpression
-
 -- | PARSE MUTABLE DECLARATION
 -- | Parse a mutable declaration. A mutable declaration is used to declare a mutable
 -- | value in Bonzai. It is used to declare a value that can be mutated.
@@ -211,7 +197,7 @@ parseMut = localize $ do
   name <- Lex.identifier <|> Lex.parens Lex.operator
   void $ Lex.reserved "="
 
-  HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing) . (`HLIR.MkExprMut` Nothing) <$> parseExpression
+  HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing) . HLIR.MkExprMut <$> parseExpression
 
 -- | PARSE MUTABLE EXPRESSION
 -- | Parse a mutable expression. A mutable expression is an expression that consists
@@ -223,7 +209,7 @@ parseMutExpr :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseMutExpr = localize $ do
   void $ Lex.reserved "mut"
 
-  HLIR.MkExprMut <$> parseExpression <*> pure Nothing
+  HLIR.MkExprMut <$> parseExpression
 
 -- | PARSE DIRECT DATA
 -- | Parse a direct data expression. A direct data expression is an expression that
@@ -321,7 +307,7 @@ parseMatch = localize $ do
   cases <- P.some parseCase
   void $ Lex.symbol "}"
 
-  pure $ HLIR.MkExprMatch expr Nothing cases Nothing
+  pure $ HLIR.MkExprMatch expr cases
 
   where
     parseCase :: MonadIO m => P.Parser m (HLIR.HLIR "pattern", HLIR.HLIR "expression", HLIR.Position)
@@ -407,7 +393,7 @@ parseWhile = localize $ do
   body <- P.many parseExpression
   void $ Lex.symbol "}"
 
-  pure $ HLIR.MkExprWhile cond (HLIR.MkExprBlock body Nothing)
+  pure $ HLIR.MkExprWhile cond (HLIR.MkExprBlock body)
 
 -- | PARSE BLOCK EXPRESSION
 -- | Parse a block expression. A block expression is an expression that consists of
@@ -421,7 +407,7 @@ parseBlock = localize $ do
   exprs <- P.many parseExpression
   void $ Lex.symbol "}"
 
-  pure $ HLIR.MkExprBlock exprs Nothing
+  pure $ HLIR.MkExprBlock exprs
 
 -- | PARSE FUNCTION EXPRESSION
 -- | Parse a function expression. A function expression is an expression that consists
@@ -472,61 +458,6 @@ parseUpdate = localize $ do
 
   HLIR.MkExprUpdate (HLIR.MkUpdtVariable (HLIR.MkAnnotation name Nothing)) <$> parseExpression
 
--- | PARSE ACTOR EXPRESSION
--- | Parse an actor expression. An actor expression is an expression that consists
--- | of an actor definition. It is used to define an actor in Bonzai.
--- | The syntax of an actor expression is as follows:
--- |
--- | "actor" identifier ("<" type) "{" event* "}"
-parseActor :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseActor = localize $ do
-  void $ Lex.reserved "actor"
-  name <- Lex.identifier <|> Lex.parens Lex.operator
-  implemented <- Lex.symbol "<" *> Typ.parseType
-  HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing)
-    . HLIR.MkExprActor implemented
-      <$> Lex.braces (P.many parseEvent)
-
--- | PARSE ANONYMOUS ACTOR EXPRESSION
--- | Parse an anonymous actor expression. An anonymous actor expression is an expression
--- | that consists of an anonymous actor definition. It is used to define an actor
--- | without a name in Bonzai.
--- | The syntax of an anonymous actor expression is as follows:
--- |
--- | "actor" "<" type "{" event* "}"
-parseAnonActor :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseAnonActor = localize $ do
-  void $ Lex.reserved "actor"
-  implemented <- Lex.symbol "<" *> Typ.parseType
-  HLIR.MkExprActor implemented <$> Lex.braces (P.many parseEvent)
-
--- | PARSE EVENT
--- | Parse an event expression. An event expression is an expression that consists
--- | of an event definition. It is used to define an event in Bonzai.
--- | The syntax of an event expression is as follows:
--- |
--- | "on" identifier "(" arguments ")" "=>" expression
-parseEvent :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseEvent = localize $ do
-  void $ Lex.reserved "on"
-  name <- Lex.identifier <|> Lex.parens Lex.operator
-  args <- Lex.parens (P.sepBy (parseAnnotation Typ.parseType) Lex.comma)
-
-  void $ Lex.symbol "=>"
-
-  HLIR.MkExprOn name args <$> parseExpression
-
--- | PARSE SPAWN
--- | Parse a spawn expression. A spawn expression is an expression that consists of
--- | a spawn statement. It is used to spawn a new actor in Bonzai.
--- | The syntax of a spawn expression is as follows:
--- |
--- | "spawn" expression
-parseSpawn :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseSpawn = localize $ do
-  void $ Lex.reserved "spawn"
-  HLIR.MkExprSpawn <$> parseExpression
-
 -- | PARSE MAP
 -- | Parse a map expression. A map expression is an expression that consists of a map
 -- | definition. It is used to define a map in Bonzai.
@@ -538,7 +469,7 @@ parseMap = do
   xs <- P.string "{" *> Lex.scn *> P.sepBy1 parseMapPair Lex.comma <* Lex.symbol "}"
 
   let mapVar = HLIR.MkExprVariable (HLIR.MkAnnotation "Map" Nothing)
-  pure $ HLIR.MkExprApplication mapVar [HLIR.MkExprList xs] Nothing
+  pure $ HLIR.MkExprApplication mapVar [HLIR.MkExprList xs]
 
   where
     parseMapPair :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
@@ -567,26 +498,6 @@ parseRequire = localize $ do
 
   pure $ HLIR.MkExprRequire path (fromList vars)
 
--- | PARSE TRY-CATCH EXPRESSION
--- | Parse a try-catch expression. A try-catch expression is an expression that consists
--- | of a try-catch statement. It is used to catch an error in Bonzai.
--- | The syntax of a try-catch expression is as follows:
--- |
--- | "try" expression "catch" identifier "{" expression* "}"
-parseTryCatch :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseTryCatch = localize $ do
-  void $ Lex.reserved "try"
-  expr <- parseExpression
-
-  void $ Lex.reserved "catch"
-  name <- Lex.identifier <|> Lex.parens Lex.operator
-
-  void $ Lex.symbol "{"
-  body <- P.many parseExpression
-  void $ Lex.symbol "}"
-
-  pure $ HLIR.MkExprTryCatch expr (HLIR.MkAnnotation name Nothing) (HLIR.MkExprBlock body Nothing)
-
 -- | PARSE TERM EXPRESSION
 -- | Parse a term expression. A term expression is an expression that consists of a term.
 -- | It is used to represent a non-recursive value in Bonzai.
@@ -594,13 +505,9 @@ parseTerm :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseTerm =
   localize $ P.choice [
     parseWhile,
-    P.try parseActor,
-    parseAnonActor,
-    parseSpawn,
     P.try parseFunction,
     parseLambda,
     parseLet,
-    parseLive,
     P.try parseMut,
     parseMutExpr,
     parseMatch,
@@ -609,7 +516,6 @@ parseTerm =
     P.try parseMap,
     parseBlock,
     parseList,
-    parseTryCatch,
     P.try parseTuple,
     P.try parseUpdate,
     parseVariable,
@@ -658,14 +564,14 @@ parseExpression = localize $ P.makeExprParser parseTerm table
         [
           P.Postfix . Lex.makeUnaryOp $ do
             args <- Lex.parens (P.sepBy parseExpression Lex.comma)
-            pure $ \e -> HLIR.MkExprApplication e args Nothing
+            pure $ \e -> HLIR.MkExprApplication e args
         ],
         [
             P.Postfix . Lex.makeUnaryOp $ do
               field <- P.char '.' *> Lex.nonLexedID <* Lex.scn
               args <- P.option [] $ Lex.parens (P.sepBy parseExpression Lex.comma)
               let var = HLIR.MkExprVariable (HLIR.MkAnnotation field Nothing)
-              pure $ \e -> HLIR.MkExprApplication var (e:args) Nothing
+              pure $ \e -> HLIR.MkExprApplication var (e:args)
         ],
         [
           P.Postfix . Lex.makeUnaryOp $ do
@@ -674,14 +580,6 @@ parseExpression = localize $ P.makeExprParser parseTerm table
             void $ Lex.symbol "]"
 
             pure $ \e -> HLIR.MkExprIndex e idx
-        ],
-        [
-          P.Postfix . Lex.makeUnaryOp $ do
-            void $ Lex.symbol "->"
-            name <- Lex.identifier
-            args <- Lex.parens (P.sepBy parseExpression Lex.comma)
-
-            pure $ \e -> HLIR.MkExprSend e name args Nothing
         ],
         [
           P.InfixL $ do
@@ -732,7 +630,7 @@ parseExpression = localize $ P.makeExprParser parseTerm table
         [
           P.Prefix . Lex.makeUnaryOp $ do
             void $ Lex.symbol "!"
-            pure $ \a -> HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "!" Nothing)) [a] Nothing
+            pure $ \a -> HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "!" Nothing)) [a]
         ],
         [
           P.InfixL $ do
@@ -751,6 +649,20 @@ parseExpression = localize $ P.makeExprParser parseTerm table
         ]
       ]
 
+-- | PARSE MODULE EXPRESSION
+-- | Parse a module expression. A module expression is an expression that consists of
+-- | a module definition. It is used to define a module in Bonzai.
+-- | The syntax of a module expression is as follows:
+-- |
+-- | "module" identifier "{" toplevel* "}"
+parseModule :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseModule = localize $ do
+  void $ Lex.reserved "module"
+  name <- Lex.identifier
+  body <- Lex.braces (P.many parseToplevel)
+
+  pure $ HLIR.MkExprModule name body
+
 -- | PARSE TOPLEVEL
 -- | Parse a toplevel expression. A toplevel expression is an expression that is
 -- | at the top level of a module. It is used to define a module in Bonzai.
@@ -758,6 +670,7 @@ parseToplevel :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseToplevel =
   localize $ P.choice [
     parsePublic,
+    parseModule,
     parseInterface,
     P.try parseDatatype,
     parseDirectData,

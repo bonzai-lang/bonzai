@@ -10,6 +10,7 @@ import System.FilePath
 import System.Directory (makeAbsolute, doesFileExist)
 import qualified Language.Bonzai.Frontend.Parser as P
 import qualified Language.Bonzai.Frontend.Parser.Expression as P
+import Language.Bonzai.Frontend.Module.Solver (solveModule)
 
 type MonadConversion m = (MonadIO m, MonadError Error m)
 
@@ -89,7 +90,9 @@ resolveContent content = do
 
   case cst of
     Left err -> throw (ParseError err)
-    Right ast -> do
+    Right cst' -> do
+      ast <- solveModule cst'
+
       modUnit <- foldlM resolveImports moduleUnit ast
       modifyIORef' resultState (<> ast)
       pure modUnit
@@ -150,7 +153,9 @@ resolve path isPublic = do
 
       case cst of
         Left err -> throw (ParseError err)
-        Right ast -> do
+        Right cst' -> do
+          ast <- solveModule cst'
+
           -- Get the public variables, types, and classes
           let imports = mempty
               variables = getPublicVariables ast
@@ -191,7 +196,6 @@ getPublicVariables = foldl' getPublicVariables' mempty
   getPublicVariables' s (HLIR.MkExprLoc e _) = getPublicVariables' s e
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLoc e _)) = getPublicVariables' s (HLIR.MkExprPublic e)
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLet _ name _)) = Set.insert name.name s
-  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLive ann _)) = Set.insert ann.name s
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprNative ann _)) = Set.insert ann.name s
   getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprData _ cs)) = foldl' getPublicVariablesDataConstr s cs
   getPublicVariables' s _ = s
@@ -220,7 +224,7 @@ foldM' f z (x:xs) = do
 
 -- | Main conversion function
 resolveImports :: (MonadResolution m) => ModuleUnit -> HLIR.HLIR "expression" -> m ModuleUnit
-resolveImports m (HLIR.MkExprApplication f args _) = do
+resolveImports m (HLIR.MkExprApplication f args) = do
   m1 <- resolveImports m f
   foldM' resolveImports m1 args
 resolveImports m (HLIR.MkExprLambda args _ body) = do
@@ -235,14 +239,10 @@ resolveImports m (HLIR.MkExprLet _ name expr) = do
   let m' = m {variables = Set.singleton name.name <> variables m}
   void $ resolveImports m' expr
   pure m'
-resolveImports m (HLIR.MkExprLive ann expr) = do
-  let m' = m {variables = Set.singleton ann.name <> variables m}
-  void $ resolveImports m' expr
-  pure m'
-resolveImports m (HLIR.MkExprBlock exprs _) = do
+resolveImports m (HLIR.MkExprBlock exprs) = do
   void $ foldlM resolveImports m exprs
   pure m
-resolveImports m (HLIR.MkExprTernary cond then' else' _) = do
+resolveImports m (HLIR.MkExprTernary cond then' else') = do
   m1 <- resolveImports m cond
   m2 <- resolveImports m1 then'
   resolveImports m2 else'
@@ -280,23 +280,9 @@ resolveImports m (HLIR.MkExprUpdate u e) = do
     resolveUpdate m' (HLIR.MkUpdtIndex u' e') = do
       m1 <- resolveUpdate m' u'
       resolveImports m1 e'
-resolveImports m (HLIR.MkExprSend e _ e' _) = do
-  m1 <- resolveImports m e
-  mapM_ (resolveImports m1) e'
-  pure m
-resolveImports m (HLIR.MkExprActor _ e) = foldM resolveImports m e
-resolveImports m (HLIR.MkExprOn _ args e) = do
-  old <- readIORef moduleState
-  modifyIORef' moduleState $ \st -> 
-    st { boundArgs = boundArgs st <> map (.name) args }
-  m' <- resolveImports m e
-  writeIORef moduleState old
-
-  return m'
-resolveImports m (HLIR.MkExprSpawn e) = resolveImports m e
 resolveImports m (HLIR.MkExprList es) = foldlM resolveImports m es
 resolveImports m (HLIR.MkExprNative ann _) = pure m {variables = Set.singleton ann.name <> variables m}
-resolveImports m (HLIR.MkExprMut e _) = resolveImports m e
+resolveImports m (HLIR.MkExprMut e) = resolveImports m e
 resolveImports m (HLIR.MkExprWhile c e) = do
   m1 <- resolveImports m c
   resolveImports m1 e
@@ -307,7 +293,7 @@ resolveImports m (HLIR.MkExprIndex e e') = do
 resolveImports m (HLIR.MkExprData ann cs) = do
   let m' = m {types = Set.singleton ann.name <> types m}
   foldM' resolveImportsDataConstr m' cs
-resolveImports m (HLIR.MkExprMatch e _ cs _) = do
+resolveImports m (HLIR.MkExprMatch e cs) = do
   void $ resolveImports m e
   mapM_ (\(p, b, _) -> do
       m' <- resolveImportsPattern m p
@@ -316,12 +302,8 @@ resolveImports m (HLIR.MkExprMatch e _ cs _) = do
 
   pure m
 resolveImports m (HLIR.MkExprPublic e) = resolveImports m e
-resolveImports m (HLIR.MkExprTryCatch e ann e') = do
-  m1 <- resolveImports m e
-  void $ resolveImports (m { variables = Set.insert ann.name m.variables }) e'
-  pure m1
-resolveImports _ (HLIR.MkExprUnwrapLive {}) = compilerError "UnwrapLive not implemented"
-resolveImports _ (HLIR.MkExprWrapLive {}) = compilerError "WrapLive not implemented"
+resolveImports m (HLIR.MkExprModule _ e) = foldM resolveImports m e
+
 
 resolveImportsPattern :: MonadConversion m => ModuleUnit -> HLIR.HLIR "pattern" -> m ModuleUnit
 resolveImportsPattern m (HLIR.MkPatVariable n _) = pure m { variables = Set.insert n m.variables }
