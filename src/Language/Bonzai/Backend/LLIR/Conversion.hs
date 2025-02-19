@@ -200,9 +200,6 @@ instance Assemble MLIR.Expression where
     nats <- readIORef natives
     locals <- ask
 
-    -- when (n == "ws") $ do
-    --   print locals
-
     if Set.member n locals then
       pure $ LLIR.loadLocal n
     else if Set.member n gs then

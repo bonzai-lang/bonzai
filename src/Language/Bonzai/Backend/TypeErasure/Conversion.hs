@@ -44,7 +44,9 @@ convert :: HLIR.TLIR "expression" -> MLIR.MLIR "expression"
 convert (HLIR.MkExprLiteral l) = MLIR.MkExprLiteral l
 convert (HLIR.MkExprVariable a) = MLIR.MkExprVariable a.name
 convert (HLIR.MkExprApplication f args) = MLIR.MkExprApplication (convert f) (map convert args)
-convert (HLIR.MkExprLet _ ann e) = MLIR.MkExprLet ann.name (convert e)
+convert (HLIR.MkExprLet _ ann e b) = case convert b of
+  MLIR.MkExprVariable "unit" -> MLIR.MkExprLet ann.name (convert e)
+  b' -> MLIR.MkExprUnpack ann.name (convert e) b'
 convert (HLIR.MkExprBlock es) = MLIR.MkExprBlock (map convert es)
 convert (HLIR.MkExprRequire _ _) = compilerError "require is not supported in MLIR"
 convert (HLIR.MkExprLoc e p) = MLIR.MkExprLoc p (convert e)
