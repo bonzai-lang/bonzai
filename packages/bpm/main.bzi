@@ -14,7 +14,7 @@ extern fn execute_command_silent(command: string)
 extern fn length<A>(xs: list<A>): int
 
 type CLI {
-  Command(name: string, description: string, action: fn(list<string>): unit)
+  Command(name: string, description: string, action: fn(list<Argument>): unit)
 }
 
 type Argument {
@@ -30,18 +30,20 @@ fn parseCLI(args: list<string>) => {
   }
 
   fn parseArgument() => {
-    let ws = satisfy(is_whitespace).many()
     let minus = satisfy(fn(x) => x == '-')
 
     let optionParser = minus :right: satisfy(is_alphanumeric).many1() :Parser::bind: fn(flag) =>
-      ws :right: noneOf([' ']).many1() :left: ws :Parser::map: fn(value) => Option(flag.implode, value.implode)
+      noneOf([' ']).many1().lex() :Parser::map: fn(value) => Option(flag.implode, value.implode)
+
+    let bioptionParser = minus :right: minus :right: satisfy(is_alphanumeric).many1() :Parser::bind: fn(flag) =>
+      noneOf([' ']).many1().lex() :Parser::map: fn(value) => Option(flag.implode, value.implode)
       
     let argumentParser = noneOf([' ']).many1() :Parser::map: fn(value) => Argument(value.implode)
 
     let flagParser = minus :right: satisfy(is_alphanumeric).many1() :Parser::map: fn(flag) => Flag(flag.implode)
     let biflagParser = minus :right: minus :right: satisfy(is_alphanumeric).many1() :Parser::map: fn(flag) => Flag(flag.implode)
 
-    choice([optionParser, flagParser, biflagParser, argumentParser])
+    choice([optionParser, bioptionParser, flagParser, biflagParser, argumentParser])
   };
 
   let parser = parseArgument().lex.many()
@@ -51,4 +53,39 @@ fn parseCLI(args: list<string>) => {
   parser.runParser(formattedArgs)
 }
 
-print(parseCLI(get_args()))
+fn interpretCLIResult(cli: list<Argument>): (string, list<Argument>) => {
+  match cli {
+    case [Argument(value) .. args] => (value, args)
+    case _ => ("", cli)
+  }
+}
+
+fn runCLI(commands: list<CLI>, args: list<string>) => {
+  let result = parseCLI(args.sliceFrom(4))
+
+  match result {
+    case ParseResult(x, _) => {
+      let Tuple(cmd, args) = interpretCLIResult(x)
+
+      let command = List::find(fn(Command(name, _, _)) => name == cmd, commands)
+
+      match command {
+        case Some(Command(_, _, action)) => action(args)
+        case None => print("Command not found")
+      }
+    } 
+
+    case ParseError(msg, _) => print(msg)
+  }
+}
+
+let commands = [
+  Command("help", "Display help", fn(args) => {
+    print("Help")
+  }),
+  Command("version", "Display version", fn(args) => {
+    print("Version")
+  })
+]
+
+runCLI(commands, get_args())
