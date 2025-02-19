@@ -343,7 +343,7 @@ Value sliceFrom(Module* mod, Value* args, int argc) {
   ASSERT_TYPE(mod, "sliceFrom", args[1], TYPE_INTEGER);
 
   HeapValue* list = GET_PTR(args[0]);
-  uint32_t start = GET_INT(args[1]);
+  int32_t start = GET_INT(args[1]);
 
   if (start < 0 || start > list->length) {
     THROW(mod, "Index out of bounds");
