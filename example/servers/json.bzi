@@ -1,8 +1,0 @@
-require "std:http/websocket"
-require "std:io"
-
-let ws = spawn Websocket("echo.websocket.org", 80, "/", false)
-
-ws->receive(fn (data) => {
-  print(data)
-})
