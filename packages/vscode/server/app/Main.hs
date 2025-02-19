@@ -38,14 +38,19 @@ isUnit (HLIR.MkExprLoc e _) = isUnit e
 isUnit _ = False
 
 getVar :: HLIR.TLIR "expression" -> (Position, Uri) -> Maybe (Text, HLIR.Type)
-getVar (HLIR.MkExprLet _ ann e b) p | isUnit b = case getVar e p of
+getVar (HLIR.MkExprLet _ (Left ann) e b) p | isUnit b = case getVar e p of
   Just (name, ty) -> Just (name, ty)
   Nothing -> Just (HLIR.name ann, runIdentity $ HLIR.value ann)
-getVar (HLIR.MkExprLet _ ann e b) p = case getVar e p of
+getVar (HLIR.MkExprLet _ (Left ann) e b) p = case getVar e p of
   Just (name, ty) -> Just (name, ty)
   Nothing -> case getVar b p of
     Just (name, ty) -> Just (name, ty)
     Nothing -> Just (HLIR.name ann, runIdentity $ HLIR.value ann)
+getVar (HLIR.MkExprLet _ (Right pat) e b) p = case getVar e p of
+  Just (name, ty) -> Just (name, ty)
+  Nothing -> case getVar b p of
+    Just (name, ty) -> Just (name, ty)
+    Nothing -> getVarInPattern pat p
 getVar (HLIR.MkExprNative ann ty) _ = Just (HLIR.name ann, ty)
 getVar (HLIR.MkExprVariable ann) _ = Just (HLIR.name ann, runIdentity $ HLIR.value ann)
 getVar (HLIR.MkExprLoc e (start, end)) ref = do
@@ -57,9 +62,7 @@ getVar (HLIR.MkExprLoc e (start, end)) ref = do
 
   let cond = pos' >= start && pos' < end
 
-  if cond
-    then getVar e ref
-    else Nothing
+  if cond then getVar e ref else Nothing
 getVar (HLIR.MkExprLambda _ _ body) pos = getVar body pos
 getVar (HLIR.MkExprMatch e cs) pos = do
   let (Position line col, uri) = pos
@@ -68,13 +71,12 @@ getVar (HLIR.MkExprMatch e cs) pos = do
               (mkPos $ fromIntegral line + 1)
               (mkPos $ fromIntegral col + 1)
 
-  let vars = map (\(p, e', (start, end)) -> do
-        if pos' >= start && pos' < end
-          then case getVar e' pos of
-            Just x -> Just x
-            Nothing -> getVarInPattern p pos
-          else Nothing
-        ) cs
+  let vars = map (\(pat, e', p) -> do
+        case p of
+          Just (start, end) -> if pos' >= start && pos' < end
+            then getVarInPattern pat pos
+            else getVar e' pos
+          Nothing -> getVar e' pos) cs
   case getVar e pos of
     Just x -> Just x
     Nothing -> case catMaybes vars of
@@ -135,15 +137,19 @@ findLets (HLIR.MkExprLet _ ann e b) (pos, uri) p@(Just (start, end)) = do
   let cond = pos' >= start
           && pos' < end
 
-  let varDef = Map.singleton (HLIR.name ann) (runIdentity (HLIR.value ann), Nothing)
+  let varDef = case ann of
+        Left ann' -> Map.singleton (HLIR.name ann') (runIdentity $ HLIR.value ann', Nothing)
+        Right pat -> Map.map (,Nothing) (findLetsInPattern pat (pos, uri) p)
 
   if cond
     then findLets e (pos, uri) p <> varDef <> findLets b (pos, uri) p
     else if sourceName start /= fromMaybe "" (uriToFilePath uri)
       then varDef
       else mempty
-findLets (HLIR.MkExprLet _ ann _ _) _ _ =
+findLets (HLIR.MkExprLet _ (Left ann) _ _) _ _ =
   Map.singleton (HLIR.name ann) (runIdentity $ HLIR.value ann, Nothing)
+findLets (HLIR.MkExprLet _ (Right pat) _ _) p1 p2 =
+  Map.map (,Nothing) (findLetsInPattern pat p1 p2)
 findLets (HLIR.MkExprNative ann ty) _ _ =
   Map.singleton (HLIR.name ann) (ty, Nothing)
 findLets (HLIR.MkExprMut e) pos p = findLets e pos p 
@@ -169,7 +175,7 @@ findLets (HLIR.MkExprLambda args _ body) p p' = do
   vars <> findLets body p p'
 findLets (HLIR.MkExprMatch e cs) pos p = do
   let vars = findLets e pos p
-  let vars' = foldr (\(pat, expr, _) acc -> Map.map (, Nothing) (findLetsInPattern pat pos p) <> findLets expr pos p <> acc) mempty cs
+  let vars' = foldr (\(pat, expr, p') acc -> Map.map (, Nothing) (findLetsInPattern pat pos p') <> findLets expr pos p' <> acc) mempty cs
   vars <> vars'
 findLets (HLIR.MkExprTernary c t e) pos p = do
   let vars = findLets c pos p
