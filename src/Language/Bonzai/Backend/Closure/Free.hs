@@ -38,7 +38,7 @@ instance Free MLIR.Expression where
   free (MLIR.MkExprNative n _) = Set.singleton n.name
   free (MLIR.MkExprIndex e i) = free e <> free i
   free (MLIR.MkExprLiteral _) = Set.empty
-  free (MLIR.MkExprUnpack n e e') = free e <> (free e' Set.\\ Set.singleton n)
+  free (MLIR.MkExprUnpack n e e') = (free e <> free e') Set.\\ Set.singleton n
   free (MLIR.MkExprLoc _ e) = free e
   free (MLIR.MkExprWhile c e) = free c <> free e
   free MLIR.MkExprSpecial = Set.empty
