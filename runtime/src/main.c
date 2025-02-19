@@ -89,6 +89,7 @@ int main(int argc, char* argv[]) {
 
   module.stack = stack_new();
   module.handles = libs;
+  module.call_function = call_function;
   module.num_handles = num_libs;
   module.current_actor = NULL;
   module.latest_try_catch_count = 0;

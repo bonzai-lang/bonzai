@@ -16,6 +16,39 @@ Value list_get(Module *mod, Value list, uint32_t idx) {
   return l->as_ptr[idx];
 }
 
+Value call_function(struct Module *m, Value closure, int32_t argc,
+                    Value *argv) {
+  Value callee = list_get(m, closure, 0);
+  Value env = list_get(m, closure, 1);
+
+  HeapValue *func = GET_PTR(callee);
+  HeapValue *env_ptr = GET_PTR(env);
+
+  int32_t ipc = func->as_func.ip;
+  uint16_t local_space = func->as_func.local_space;
+
+  int32_t old_sp = m->stack->stack_pointer;
+
+  // Push arguments in reverse order
+  stack_push(m, env);
+  for (int i = argc - 1; i >= 0; i--) stack_push(m, argv[i]);
+  for (int i = 0; i < local_space - argc; i++) stack_push(m, MAKE_INTEGER(0));
+
+  int32_t new_pc = m->pc;
+
+  stack_push(m, MAKE_INTEGER(new_pc));
+  stack_push(m, MAKE_INTEGER(old_sp));
+  stack_push(m, MAKE_INTEGER(m->base_pointer));
+
+  m->base_pointer = m->stack->stack_pointer - 3;
+  m->stack->stack_pointer++;
+  m->callstack++;
+
+  Value ret = run_interpreter(m, ipc, true, m->callstack - 1);
+
+  return ret;
+}
+
 Value call_threaded(Module *new_module, Value callee, int32_t argc,
                     Value *argv) {
   HeapValue *func = GET_PTR(callee);
