@@ -22,7 +22,6 @@ Value call_function(struct Module *m, Value closure, int32_t argc,
   Value env = list_get(m, closure, 1);
 
   HeapValue *func = GET_PTR(callee);
-  HeapValue *env_ptr = GET_PTR(env);
 
   int32_t ipc = func->as_func.ip;
   uint16_t local_space = func->as_func.local_space;

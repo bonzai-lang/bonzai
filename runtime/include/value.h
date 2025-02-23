@@ -122,14 +122,14 @@ typedef struct Stack {
 
 #define MAX_FRAMES 16384
 
-typedef struct {
+struct Frame {
   reg instruction_pointer;
   int32_t stack_pointer;
   int32_t base_ptr;
 
   int ons_count;
   int function_ipc;
-} Frame;
+};
 
 struct EventOn {
   int id;
@@ -159,7 +159,7 @@ typedef struct HeapValue {
     void* as_any;
     struct Event as_event;
     struct EventOn as_event_on;
-    Frame as_frame;
+    struct Frame as_frame;
     struct Native as_native;
     struct Function as_func;
   };
@@ -204,9 +204,11 @@ Value MAKE_EVENT_ON(struct Module* mod, int id, Value func);
 Value MAKE_STRING_NON_GC(struct Module* mod, char* x);
 Value MAKE_FUNCTION(struct Module* mod, int32_t ip, uint16_t local_space);
 void gc(struct Module* vm);
+void gc_free(struct Module* mod, HeapValue* hp);
 void force_sweep(struct Module* vm);
 HeapValue* allocate(struct Module* mod, ValueType type);
 void mark_value(Value value);
+Value clone_value(struct Module* mod, Value value);
 
 #define MAKE_SPECIAL() kNull
 #define MAKE_ADDRESS(x) MAKE_INTEGER(x)
@@ -296,7 +298,6 @@ inline static char* type_to_str(ValueType t) {
   }
 }
 
-void safe_point(struct Module* mod);
 void stop_the_world(struct Module* mod, bool stop);
 
 #endif  // VALUE_H

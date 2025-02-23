@@ -33,10 +33,13 @@ void mark_value(Value value) {
 }
 
 void mark_all(struct Module* vm) {
-  gc_t* gc = vm->gc;
+  for (int i = 0; i < vm->stack->stack_capacity; i++) {
+    if (i < vm->stack->stack_pointer) {
+      mark_value(vm->stack->values[i]);
+      continue;
+    }
 
-  for (int i = 0; i < vm->stack->stack_pointer; i++) {
-    mark_value(vm->stack->values[i]);
+    vm->stack->values[i] = kNull;
   }
 }
 
@@ -80,7 +83,7 @@ static void sweep(struct Module* vm) {
 void gc(struct Module* vm) {
   gc_t* gc_ = vm->gc;
   vm->gc->gc_running = true;
-  int numObjects = gc_->num_objects;
+  // int numObjects = gc_->num_objects;
 
   mark_all(vm);
   sweep(vm);
@@ -88,8 +91,9 @@ void gc(struct Module* vm) {
   gc_->max_objects =
       gc_->num_objects < INIT_OBJECTS ? INIT_OBJECTS : gc_->num_objects * 2;
 
-  // printf("Collected %d objects, %d max objects\n",
-  //        numObjects - gc_->num_objects, gc_->max_objects);
+  // printf("Collected %d objects, %d max objects (sp: %d)\n",
+  //        numObjects - gc_->num_objects, gc_->max_objects,
+  //        vm->stack->stack_pointer);
 
   vm->gc->gc_running = false;
 }
@@ -321,7 +325,7 @@ Stack* stack_new() {
   Stack* stack = malloc(sizeof(Stack));
   stack->stack_pointer = GLOBALS_SIZE;
   stack->stack_capacity = MAX_STACK_SIZE;
-  stack->values = malloc(stack->stack_capacity * sizeof(Value));
+  stack->values = calloc(stack->stack_capacity, sizeof(Value));
   return stack;
 }
 
@@ -490,22 +494,35 @@ void stop_the_world(Module* mod, bool stop) {
   // }
 }
 
-void safe_point(Module* mod) {
-  // if (mod->current_actor == NULL) return;
-  // if (!mod->gc->gc_running) return;
-
-  // // Signal the GC thread that we are stoped
-  // pthread_cond_signal(&mod->current_actor->cond);
-
-  // // mod->gc->stopped_threads++;
-
-  // printf("reached safe point: %p (%d actors)\n", mod->current_actor,
-  // mod->event_count);
-
-  // while (mod->gc->gc_running) {}
-
-  // Wait for the GC thread to signal us
-  // pthread_mutex_lock(&mod->gc->gc_mutex);
-  // pthread_cond_wait(&mod->gc->is_gc_running, &mod->gc->gc_mutex);
-  // pthread_mutex_unlock(&mod->gc->gc_mutex);
+Value clone_value(Module* mod, Value value) {
+  switch (get_type(value)) {
+    case TYPE_INTEGER:
+      return MAKE_INTEGER(GET_INT(value));
+    case TYPE_FLOAT:
+      return MAKE_FLOAT(GET_FLOAT(value));
+    case TYPE_STRING: {
+      HeapValue* str = GET_PTR(value);
+      char* new_str = malloc(str->length + 1);
+      strcpy(new_str, str->as_string);
+      return MAKE_STRING(mod, new_str);
+    }
+    case TYPE_LIST: {
+      HeapValue* list = GET_PTR(value);
+      Value* new_list = malloc(list->length * sizeof(Value));
+      for (uint32_t i = 0; i < list->length; i++) {
+        new_list[i] = clone_value(mod, list->as_ptr[i]);
+      }
+      return MAKE_LIST(mod, new_list, list->length);
+    }
+    case TYPE_MUTABLE:
+      return MAKE_MUTABLE(mod, clone_value(mod, GET_MUTABLE(value)));
+    case TYPE_SPECIAL:
+      return MAKE_SPECIAL();
+    case TYPE_FUNCTION:
+      return MAKE_FUNCTION(mod, GET_PTR(value)->as_func.ip,
+                           GET_PTR(value)->as_func.local_space);
+    case TYPE_UNKNOWN:
+    default:
+      return value;
+  }
 }

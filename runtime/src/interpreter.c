@@ -104,7 +104,7 @@ case_store_global: {
 }
 
 case_return: {
-  Frame fr = pop_frame(module);
+  struct Frame fr = pop_frame(module);
   Value ret = stack_pop(module);
 
   module->stack->stack_pointer = fr.stack_pointer;
@@ -180,8 +180,6 @@ case_list_get: {
 }
 
 case_call: {
-  safe_point(module);
-
   Value callee = stack_pop(module);
 
   ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
@@ -211,8 +209,6 @@ case_call_global: {
 }
 
 case_call_local: {
-  safe_point(module);
-
   Value callee = module->stack->values[module->base_pointer + i1];
 
   ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
@@ -224,8 +220,6 @@ case_call_local: {
 }
 
 case_jump_if_false: {
-  safe_point(module);
-
   Value value = stack_pop(module);
   if (GET_INT(value) == 0) {
     INCREASE_IP_BY(module, i1);
@@ -236,8 +230,6 @@ case_jump_if_false: {
 }
 
 case_jump_rel: {
-  safe_point(module);
-
   INCREASE_IP_BY(module, i1);
   goto *jmp_table[op];
 }

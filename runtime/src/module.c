@@ -4,7 +4,7 @@
 #include <stdatomic.h>
 #include <value.h>
 
-__attribute__((always_inline)) inline Frame pop_frame(Module* mod) {
+__attribute__((always_inline)) inline struct Frame pop_frame(Module* mod) {
   Value pc = mod->stack->values[mod->base_pointer];
   Value sp = mod->stack->values[mod->base_pointer + 1];
   Value bp = mod->stack->values[mod->base_pointer + 2];
@@ -13,7 +13,7 @@ __attribute__((always_inline)) inline Frame pop_frame(Module* mod) {
   ASSERT_TYPE(mod, "pop_frame", sp, TYPE_INTEGER);
   ASSERT_TYPE(mod, "pop_frame", bp, TYPE_INTEGER);
 
-  Frame frame = {
+  struct Frame frame = {
       .instruction_pointer = GET_INT(pc),
       .stack_pointer = GET_INT(sp),
       .base_ptr = GET_INT(bp),
@@ -24,7 +24,8 @@ __attribute__((always_inline)) inline Frame pop_frame(Module* mod) {
   return frame;
 }
 
-__attribute__((always_inline)) inline Frame pop_event_frame(Module* mod) {
+__attribute__((always_inline)) inline struct Frame pop_event_frame(
+    Module* mod) {
   Value ev = mod->stack->values[mod->base_pointer];
   Value pc = mod->stack->values[mod->base_pointer + 1];
   Value sp = mod->stack->values[mod->base_pointer + 2];
@@ -35,7 +36,7 @@ __attribute__((always_inline)) inline Frame pop_event_frame(Module* mod) {
   ASSERT_TYPE(mod, "pop_event_frame", sp, TYPE_INTEGER);
   ASSERT_TYPE(mod, "pop_event_frame", bp, TYPE_INTEGER);
 
-  Frame frame = {
+  struct Frame frame = {
       .instruction_pointer = GET_INT(pc),
       .stack_pointer = GET_INT(sp),
       .base_ptr = GET_INT(bp),
