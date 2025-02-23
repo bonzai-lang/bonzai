@@ -1,0 +1,23 @@
+require "std:http": start_http_server, accept_request, close_client, get_path, send_buffer
+require "std:foundation"
+
+extern fn run_gc(): unit
+extern fn free_gc_value<A>(value: A): unit
+
+extern fn create_thread(callback: fn(): unit): unit
+
+let server = start_http_server(9)
+
+print("Server started on port 8000")
+
+while true {
+  let req = accept_request(server)
+
+  create_thread(fn() => {
+    let path = get_path(req)
+
+    send_buffer(req, "Hello, world!")
+
+    close_client(req)
+  })
+}

@@ -1,5 +1,4 @@
-require "std:io"
-require "std:math"
+require "std:foundation"
 
 type Option<A> {
   Some(x: A),

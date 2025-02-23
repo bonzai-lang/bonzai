@@ -1,0 +1,9 @@
+require "std:foundation"
+
+fn infinite() => {
+  print("tset")
+  infinite()
+}
+
+
+print(infinite())
