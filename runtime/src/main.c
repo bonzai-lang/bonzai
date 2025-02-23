@@ -1,4 +1,3 @@
-#define UGC_IMPLEMENTATION
 #include <deserialize.h>
 #include <error.h>
 #include <interpreter.h>
