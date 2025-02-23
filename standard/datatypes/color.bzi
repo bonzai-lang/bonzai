@@ -1,0 +1,30 @@
+require "std:math"
+require "std:datatypes/unit"
+
+pub fn black(str: string): string => "\x1b[30m" + str
+pub fn red(str: string): string => "\x1b[31m" + str
+pub fn green(str: string): string => "\x1b[32m" + str
+pub fn yellow(str: string): string => "\x1b[33m" + str
+pub fn blue(str: string): string => "\x1b[34m" + str
+pub fn magenta(str: string): string => "\x1b[35m" + str
+pub fn cyan(str: string): string => "\x1b[36m" + str
+pub fn white(str: string): string => "\x1b[37m" + str
+
+pub fn bgBlack(str: string): string => "\x1b[40m" + str
+pub fn bgRed(str: string): string => "\x1b[41m" + str
+pub fn bgGreen(str: string): string => "\x1b[42m" + str
+pub fn bgYellow(str: string): string => "\x1b[43m" + str
+pub fn bgBlue(str: string): string => "\x1b[44m" + str
+pub fn bgMagenta(str: string): string => "\x1b[45m" + str
+pub fn bgCyan(str: string): string => "\x1b[46m" + str
+pub fn bgWhite(str: string): string => "\x1b[47m" + str
+
+pub fn reset(str: string): string => str + "\x1b[0m"
+
+pub fn bold(str: string): string => "\x1b[1m" + str
+pub fn dim(str: string): string => "\x1b[2m" + str
+pub fn italic(str: string): string => "\x1b[3m" + str
+pub fn underline(str: string): string => "\x1b[4m" + str
+pub fn inverse(str: string): string => "\x1b[7m" + str
+pub fn hidden(str: string): string => "\x1b[8m" + str
+pub fn strikethrough(str: string): string => "\x1b[9m" + str
