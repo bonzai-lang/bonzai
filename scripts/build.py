@@ -42,8 +42,8 @@ xmake_root = '--root' if is_root else ''
 system(f'xmake b {xmake_root} -P runtime bonzai-runtime')
 system(f"cp runtime/bin/{runtime_executable} bin/{runtime_executable_out}")
 
-system(f'xmake config {xmake_root} -P bindings --ccache=n -y')
-system(f'xmake b {xmake_root} -P bindings bonzai-standard')
+system(f'xmake config {xmake_root} -P bindings/standard --ccache=n -y')
+system(f'xmake b {xmake_root} -P bindings/standard bonzai-standard')
 
 # Write simple shell script
 shell_script = f"""#!/bin/sh
@@ -57,7 +57,7 @@ shift
 args=$*
 
 bonzaic build "$first_arg"
-bonzai-runtime "$first_arg".bin -l "$BONZAI_PATH/bindings/bin/bindings.dylib" "$args"
+bonzai-runtime "$first_arg".bin -l "$BONZAI_PATH/bindings/standard/bin/bindings.dylib" $args
 """
 
 with open('bin/bpm', 'w') as f:
