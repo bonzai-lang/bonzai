@@ -13,9 +13,9 @@ add_requires("libpq")
 target("bonzai-standard")
   add_rules("mode.release")
   add_files("src/**.c")
-  add_files("../runtime/src/**.c")
+  add_files("../../runtime/src/**.c")
   add_includedirs("include")
-  add_includedirs("../runtime/include")
+  add_includedirs("../../runtime/include")
 
   add_cxflags("-Wall")
 
@@ -30,9 +30,9 @@ target("bonzai-standard")
 target("bonzai-standard-test")
   add_rules("mode.debug", "mode.profile")
   add_files("src/**.c")
-  add_files("../runtime/src/**.c")
+  add_files("../../runtime/src/**.c")
   add_includedirs("include")
-  add_includedirs("../runtime/include")
+  add_includedirs("../../runtime/include")
 
   add_packages("libcurl", "openssl", "libpq")
 

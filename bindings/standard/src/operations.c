@@ -583,3 +583,23 @@ Value write_file(Module* mod, Value* args, int argc) {
 
   return MAKE_INTEGER(0);
 }
+
+Value run_gc(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "run_gc", argc, 0);
+
+  stop_the_world(mod, true);
+  gc(mod);
+  stop_the_world(mod, false);
+
+  return MAKE_INTEGER(0);
+}
+
+Value free_gc_value(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "free_gc_value", argc, 1);
+
+  if (!IS_PTR(args[0])) return MAKE_INTEGER(0);
+
+  free_value(mod, GET_PTR(args[0]));
+
+  return MAKE_INTEGER(0);
+}
