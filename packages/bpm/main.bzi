@@ -3,6 +3,7 @@ require "std:language/parser":
   satisfy, many, right, left, Parser::bind, 
   Parser::map, noneOf, is_whitespace, is_alphanumeric, 
   implode, explode, many1, choice, runParser
+require "std:datatypes/color"
 
 extern fn get_args(): list<string>
 extern fn slice<A>(xs: list<A>, start: int, end: int): list<A>
@@ -12,6 +13,9 @@ extern fn get_env(name: string): string
 extern fn execute_command(command: string)
 extern fn execute_command_silent(command: string)
 extern fn length<A>(xs: list<A>): int
+
+let bziPath = get_env("BONZAI_PATH")
+let bpmPath = "$bziPath/packages/bpm"
 
 type CLI {
   Command(name: string, description: string, action: fn(list<Argument>): unit)
@@ -81,10 +85,27 @@ fn runCLI(commands: list<CLI>, args: list<string>) => {
 
 let commands = [
   Command("help", "Display help", fn(args) => {
-    print("Help")
+    print(" BPM ".white.bgBlue.bold.reset + " " + "Commands".bold.reset)
+    let help = commands.map(fn(Command(name, description, _)) => "  " + name.italic.reset + " - " + description.black.reset)
+    print(String::join(help, "\n"))
   }),
   Command("version", "Display version", fn(args) => {
-    print("Version")
+    print(" BPM ".white.bgBlue.bold.reset + " " + "Version 0.0.1")
+  }),
+  Command("init", "Initialize a new project", fn(args) => {
+    let cwd = get_cwd()
+    
+    match args {
+      case [Argument(projectName) .. _] => {
+        execute_command("mkdir $cwd/$projectName")
+        execute_command("cp -r $cwd/packages/bpm/templates/* $cwd/$projectName")
+
+        print(" BPM ".white.bgBlue.bold.reset + " Project $projectName initialized.")
+      }
+
+      case [] => print("No arguments provided")
+      case _ => print("Invalid arguments")
+    }
   })
 ]
 
