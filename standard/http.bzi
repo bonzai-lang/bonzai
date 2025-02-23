@@ -6,6 +6,7 @@ require "std:datatypes/mutable"
 require "std:datatypes/list"
 require "std:io"
 require "std:datatypes/map"
+require "std:datatypes/unit"
 
 extern fn start_http_server(port: int): HTTP
 extern fn accept_request(server: HTTP): Request
@@ -35,7 +36,7 @@ pub fn Map::mapToHeaders(headers: Map<string>): string => {
   
   match headers {
     case Map(entries) => {
-      while i.value < entries.length {
+      while i.value < List::length(entries) {
         match entries[i.value] {
           case Tuple(key, val) => {
             headersString = headersString.value + "$key: $val\r\n"
