@@ -2,16 +2,16 @@ require "std:datatypes/list"
 require "std:math"
 require "std:datatypes/string"
 require "std:datatypes/unit"
+require "std:datatypes/mutable"
+require "std:io"
 
 extern fn is_whitespace(c: char): bool
 extern fn is_digit(c: char): bool
 extern fn is_alpha(c: char): bool
 extern fn is_alphanumeric(c: char): bool
-extern fn slice<A>(xs: list<A>, start: int, end: int): list<A>
 extern fn length<A>(xs: list<A>): int
 extern fn explode(s: string): list<char>
 extern fn implode(cs: list<char>): string
-extern fn str_index(s: string, i: int): char
 extern fn toInt(s: string): int
 extern fn toFloat(s: string): float
 
@@ -82,8 +82,11 @@ fn char(c: char): Parser<char> =>
 fn string(s: string): Parser<string> => 
   Parser(fn(input) => {
     let len = String::length(s)
-    let str = slice(input, 0, len)
-    if str.implode == s then ParseResult(s, input.sliceFrom(len)) else ParseError("Unexpected string $s", input)
+    let inputLen = List::length(input)
+    let str = List::slice(input, 0, len)
+    if str.implode == s 
+      then ParseResult(s, List::slice(input, len, inputLen)) 
+      else ParseError("Unexpected string $s", input)
   })
 
 let and = Parser::andThen
