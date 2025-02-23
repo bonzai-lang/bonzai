@@ -31,7 +31,6 @@ target("bonzai-runtime-test")
   set_targetdir("bin")
   set_kind("binary")
   set_symbols("debug")
-  set_policy("build.sanitizer.address", true)
   add_cxflags("-pg")
   add_ldflags("-pg")
 

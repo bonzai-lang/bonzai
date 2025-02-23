@@ -180,6 +180,7 @@ case_list_get: {
 }
 
 case_call: {
+  request_gc(module);
   Value callee = stack_pop(module);
 
   ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
@@ -220,6 +221,7 @@ case_call_local: {
 }
 
 case_jump_if_false: {
+  request_gc(module);
   Value value = stack_pop(module);
   if (GET_INT(value) == 0) {
     INCREASE_IP_BY(module, i1);
@@ -230,6 +232,7 @@ case_jump_if_false: {
 }
 
 case_jump_rel: {
+  request_gc(module);
   INCREASE_IP_BY(module, i1);
   goto *jmp_table[op];
 }
@@ -335,7 +338,8 @@ case_add: {
       char *s2 = GET_STRING(b);
 
       char *s = malloc(strlen(s1) + strlen(s2) + 1);
-      sprintf(s, "%s%s", s1, s2);
+
+      snprintf(s, strlen(s1) + strlen(s2) + 1, "%s%s", s1, s2);
 
       module->stack->values[module->stack->stack_pointer - 2] =
           MAKE_STRING(module, s);
@@ -474,6 +478,7 @@ case_mod: {
 }
 
 case_call_native: {
+  request_gc(module);
   Value native = module->constants.values[i1];
 
   direct_native_call(

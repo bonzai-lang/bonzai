@@ -32,26 +32,40 @@ void mark_value(Value value) {
   }
 }
 
-void mark_all(struct Module* vm) {
-  for (int i = 0; i < vm->stack->stack_capacity; i++) {
-    if (i < vm->stack->stack_pointer) {
-      mark_value(vm->stack->values[i]);
-      continue;
-    }
-
-    vm->stack->values[i] = kNull;
-  }
-}
-
-void free_value(HeapValue* unreached) {
+void free_value(struct Module* mod, HeapValue* unreached) {
   if (unreached->type == TYPE_LIST || unreached->type == TYPE_MUTABLE) {
     free(unreached->as_ptr);
   } else if (unreached->type == TYPE_STRING) {
     if (!unreached->is_constant) {
       free(unreached->as_string);
     }
+  } else if (unreached->type == TYPE_API) {
+    unreached->destructor(mod, unreached);
   }
   free(unreached);
+}
+
+void gc_free(struct Module* mod, Value value) {
+  if (!IS_PTR(value)) return;
+
+  HeapValue* ptr = GET_PTR(value);
+
+  if (ptr->is_marked) return;
+
+  free_value(mod, ptr);
+}
+
+void mark_all(struct Module* vm) {
+  for (int i = 0; i <= vm->stack->stack_capacity; i++) {
+    if (i <= vm->stack->stack_pointer) {
+      mark_value(vm->stack->values[i]);
+      continue;
+    }
+
+    gc_free(vm, vm->stack->values[i]);
+
+    vm->stack->values[i] = kNull;
+  }
 }
 
 static void sweep(struct Module* vm) {
@@ -71,11 +85,9 @@ static void sweep(struct Module* vm) {
         vm->gc->first_object = object;
       }
 
-      if (!unreached->is_constant) {
-        free_value(unreached);
+      free_value(vm, unreached);
 
-        vm->gc->num_objects--;
-      }
+      vm->gc->num_objects--;
     }
   }
 }
@@ -103,28 +115,20 @@ void force_sweep(struct Module* vm) {
   HeapValue* object = gc->first_object;
   while (object) {
     HeapValue* next = object->next;
-    switch (object->type) {
-      case TYPE_LIST:
-      case TYPE_MUTABLE: {
-        free(object->as_ptr);
-        break;
-      }
-
-      case TYPE_STRING: {
-        if (!object->is_constant) {
-          free(object->as_string);
-        }
-        break;
-      }
-
-      default:
-        break;
-    }
-    free(object);
+    free_value(vm, object);
     object = next;
   }
   gc->first_object = NULL;
   gc->num_objects = 0;
+}
+
+void request_gc(struct Module* vm) {
+  gc_t* gc_ = vm->gc;
+  if (gc_->num_objects >= gc_->max_objects) {
+    stop_the_world(vm, true);
+    gc(vm);
+    stop_the_world(vm, false);
+  }
 }
 
 HeapValue* allocate(struct Module* mod, ValueType type) {
@@ -137,15 +141,13 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
   // pthread_mutex_unlock(&gc_->gc_mutex);
   // // }
 
-  if (gc_->num_objects == gc_->max_objects) {
+  if (gc_->num_objects >= gc_->max_objects) {
     if (gc_->gc_enabled) {
       stop_the_world(mod, true);
       gc(mod);
       stop_the_world(mod, false);
-
-      // mod->gc->max_objects += 2;
     } else {
-      mod->gc->max_objects *= 1.5;
+      gc_->max_objects += 2;
     }
   }
 

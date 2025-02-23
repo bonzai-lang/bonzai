@@ -152,6 +152,7 @@ typedef struct HeapValue {
   uint32_t length;
   bool is_marked, is_constant;
   struct HeapValue* next;
+  void (*destructor)(struct Module*, struct HeapValue*);
 
   union {
     char* as_string;
@@ -204,11 +205,12 @@ Value MAKE_EVENT_ON(struct Module* mod, int id, Value func);
 Value MAKE_STRING_NON_GC(struct Module* mod, char* x);
 Value MAKE_FUNCTION(struct Module* mod, int32_t ip, uint16_t local_space);
 void gc(struct Module* vm);
-void gc_free(struct Module* mod, HeapValue* hp);
 void force_sweep(struct Module* vm);
 HeapValue* allocate(struct Module* mod, ValueType type);
 void mark_value(Value value);
 Value clone_value(struct Module* mod, Value value);
+void request_gc(struct Module* vm);
+void free_value(struct Module* mod, HeapValue* unreached);
 
 #define MAKE_SPECIAL() kNull
 #define MAKE_ADDRESS(x) MAKE_INTEGER(x)
@@ -224,7 +226,8 @@ void debug_value(Value v);
 #define stack_push(module, value)                                        \
   do {                                                                   \
     if (module->stack->stack_pointer >= module->stack->stack_capacity) { \
-      module->stack->stack_capacity *= 2;                                \
+      printf("Reallocating stack");                                      \
+      module->stack->stack_capacity *= 1.25;                             \
       module->stack->values =                                            \
           realloc(module->stack->values,                                 \
                   module->stack->stack_capacity * sizeof(Value));        \

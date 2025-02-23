@@ -78,11 +78,9 @@ int main(int argc, char* argv[]) {
   int num_libs = count_libraries(libraries);
   DLL* libs = malloc(sizeof(DLL) * num_libs);
 
-  int i = 0;
   LibraryOption* current = libraries;
-  while (current != NULL) {
+  for (int i = 0; i < num_libs; i++) {
     libs[i] = current->library;
-    i++;
     current = current->next;
   }
 
