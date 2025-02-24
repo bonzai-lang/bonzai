@@ -47,7 +47,7 @@ system(f'xmake b {xmake_root} -P bindings/standard bonzai-standard')
 
 # Write simple shell script
 shell_script = f"""#!/bin/sh
-bonzai $BONZAI_PATH/packages/bpm/main.bzi.bin -l $BONZAI_PATH/bindings/bin/bindings.dylib "$@"
+bonzai "$BONZAI_PATH/packages/bpm/main.bzi" "$@"
 """
 
 bonzai_script = f"""#!/bin/sh
