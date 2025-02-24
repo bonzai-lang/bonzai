@@ -14,7 +14,7 @@ void mark_value(Value value) {
 
   HeapValue* ptr = GET_PTR(value);
 
-  if (ptr->is_marked || ptr->is_constant) return;
+  if (ptr->is_marked) return;
 
   ptr->is_marked = true;
   if (ptr->type == TYPE_LIST) {
@@ -56,6 +56,10 @@ void gc_free(struct Module* mod, Value value) {
 }
 
 void mark_all(struct Module* vm) {
+  for (int i = 0; i < vm->argc; i++) {
+    mark_value(vm->argv[i]);
+  }
+
   for (int i = 0; i <= vm->stack->stack_capacity; i++) {
     if (i <= vm->stack->stack_pointer) {
       mark_value(vm->stack->values[i]);
@@ -86,7 +90,6 @@ static void sweep(struct Module* vm) {
       }
 
       free_value(vm, unreached);
-
       vm->gc->num_objects--;
     }
   }
