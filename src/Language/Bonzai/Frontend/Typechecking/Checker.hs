@@ -62,6 +62,9 @@ synthesize (HLIR.MkExprApplication f args) = do
   (f', ty) <- synthesize f
   case ty of
     argsTys HLIR.:->: retTy -> do
+      when (length argsTys /= length args) $ 
+        throw (M.InvalidArgumentQuantity (length argsTys) (length args))
+
       args' <- zipWithM check args argsTys
       pure (HLIR.MkExprApplication f' args', retTy)
     _ -> do
@@ -157,7 +160,10 @@ synthesize (HLIR.MkExprUpdate u e) = do
   (u', ty) <- typecheckUpdate u
   e' <- case ty of
     HLIR.MkTyMutable exprTy -> check e exprTy
-    _ -> throw M.InvalidUpdate
+    _ -> synthesize e >>= \case
+      (e', ty') -> do
+        ty `U.unifiesWith` HLIR.MkTyMutable ty'
+        pure e'
 
   pure (HLIR.MkExprUpdate u' e', HLIR.MkTyUnit)
 synthesize (HLIR.MkExprList es) = do
@@ -247,6 +253,9 @@ synthesize (HLIR.MkExprModule _ _) = compilerError "typecheck: module should not
 
 check :: M.MonadChecker m => HLIR.HLIR "expression" -> HLIR.Type -> m (HLIR.TLIR "expression")
 check (HLIR.MkExprApplication f args) fTy@(argsTys HLIR.:->: _) = do
+  when (length argsTys /= length args) $ 
+    throw (M.InvalidArgumentQuantity (length argsTys) (length args))
+
   f' <- check f fTy
   args' <- zipWithM check args argsTys
 
