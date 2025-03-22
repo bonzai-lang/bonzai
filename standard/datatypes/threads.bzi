@@ -1,0 +1,23 @@
+require "unit"
+require "../math"
+require "mutable"
+require "list"
+require "map"
+require "tuple"
+require "../io"
+
+extern fn create_thread<A>(cb: fn(): A): Thread<A>
+extern fn wait_thread<A>(thread: Thread<A>): A
+extern fn lock<A>(x: A): int
+extern fn unlock<A>(x: A): int
+
+pub fn Thread::withVariable<A, B>(cb: fn(A): B, x: A): B => {
+  lock(x)
+  let res = cb(x)
+  unlock(x)
+
+  res
+}
+
+pub let Thread::new = create_thread
+pub let Thread::wait = wait_thread

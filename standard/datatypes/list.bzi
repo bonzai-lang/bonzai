@@ -2,6 +2,7 @@ require "std:math"
 require "std:datatypes/optional"
 require "std:datatypes/unit"
 pub extern fn sliceFrom<A>(xs: list<A>, start: int): list<A>
+pub extern fn length<A>(xs: list<A>): int
 
 pub fn List::slice<A>(xs: list<A>, start: int, end: int): list<A> =>
   match xs {
@@ -60,4 +61,30 @@ pub fn List::find<A>(f: fn(A): bool, xs: list<A>): Optional<A> =>
   match xs {
     case [] => None
     case [x .. xs] => if f(x) then Some(x) else List::find(f, xs)
+  }
+
+
+pub fn List::pop<A>(xs: list<A>): Optional<A> =>
+  match xs {
+    case [x] => Some(x)
+    case [y .. ys] => List::pop(ys)
+    case [] => None
+  }
+  
+pub fn List::push<A>(xs: list<A>, x: A): list<A> =>
+  xs + [x]
+
+pub fn List::shift<A>(xs: list<A>): Optional<A> =>
+  match xs {
+    case [x .. xs] => Some(x)
+    case [] => None
+  }
+
+pub fn List::unshift<A>(xs: list<A>, x: A): list<A> =>
+  [x] + xs
+
+pub fn List::tail<A>(xs: list<A>): list<A> =>
+  match xs {
+    case [x .. xs] => xs
+    case [] => []
   }
