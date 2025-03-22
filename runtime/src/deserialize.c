@@ -100,7 +100,9 @@ void deserialize(Module* mod, FILE* file) {
 
   mod->instr_count = instr_count;
   mod->instrs = instrs;
-  mod->constants = constants_;
+  mod->constants = malloc(sizeof(Constants));
+  mod->constants->size = constants_.size;
+  mod->constants->values = constants_.values;
 
   mod->native_handles = calloc(constants_.size, sizeof(void*));
 }

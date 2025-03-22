@@ -87,6 +87,7 @@ int main(int argc, char* argv[]) {
   module.stack = stack_new();
   module.handles = libs;
   module.call_function = call_function;
+  module.gc->stacks.stacks[module.gc->stacks.stack_count++] = module.stack;
   module.num_handles = num_libs;
   module.current_actor = NULL;
   module.latest_try_catch_count = 0;
@@ -112,15 +113,15 @@ int main(int argc, char* argv[]) {
   // Closing and freeing resources
   fclose(file);
 
-  for (int i = 0; i < module.constants.size; i++) {
-    free_constant(module.constants.values[i]);
+  for (int i = 0; i < module.constants->size; i++) {
+    free_constant(module.constants->values[i]);
   }
 
   force_sweep(&module);
   free(module.stack->values);
   free(module.stack);
   free(module.instrs);
-  free(module.constants.values);
+  free(module.constants->values);
   free(module.native_handles);
   free(module.events);
   free(gc);

@@ -26,7 +26,7 @@ typedef struct Module {
 
   struct Actor* current_actor;
 
-  Constants constants;
+  Constants* constants;
   Stack* stack;
 
   size_t num_handles;

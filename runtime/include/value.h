@@ -118,6 +118,7 @@ typedef struct Stack {
   Value* values;
   int32_t stack_pointer;
   int32_t stack_capacity;
+  pthread_mutex_t mutex;
 } Stack;
 
 #define MAX_FRAMES 16384
@@ -153,6 +154,7 @@ typedef struct HeapValue {
   bool is_marked, is_constant;
   struct HeapValue* next;
   void (*destructor)(struct Module*, struct HeapValue*);
+  pthread_mutex_t mutex;
 
   union {
     char* as_string;
@@ -177,6 +179,8 @@ typedef struct {
   int num_objects, max_objects;
   bool gc_enabled;
   bool gc_running;
+
+  stacks_t stacks;
 
   pthread_cond_t gc_cond;
   pthread_mutex_t gc_mutex;
@@ -302,5 +306,6 @@ inline static char* type_to_str(ValueType t) {
 }
 
 void stop_the_world(struct Module* mod, bool stop);
+void safe_point(struct Module* mod);
 
 #endif  // VALUE_H

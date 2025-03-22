@@ -81,7 +81,11 @@ void op_native_call(Module* module, Value callee, int32_t argc) {
 
 void direct_native_call(Module* module, struct Native fun, int32_t argc) {
   Value* args = malloc(sizeof(Value) * argc);
+
+  pthread_mutex_lock(&module->gc->gc_mutex);
   module->gc->gc_enabled = false;
+  pthread_mutex_unlock(&module->gc->gc_mutex);
+
   // Pop args in reverse order
   for (int i = argc - 1; i >= 0; i--) {
     args[i] = stack_pop(module);
@@ -97,7 +101,9 @@ void direct_native_call(Module* module, struct Native fun, int32_t argc) {
 
   stack_push(module, ret);
 
+  pthread_mutex_lock(&module->gc->gc_mutex);
   module->gc->gc_enabled = true;
+  pthread_mutex_unlock(&module->gc->gc_mutex);
 
   free(args);
   module->pc += 5;

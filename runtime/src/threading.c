@@ -21,6 +21,9 @@ Value call_function(struct Module *m, Value closure, int32_t argc,
   Value callee = list_get(m, closure, 0);
   Value env = list_get(m, closure, 1);
 
+  ASSERT_TYPE(m, "call_function", callee, TYPE_FUNCTION);
+  ASSERT_TYPE(m, "call_function", env, TYPE_LIST);
+
   HeapValue *func = GET_PTR(callee);
 
   int32_t ipc = func->as_func.ip;
@@ -29,21 +32,20 @@ Value call_function(struct Module *m, Value closure, int32_t argc,
   int32_t old_sp = m->stack->stack_pointer;
 
   // Push arguments in reverse order
-  stack_push(m, env);
   for (int i = argc - 1; i >= 0; i--) stack_push(m, argv[i]);
-  for (int i = 0; i < local_space - argc; i++) stack_push(m, MAKE_INTEGER(0));
+  stack_push(m, env);
+  for (int i = 0; i < local_space - argc - 1; i++) stack_push(m, kNull);
 
-  int32_t new_pc = m->pc;
+  int32_t old_sp2 = m->stack->stack_pointer;
+  int32_t new_pc = m->pc + 5;
 
   stack_push(m, MAKE_INTEGER(new_pc));
   stack_push(m, MAKE_INTEGER(old_sp));
   stack_push(m, MAKE_INTEGER(m->base_pointer));
 
-  m->base_pointer = m->stack->stack_pointer - 3;
-  m->stack->stack_pointer++;
-  m->callstack++;
+  m->base_pointer = old_sp2;
 
-  Value ret = run_interpreter(m, ipc, true, m->callstack - 1);
+  Value ret = run_interpreter(m, ipc, true, 1);
 
   return ret;
 }
@@ -126,7 +128,7 @@ void *actor_run(void *arg) {
   }
 
   // Free the stack and the module
-  gc(new_module);
+  // gc(new_module);
   free(new_module);
   free(actor->queue);
   free(actor);

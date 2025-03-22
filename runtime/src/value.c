@@ -1,3 +1,4 @@
+#include <debug.h>
 #include <error.h>
 #include <module.h>
 #include <stdarg.h>
@@ -39,7 +40,7 @@ void free_value(struct Module* mod, HeapValue* unreached) {
     if (!unreached->is_constant) {
       free(unreached->as_string);
     }
-  } else if (unreached->type == TYPE_API) {
+  } else if (unreached->type == TYPE_API && unreached->destructor) {
     unreached->destructor(mod, unreached);
   }
   free(unreached);
@@ -60,15 +61,24 @@ void mark_all(struct Module* vm) {
     mark_value(vm->argv[i]);
   }
 
-  for (int i = 0; i <= vm->stack->stack_capacity; i++) {
-    if (i <= vm->stack->stack_pointer) {
-      mark_value(vm->stack->values[i]);
-      continue;
+  for (int i = 0; i < vm->gc->stacks.stack_count; i++) {
+    Stack* stack = vm->gc->stacks.stacks[i];
+
+    // printf("Marking stack %d (sp: %d)\n", i, stack->stack_pointer);
+    if (!stack || !stack->values) continue;
+    pthread_mutex_lock(&stack->mutex);
+
+    for (int j = 0; j <= stack->stack_capacity; j++) {
+      if (j <= stack->stack_pointer) {
+        mark_value(stack->values[j]);
+
+        continue;
+      }
+
+      stack->values[j] = kNull;
     }
 
-    gc_free(vm, vm->stack->values[i]);
-
-    vm->stack->values[i] = kNull;
+    pthread_mutex_unlock(&stack->mutex);
   }
 }
 
@@ -96,13 +106,17 @@ static void sweep(struct Module* vm) {
 }
 
 void gc(struct Module* vm) {
+  // printf("Requested GC from thread %ld\n", pthread_self());
   gc_t* gc_ = vm->gc;
+  pthread_mutex_lock(&gc_->gc_mutex);
   vm->gc->gc_running = true;
   // int numObjects = gc_->num_objects;
+  pthread_mutex_unlock(&gc_->gc_mutex);
 
   mark_all(vm);
   sweep(vm);
 
+  pthread_mutex_lock(&gc_->gc_mutex);
   gc_->max_objects =
       gc_->num_objects < INIT_OBJECTS ? INIT_OBJECTS : gc_->num_objects * 2;
 
@@ -111,6 +125,7 @@ void gc(struct Module* vm) {
   //        vm->stack->stack_pointer);
 
   vm->gc->gc_running = false;
+  pthread_mutex_unlock(&gc_->gc_mutex);
 }
 
 void force_sweep(struct Module* vm) {
@@ -136,19 +151,25 @@ void request_gc(struct Module* vm) {
 
 HeapValue* allocate(struct Module* mod, ValueType type) {
   gc_t* gc_ = mod->gc;
-  // pthread_mutex_lock(&gc_->gc_mutex);
-  // if (gc_->gc_running) {
-  //   pthread_cond_wait(&gc_->gc_cond, &gc_->gc_mutex);
-  //   //   pthread_mutex_unlock(&gc_->gc_mutex);
-  // }
-  // pthread_mutex_unlock(&gc_->gc_mutex);
-  // // }
+  pthread_mutex_lock(&gc_->gc_mutex);
+  while (gc_->gc_running) {
+    pthread_cond_wait(&gc_->gc_cond, &gc_->gc_mutex);
+  }
+  int numObjects = gc_->num_objects;
+  int maxObjects = gc_->max_objects;
+  pthread_mutex_unlock(&gc_->gc_mutex);
 
-  if (gc_->num_objects >= gc_->max_objects) {
+  if (numObjects >= maxObjects) {
     if (gc_->gc_enabled) {
-      stop_the_world(mod, true);
-      gc(mod);
-      stop_the_world(mod, false);
+      pthread_mutex_lock(&gc_->gc_mutex);
+      int is_running = gc_->gc_running;
+      pthread_mutex_unlock(&gc_->gc_mutex);
+
+      if (!is_running) {
+        stop_the_world(mod, true);
+        gc(mod);
+        stop_the_world(mod, false);
+      }
     } else {
       gc_->max_objects += 2;
     }
@@ -160,6 +181,7 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
   v->is_marked = false;
   v->next = gc_->first_object;
   v->is_constant = false;
+  pthread_mutex_init(&v->mutex, NULL);
 
   gc_->first_object = v;
   gc_->num_objects++;
@@ -331,6 +353,7 @@ Stack* stack_new() {
   stack->stack_pointer = GLOBALS_SIZE;
   stack->stack_capacity = MAX_STACK_SIZE;
   stack->values = calloc(stack->stack_capacity, sizeof(Value));
+  pthread_mutex_init(&stack->mutex, NULL);
   return stack;
 }
 
@@ -461,6 +484,11 @@ void debug_value(Value v) {
       printf("FunctionEnv");
       break;
 
+    case TYPE_NATIVE: {
+      printf("Native(%s)", GET_NATIVE(v).name);
+      break;
+    }
+
     case TYPE_UNKNOWN:
     default:
       printf("Unknown");
@@ -468,35 +496,18 @@ void debug_value(Value v) {
   }
 }
 
+void safe_point(Module* mod) {
+  pthread_mutex_lock(&mod->gc->gc_mutex);
+  if (mod->gc->gc_running) {
+    pthread_cond_wait(&mod->gc->gc_cond, &mod->gc->gc_mutex);
+  }
+  pthread_mutex_unlock(&mod->gc->gc_mutex);
+}
+
 void stop_the_world(Module* mod, bool stop) {
   if (!stop) {
-    pthread_cond_signal(&mod->gc->gc_cond);
+    pthread_cond_broadcast(&mod->gc->gc_cond);
   }
-
-  // if (stop) {
-  //   // pthread_mutex_lock(&mod->gc->gc_mutex);
-  //   mod->gc->gc_running = true;
-  //   // pthread_mutex_unlock(&mod->gc->gc_mutex);
-
-  //   for (int i = 0; i < mod->event_count; i++) {
-  //     struct Actor* actor = mod->events[i];
-
-  //     printf("Actor %d is pausing\n", i);
-
-  //     pthread_mutex_lock(&actor->mutex);
-  //     pthread_cond_wait(&actor->cond, &actor->mutex);
-  //     pthread_mutex_unlock(&actor->mutex);
-
-  //     printf("Actor %d is paused\n", i);
-  //   }
-  // } else {
-  //   // pthread_mutex_lock(&mod->gc->gc_mutex);
-  //   mod->gc->gc_running = false;
-  //   // pthread_mutex_unlock(&mod->gc->gc_mutex);
-
-  //   printf("GC stopped\n");
-  //   pthread_cond_signal(&mod->gc->is_gc_running);
-  // }
 }
 
 Value clone_value(Module* mod, Value value) {
@@ -526,6 +537,8 @@ Value clone_value(Module* mod, Value value) {
     case TYPE_FUNCTION:
       return MAKE_FUNCTION(mod, GET_PTR(value)->as_func.ip,
                            GET_PTR(value)->as_func.local_space);
+    case TYPE_NATIVE:
+      return MAKE_NATIVE(mod, GET_NATIVE(value).name, GET_NATIVE(value).addr);
     case TYPE_UNKNOWN:
     default:
       return value;

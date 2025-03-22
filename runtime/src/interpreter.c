@@ -14,7 +14,7 @@
 
 Value run_interpreter(Module *module, int32_t ipc, bool does_return,
                       int callstack) {
-  Constants constants = module->constants;
+  Constants *constants = module->constants;
   int32_t *bytecode = module->instrs;
   module->pc = ipc;
 
@@ -82,7 +82,7 @@ case_store_local: {
 }
 
 case_load_constant: {
-  Value value = constants.values[i1];
+  Value value = constants->values[i1];
   stack_push(module, value);
   INCREASE_IP(module);
   goto *jmp_table[op];
@@ -96,8 +96,10 @@ case_load_global: {
 }
 
 case_store_global: {
-  Value value = stack_pop(module);
+  Value value = module->stack->values[module->stack->stack_pointer - 1];
   module->stack->values[i1] = value;
+
+  module->stack->stack_pointer--;
 
   INCREASE_IP(module);
   goto *jmp_table[op];
@@ -105,15 +107,14 @@ case_store_global: {
 
 case_return: {
   struct Frame fr = pop_frame(module);
-  Value ret = stack_pop(module);
+  Value ret = module->stack->values[module->stack->stack_pointer - 1];
 
   module->stack->stack_pointer = fr.stack_pointer;
   module->base_pointer = fr.base_ptr;
   stack_push(module, ret);
 
   module->pc = fr.instruction_pointer;
-
-  if (does_return && callstack == module->callstack) {
+  if (does_return && module->callstack == 0) {
     return ret;
   }
 
@@ -132,12 +133,20 @@ case_compare: {
 }
 
 case_update: {
-  Value variable = stack_pop(module);
-  Value value = stack_pop(module);
+  Value variable = module->stack->values[module->stack->stack_pointer - 1];
+  Value value = module->stack->values[module->stack->stack_pointer - 2];
 
   ASSERT_TYPE(module, "update", variable, TYPE_MUTABLE);
 
+  HeapValue *ptr = GET_PTR(variable);
+
+  // pthread_mutex_lock(&ptr->mutex);
+
   GET_MUTABLE(variable) = value;
+
+  // pthread_mutex_unlock(&ptr->mutex);
+
+  module->stack->stack_pointer -= 2;
 
   INCREASE_IP(module);
   goto *jmp_table[op];
@@ -163,7 +172,7 @@ case_make_list: {
 }
 
 case_list_get: {
-  Value list = stack_pop(module);
+  Value list = module->stack->values[module->stack->stack_pointer - 1];
   uint32_t index = i1;
 
   ASSERT_TYPE(module, "list_get", list, TYPE_LIST);
@@ -173,14 +182,15 @@ case_list_get: {
   ASSERT_FMT(module, index >= 0 && index < GET_PTR(list)->length,
              "Index out of bounds, received %d", index);
 
-  stack_push(module, list_ptr[index]);
+  // stack_push(module, list_ptr[index]);
+  module->stack->values[module->stack->stack_pointer - 1] = list_ptr[index];
 
   INCREASE_IP(module);
   goto *jmp_table[op];
 }
 
 case_call: {
-  request_gc(module);
+  safe_point(module);
   Value callee = stack_pop(module);
 
   ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
@@ -197,7 +207,7 @@ case_call: {
 }
 
 case_call_global: {
-  // printf("Call global %d\n", i1);
+  safe_point(module);
 
   Value callee = module->stack->values[i1];
 
@@ -210,6 +220,7 @@ case_call_global: {
 }
 
 case_call_local: {
+  safe_point(module);
   Value callee = module->stack->values[module->base_pointer + i1];
 
   ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
@@ -221,25 +232,26 @@ case_call_local: {
 }
 
 case_jump_if_false: {
-  request_gc(module);
-  Value value = stack_pop(module);
+  Value value = module->stack->values[module->stack->stack_pointer - 1];
   if (GET_INT(value) == 0) {
     INCREASE_IP_BY(module, i1);
   } else {
     INCREASE_IP(module);
   }
+
+  module->stack->stack_pointer--;
+
   goto *jmp_table[op];
 }
 
 case_jump_rel: {
-  request_gc(module);
   INCREASE_IP_BY(module, i1);
   goto *jmp_table[op];
 }
 
 case_get_index: {
-  Value index = stack_pop(module);
-  Value list = stack_pop(module);
+  Value index = module->stack->values[module->stack->stack_pointer - 1];
+  Value list = module->stack->values[module->stack->stack_pointer - 2];
 
   ASSERT_TYPE(module, "get_index", list, TYPE_LIST);
   ASSERT_TYPE(module, "get_index", index, TYPE_INTEGER);
@@ -250,7 +262,8 @@ case_get_index: {
   ASSERT_FMT(module, idx >= 0 && idx < GET_PTR(list)->length,
              "Index out of bounds, received %d", idx);
 
-  stack_push(module, list_ptr[idx]);
+  module->stack->values[module->stack->stack_pointer - 2] = list_ptr[idx];
+  module->stack->stack_pointer--;
 
   INCREASE_IP(module);
   goto *jmp_table[op];
@@ -264,10 +277,6 @@ case_special: {
 
 case_halt: {
   module->is_terminated = true;
-
-  for (int i = 0; i < module->event_count; i++) {
-    pthread_join(module->events[i]->thread, NULL);
-  }
 
   return kNull;
 }
@@ -283,7 +292,7 @@ case_make_function_and_store: {
 }
 
 case_load_native: {
-  Value native = module->constants.values[i1];
+  Value native = module->constants->values[i1];
 
   ASSERT_TYPE(module, "load_native", native, TYPE_STRING);
 
@@ -305,7 +314,7 @@ case_make_mutable: {
 case_loc: {
   module->latest_position[0] = i1;
   module->latest_position[1] = i2;
-  module->file = GET_STRING(constants.values[i3]);
+  module->file = GET_STRING(constants->values[i3]);
 
   INCREASE_IP(module);
   goto *jmp_table[op];
@@ -478,8 +487,7 @@ case_mod: {
 }
 
 case_call_native: {
-  request_gc(module);
-  Value native = module->constants.values[i1];
+  Value native = module->constants->values[i1];
 
   direct_native_call(
       module, (struct Native){.name = GET_STRING(native), .addr = i1}, i2);
@@ -487,11 +495,11 @@ case_call_native: {
 }
 
 case_get_value: {
-  Value value = stack_pop(module);
+  Value value = module->stack->values[module->stack->stack_pointer - 1];
 
   ASSERT_TYPE(module, "get_value", value, TYPE_MUTABLE);
 
-  stack_push(module, GET_MUTABLE(value));
+  module->stack->values[module->stack->stack_pointer - 1] = GET_MUTABLE(value);
 
   INCREASE_IP(module);
   goto *jmp_table[op];

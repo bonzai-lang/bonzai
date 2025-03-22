@@ -9,9 +9,9 @@ __attribute__((always_inline)) inline struct Frame pop_frame(Module* mod) {
   Value sp = mod->stack->values[mod->base_pointer + 1];
   Value bp = mod->stack->values[mod->base_pointer + 2];
 
-  ASSERT_TYPE(mod, "pop_frame", pc, TYPE_INTEGER);
-  ASSERT_TYPE(mod, "pop_frame", sp, TYPE_INTEGER);
-  ASSERT_TYPE(mod, "pop_frame", bp, TYPE_INTEGER);
+  ASSERT_TYPE(mod, "pop_frame pc", pc, TYPE_INTEGER);
+  ASSERT_TYPE(mod, "pop_frame sp", sp, TYPE_INTEGER);
+  ASSERT_TYPE(mod, "pop_frame bp", bp, TYPE_INTEGER);
 
   struct Frame frame = {
       .instruction_pointer = GET_INT(pc),
@@ -60,6 +60,10 @@ void init_gc(gc_t* gc, Module* mod) {
 
   pthread_cond_init(&gc->gc_cond, NULL);
   pthread_mutex_init(&gc->gc_mutex, NULL);
+
+  gc->stacks.stack_count = 0;
+  gc->stacks.stack_capacity = STACKS_SIZE;
+  gc->stacks.stacks = malloc(sizeof(Stack*) * STACKS_SIZE);
 
   mod->gc = gc;
 }

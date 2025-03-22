@@ -26,6 +26,7 @@ target("bonzai-runtime-test")
   -- Adding the runtime source files
   add_files("src/**.c")
   add_includedirs("include")
+  -- set_policy("build.sanitizer.thread", true)
   
   -- Setting up the target  
   set_targetdir("bin")
