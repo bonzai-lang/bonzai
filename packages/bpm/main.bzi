@@ -75,7 +75,7 @@ fn runCLI(commands: list<CLI>, args: list<string>) => {
 
       match command {
         case Some(Command(_, _, action)) => action(args)
-        case None => print("Command not found")
+        case None => print(" BPM ".white.bgBlue.bold.reset + " Command not found")
       }
     } 
 
@@ -103,8 +103,8 @@ let commands = [
         print(" BPM ".white.bgBlue.bold.reset + " Project $projectName initialized.")
       }
 
-      case [] => print("No arguments provided")
-      case _ => print("Invalid arguments")
+      case [] => print(" BPM ".white.bgBlue.bold.reset + " No arguments provided")
+      case _ => print(" BPM ".white.bgBlue.bold.reset + "Invalid arguments")
     }
   })
 ]
