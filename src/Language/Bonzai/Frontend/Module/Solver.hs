@@ -26,14 +26,6 @@ solveModule (HLIR.MkExprPublic e : xs) = do
   xs' <- solveModule xs
 
   pure (HLIR.MkExprPublic <$> e' <> xs')
-solveModule (HLIR.MkExprModule n es : xs) = do
-  modifyIORef' moduleStack (Set.insert n)
-  es' <- mapM solveExpression es
-  modifyIORef' moduleStack (Set.delete n)
-  
-  xs' <- solveModule xs
-
-  pure (es' <> xs')
 solveModule (e:es) = do
   e' <- solveExpression e
   es' <- solveModule es

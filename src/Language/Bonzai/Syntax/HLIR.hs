@@ -68,7 +68,6 @@ data Expression f t
   | MkExprData (Annotation [Text]) [DataConstructor t]
   | MkExprMatch (Expression f t) [(Pattern f t, Expression f t, Maybe Position)]
   | MkExprPublic (Expression f t)
-  | MkExprModule Text [Expression f t]
   deriving Generic
 
 -- | DATA CONSTRUCTOR TYPE
@@ -154,7 +153,6 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprData ann cs) = T.concat ["data ", toText ann.name, "<", T.intercalate ", " (map toText cs), ">"]
   toText (MkExprMatch e cs) = T.concat ["match ", toText e, " { ", T.intercalate ", " (map (\(c, b, _) -> T.concat [toText c, " => ", toText b]) cs), " }"]
   toText (MkExprPublic e) = T.concat ["pub ", toText e]
-  toText (MkExprModule n es) = T.concat ["module ", n, " { ", T.intercalate ", " (map toText es), " }"]
 
 instance ToText t => ToText (DataConstructor t) where
   toText (MkDataVariable v) = v
@@ -209,7 +207,6 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprData ann cs == MkExprData ann' cs' = ann == ann' && cs == cs'
   MkExprMatch e cs == MkExprMatch e' cs' = e == e' && cs == cs'
   MkExprPublic e == MkExprPublic e' = e == e'
-  MkExprModule n es == MkExprModule n' es' = n == n' && es == es'
   _ == _ = False
 
 instance (Eq t) => Eq (DataConstructor t) where

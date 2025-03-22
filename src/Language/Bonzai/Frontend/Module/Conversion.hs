@@ -313,7 +313,6 @@ resolveImports m (HLIR.MkExprMatch e cs) = do
 
   pure m
 resolveImports m (HLIR.MkExprPublic e) = resolveImports m e
-resolveImports m (HLIR.MkExprModule _ e) = foldM resolveImports m e
 
 
 resolveImportsPattern :: MonadConversion m => ModuleUnit -> HLIR.HLIR "pattern" -> m ModuleUnit

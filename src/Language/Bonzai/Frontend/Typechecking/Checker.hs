@@ -249,7 +249,6 @@ synthesize (HLIR.MkExprData ann constrs) = do
   pure (HLIR.MkExprData ann constrs, HLIR.MkTyId name)
 synthesize (HLIR.MkExprPublic e) = synthesize e
 synthesize (HLIR.MkExprRequire _ _) = compilerError "typecheck: require should not appear in typechecking"
-synthesize (HLIR.MkExprModule _ _) = compilerError "typecheck: module should not appear in typechecking"
 
 check :: M.MonadChecker m => HLIR.HLIR "expression" -> HLIR.Type -> m (HLIR.TLIR "expression")
 check (HLIR.MkExprApplication f args) fTy@(argsTys HLIR.:->: _) = do
@@ -375,7 +374,6 @@ check (HLIR.MkExprLiteral l) ty = do
   ty' `U.unifiesWith` ty
   pure (HLIR.MkExprLiteral l)
 check (HLIR.MkExprRequire _ _) _ = compilerError "typecheck: require should not appear in typechecking"
-check (HLIR.MkExprModule _ _) _ = compilerError "typecheck: module should not appear in typechecking"
 check (HLIR.MkExprPublic e) ty = check e ty
 check e ty = do
   (e', ty') <- synthesize e

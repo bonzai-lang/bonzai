@@ -379,6 +379,7 @@ parsePatternTerm = localize $ P.choice [
 
       pure (HLIR.MkPatList pats slice Nothing),
     P.try $ HLIR.MkPatConstructor <$> Lex.identifier <*> Lex.parens (P.sepBy1 parsePattern Lex.comma),
+    P.try $ HLIR.MkPatConstructor "Tuple" <$> Lex.parens (P.sepBy1 parsePattern Lex.comma),
     HLIR.MkPatLiteral <$> Lex.lexeme (P.choice [Lit.parseLiteral, HLIR.MkLitString <$> Lit.parseString]),
     HLIR.MkPatWildcard <$ Lex.symbol "_",
     HLIR.MkPatVariable <$> Lex.identifier <*> pure Nothing
@@ -703,20 +704,6 @@ parseExpression = localize $ P.makeExprParser parseTerm table
         ]
       ]
 
--- | PARSE MODULE EXPRESSION
--- | Parse a module expression. A module expression is an expression that consists of
--- | a module definition. It is used to define a module in Bonzai.
--- | The syntax of a module expression is as follows:
--- |
--- | "module" identifier "{" toplevel* "}"
-parseModule :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseModule = localize $ do
-  void $ Lex.reserved "module"
-  name <- Lex.identifier
-  body <- Lex.braces (P.sepEndBy parseToplevel (P.optional (Lex.symbol ";")))
-
-  pure $ HLIR.MkExprModule name body
-
 parseTopLet :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseTopLet = localize $ do
   void $ Lex.reserved "let"
@@ -746,7 +733,6 @@ parseToplevel :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseToplevel =
   localize $ P.choice [
     parsePublic,
-    parseModule,
     parseInterface,
     P.try parseDatatype,
     parseDirectData,
