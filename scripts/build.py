@@ -57,6 +57,10 @@ shift
 args=$*
 
 bonzaic build "$first_arg"
+ret_code=$?
+if [ $ret_code -ne 0 ]; then
+  exit $ret_code
+fi
 bonzai-runtime "$first_arg".bin -l "$BONZAI_PATH/bindings/standard/bin/bindings.dylib" $args
 """
 
