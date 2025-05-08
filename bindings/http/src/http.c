@@ -136,7 +136,10 @@ Value send_buffer(Module* module, Value* args, int argc) {
   int client_socket = GET_INT(args[0]);
   char* buf = GET_STRING(args[1]);
 
-  char* response = malloc(strlen(buf) + 100);
+  // Get length of strlen(buf)
+  size_t len = sprintf(NULL, "%d", strlen(buf));
+
+  char* response = malloc(strlen(buf) + len + 69);
   sprintf(response,
           "HTTP/1.1 200 OK\r\n"
           "Content-Type: text/plain\r\n"
@@ -160,16 +163,19 @@ Value redirect_to(Module* module, Value* args, int argc) {
   int client_socket = GET_INT(args[0]);
   char* buf = GET_STRING(args[1]);
 
-  char* response = malloc(strlen(buf) + 100);
+  // Get length of strlen(buf)
+  size_t len = sprintf(NULL, "%d", strlen(buf));
+
+  char* response = malloc(strlen(buf) + len + 167);
   sprintf(response,
           "HTTP/1.1 302 Found\r\n"
           "Location: %s\r\n"
           "Content-Type: text/html\r\n"
-          "Content-Length: 54\r\n"
+          "Content-Length: %zu\r\n"
           "Connection: close\r\n"
           "\r\n"
           "<html><body><h1>302 Found</h1><p>Redirecting...</p></body></html>",
-          buf);
+          buf, strlen(buf));
 
   int bytes_sent = send(client_socket, response, strlen(response), 0);
 
