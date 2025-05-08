@@ -124,6 +124,8 @@ void gc(struct Module* vm) {
   //        numObjects - gc_->num_objects, gc_->max_objects,
   //        vm->stack->stack_pointer);
 
+  pthread_cond_signal(&gc_->gc_cond);
+
   vm->gc->gc_running = false;
   pthread_mutex_unlock(&gc_->gc_mutex);
 }
@@ -182,6 +184,7 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
   v->next = gc_->first_object;
   v->is_constant = false;
   pthread_mutex_init(&v->mutex, NULL);
+  pthread_cond_init(&v->cond, NULL);
 
   gc_->first_object = v;
   gc_->num_objects++;
@@ -498,7 +501,7 @@ void debug_value(Value v) {
 
 void safe_point(Module* mod) {
   pthread_mutex_lock(&mod->gc->gc_mutex);
-  if (mod->gc->gc_running) {
+  while (mod->gc->gc_running) {
     pthread_cond_wait(&mod->gc->gc_cond, &mod->gc->gc_mutex);
   }
   pthread_mutex_unlock(&mod->gc->gc_mutex);
@@ -506,7 +509,7 @@ void safe_point(Module* mod) {
 
 void stop_the_world(Module* mod, bool stop) {
   if (!stop) {
-    pthread_cond_broadcast(&mod->gc->gc_cond);
+    pthread_cond_signal(&mod->gc->gc_cond);
   }
 }
 

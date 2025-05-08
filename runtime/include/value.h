@@ -155,6 +155,7 @@ typedef struct HeapValue {
   struct HeapValue* next;
   void (*destructor)(struct Module*, struct HeapValue*);
   pthread_mutex_t mutex;
+  pthread_cond_t cond;
 
   union {
     char* as_string;
@@ -215,6 +216,7 @@ void mark_value(Value value);
 Value clone_value(struct Module* mod, Value value);
 void request_gc(struct Module* vm);
 void free_value(struct Module* mod, HeapValue* unreached);
+void safe_point(struct Module* mod);
 
 #define MAKE_SPECIAL() kNull
 #define MAKE_ADDRESS(x) MAKE_INTEGER(x)
