@@ -204,7 +204,7 @@ parseLet = localize $ do
 
   pure $ HLIR.MkExprLet mempty (case name of
     Left n -> Left (HLIR.MkAnnotation n Nothing)
-    Right pat | isPatVar pat, name' <- getPatVar pat -> Left (HLIR.MkAnnotation name' Nothing)
+    Right pat | isPatVar pat, Just name' <- getPatVar pat -> Left (HLIR.MkAnnotation name' Nothing)
     Right pat -> Right pat) expr body
 
 -- | PARSE MUTABLE DECLARATION
@@ -224,7 +224,7 @@ parseMut = localize $ do
 
   pure $ HLIR.MkExprLet mempty (case name of
     Left n -> Left (HLIR.MkAnnotation n Nothing)
-    Right pat | isPatVar pat, name' <- getPatVar pat -> Left (HLIR.MkAnnotation name' Nothing)
+    Right pat | isPatVar pat, Just name' <- getPatVar pat -> Left (HLIR.MkAnnotation name' Nothing)
     Right pat -> Right pat) (HLIR.MkExprMut expr) body
 
 isPatVar :: HLIR.HLIR "pattern" -> Bool
@@ -232,10 +232,10 @@ isPatVar (HLIR.MkPatVariable _ _) = True
 isPatVar (HLIR.MkPatLocated p _) = isPatVar p
 isPatVar _ = False
 
-getPatVar :: HLIR.HLIR "pattern" -> Text
-getPatVar (HLIR.MkPatVariable n _) = n
+getPatVar :: HLIR.HLIR "pattern" -> Maybe Text
+getPatVar (HLIR.MkPatVariable n _) = Just n
 getPatVar (HLIR.MkPatLocated p _) = getPatVar p
-getPatVar _ = ""
+getPatVar _ = Nothing
 
 -- | PARSE MUTABLE EXPRESSION
 -- | Parse a mutable expression. A mutable expression is an expression that consists
@@ -489,6 +489,10 @@ parseLambda = localize $ do
 
   (args', body') <- List.foldlM (\(vars, acc) x -> case x of
       Left a -> pure (vars <> [a], acc)
+      Right (HLIR.MkPatVariable name _) -> 
+        pure (vars <> [HLIR.MkAnnotation name Nothing], acc)
+      Right (HLIR.MkPatLocated p _) | Just name <- getPatVar p -> 
+        pure (vars <> [HLIR.MkAnnotation name Nothing], acc)
       Right p -> do
         name <- freshSymbol
         pure (vars <> [HLIR.MkAnnotation name Nothing], HLIR.MkExprMatch (HLIR.MkExprVariable (HLIR.MkAnnotation name Nothing)) [(p, acc, Nothing)])
@@ -548,6 +552,21 @@ parseRequire = localize $ do
 
   pure $ HLIR.MkExprRequire path (fromList vars)
 
+-- | PARSE SPAWN EXPRESSION
+-- | Parse a spawn expression. A spawn expression is an expression that consists of
+-- | a spawn statement. It is used to spawn a new thread in Bonzai.
+-- | The syntax of a spawn expression is as follows:
+-- |
+-- | "spawn" expression
+parseSpawn :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseSpawn = localize $ do
+  void $ Lex.reserved "spawn"
+  expr <- parseExpression
+
+  pure $ HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "Thread::new" Nothing)) [
+      HLIR.MkExprLambda [] Nothing expr
+    ]
+
 -- | PARSE TERM EXPRESSION
 -- | Parse a term expression. A term expression is an expression that consists of a term.
 -- | It is used to represent a non-recursive value in Bonzai.
@@ -556,6 +575,7 @@ parseTerm =
   localize $ P.choice [
     parseLambda,
     parseLet,
+    parseSpawn,
     P.try parseMut,
     parseMutExpr,
     parseMatch,
