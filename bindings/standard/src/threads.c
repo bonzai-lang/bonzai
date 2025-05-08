@@ -17,15 +17,18 @@ void* value_to_function(void* value) {
   pthread_mutex_lock(&module->module_mutex);
   new_module->stack = stack_new();
   new_module->gc = module->gc;
-  int sc = module->gc->stacks.stack_count;
+  int sc = new_module->gc->stacks.stack_count;
   new_module->gc->stacks.stacks[sc] = new_module->stack;
-  module->gc->stacks.stack_count++;
+  new_module->gc->stacks.stack_count++;
   // memcpy(new_module->stack->values, module->stack->values,
   //        GLOBALS_SIZE * sizeof(Value));
 
   for (int i = 0; i < GLOBALS_SIZE; i++) {
-    new_module->stack->values[i] =
-        clone_value(module, module->stack->values[i]);
+    Value v = module->stack->values[i];
+
+    if (v != kNull || v != NULL) {
+      new_module->stack->values[i] = clone_value(module, v);
+    }
   }
 
   new_module->instr_count = module->instr_count;
@@ -82,6 +85,23 @@ Value create_thread(Module* mod, Value* args, int argc) {
   data->function = clone_value(mod, args[0]);
   data->mod = mod;
   pthread_create(&thread, NULL, value_to_function, data);
+
+  HeapValue* thread_value = allocate(mod, TYPE_API);
+  thread_value->as_any = thread;
+  thread_value->destructor = NULL;
+  return MAKE_PTR(thread_value);
+}
+
+Value create_detached_thread(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "create_detached_thread", argc, 1);
+  ASSERT_TYPE(mod, "create_detached_thread", args[0], TYPE_LIST);
+
+  pthread_t thread;
+  struct thread_data_t* data = malloc(sizeof(struct thread_data_t));
+  data->function = clone_value(mod, args[0]);
+  data->mod = mod;
+  pthread_create(&thread, NULL, value_to_function, data);
+  pthread_detach(thread);
 
   HeapValue* thread_value = allocate(mod, TYPE_API);
   thread_value->as_any = thread;

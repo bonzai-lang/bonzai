@@ -386,7 +386,6 @@ Value toString(Module* mod, Value* args, int argc) {
 
         str = realloc(str, strlen(str) + strlen(item) + 3);
 
-        printf("item: %s\n", item);
         strcat(str, item);
         if (i < list->length - 1) {
           strcat(str, ", ");
@@ -602,4 +601,92 @@ Value free_gc_value(Module* mod, Value* args, int argc) {
   free_value(mod, GET_PTR(args[0]));
 
   return MAKE_INTEGER(0);
+}
+
+Value create_mutex(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "create_mutex", argc, 1);
+
+  HeapValue* mutex_v = allocate(mod, TYPE_API);
+  mutex_v->as_ptr = malloc(sizeof(Value));
+
+  *mutex_v->as_ptr = args[0];
+
+  return MAKE_PTR(mutex_v);
+}
+
+Value lock_mutex(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "lock_mutex", argc, 1);
+  ASSERT_TYPE(mod, "lock_mutex", args[0], TYPE_API);
+
+  HeapValue* mutex_v = GET_PTR(args[0]);
+  pthread_mutex_lock(&mutex_v->mutex);
+
+  return *((Value*) mutex_v->as_ptr);
+}
+
+Value unlock_mutex(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "unlock_mutex", argc, 1);
+  ASSERT_TYPE(mod, "unlock_mutex", args[0], TYPE_API);
+
+  HeapValue* mutex_v = GET_PTR(args[0]);
+  pthread_mutex_unlock(&mutex_v->mutex);
+
+  return kNull;
+}
+
+Value wait_mutex(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "wait_mutex", argc, 1);
+  ASSERT_TYPE(mod, "wait_mutex", args[0], TYPE_API);
+
+  HeapValue* mutex_v = GET_PTR(args[0]);
+  
+  while (*((Value*) mutex_v->as_any) == kNull) {
+    pthread_cond_wait(&mutex_v->cond, &mutex_v->mutex);
+  }
+
+  return kNull;
+}
+
+Value signal_mutex(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "signal_mutex", argc, 1);
+  ASSERT_TYPE(mod, "signal_mutex", args[0], TYPE_API);
+
+  HeapValue* mutex_v = GET_PTR(args[0]);
+  pthread_cond_signal(&mutex_v->cond);
+
+  return kNull;
+}
+
+Value destroy_mutex(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "destroy_mutex", argc, 1);
+  ASSERT_TYPE(mod, "destroy_mutex", args[0], TYPE_API);
+
+  HeapValue* mutex_v = GET_PTR(args[0]);
+  pthread_mutex_destroy(&mutex_v->mutex);
+  free(mutex_v->as_any);
+  free(mutex_v);
+
+  return kNull;
+}
+
+Value show_mutex(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "show_mutex", argc, 1);
+  ASSERT_TYPE(mod, "show_mutex", args[0], TYPE_API);
+
+  HeapValue* mutex_v = GET_PTR(args[0]);
+  printf("<mutex "); 
+  debug_value(*((Value*) mutex_v->as_any));
+  printf(">\n");
+
+  return kNull;
+}
+
+Value write_mutex(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "write_mutex", argc, 2);
+  ASSERT_TYPE(mod, "write_mutex", args[0], TYPE_API);
+
+  HeapValue* mutex_v = GET_PTR(args[0]);
+  *((Value*) mutex_v->as_any) = args[1];
+
+  return kNull;
 }

@@ -48,11 +48,69 @@ size_t write_headers_callback(void *ptr, size_t size, size_t nmemb, void *data) 
     return total_size;
 }
 
+Value fetch_helper(Module* module, Value* args, int argc) {
+  ASSERT_ARGC(module, "fetch_helper", argc, 3);
+  ASSERT_TYPE(module, "fetch_helper", args[0], TYPE_STRING);
+  ASSERT_TYPE(module, "fetch_helper", args[1], TYPE_STRING);
+  ASSERT_TYPE(module, "fetch_helper", args[2], TYPE_STRING);
+
+  char* url = GET_STRING(args[0]);
+  char* method = GET_STRING(args[1]);
+  char* headers = GET_STRING(args[2]);
+
+  CURL *curl;
+  CURLcode res;
+
+  curl = curl_easy_init();
+  if (curl) {
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method);
+
+    struct MemoryStruct chunk;
+    chunk.memory = malloc(1);
+    chunk.size = 0;
+    chunk.headers = malloc(1);
+    chunk.headers_size = 0;
+    chunk.mod = module;
+
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, write_headers_callback);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &chunk);
+
+    if (strcmp(headers, "") != 0) {
+      struct curl_slist *chunk_ = NULL;
+      chunk_ = curl_slist_append(chunk_, headers);
+      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk_);
+    }
+
+    res = curl_easy_perform(curl);
+    if (res != CURLE_OK) {
+      char* error = strdup(curl_easy_strerror(res));
+
+      free(chunk.memory);
+      free(chunk.headers);
+      curl_easy_cleanup(curl);
+      return throwable_error(module, error);
+    }
+
+    curl_easy_cleanup(curl);
+
+    return throwable_ok(module, make_tuple(
+      module,
+      MAKE_STRING(module, chunk.memory),
+      MAKE_STRING(module, chunk.headers)
+    ));
+  }
+
+  return throwable_error(module, "Failed to initialize curl");
+}
 
 // Fetch is a native function that fetches a URL and returns the content as a string.
 Value fetch(Module* module, Value *args, int argc) {
-  ASSERT_ARGC(module, "fetch", argc, 1);
+  ASSERT_ARGC(module, "fetch", argc, 2);
   ASSERT_TYPE(module, "fetch", args[0], TYPE_STRING);
+  ASSERT_TYPE(module, "fetch", args[1], TYPE_STRING);
 
   CURL *curl;
   CURLcode res;

@@ -19,7 +19,11 @@ Value add_value(Module* mod, Value* args, int argc) {
     }
     
     case TYPE_STRING: {
-      return MAKE_STRING_MULTIPLE(mod, GET_STRING(args[0]), GET_STRING(args[1]));
+      char* s1 = GET_STRING(args[0]);
+      char* s2 = GET_STRING(args[1]);
+      char* s = malloc(strlen(s1) + strlen(s2) + 1);
+      snprintf(s, strlen(s1) + strlen(s2) + 1, "%s%s", s1, s2);
+      return MAKE_STRING(mod, s);
     }
 
     case TYPE_LIST: {
