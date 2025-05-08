@@ -12,6 +12,15 @@ pub fn List::slice<A>(xs: list<A>, start: int, end: int): list<A> =>
     else List::slice(xs, start - 1, end - 1)
   }
 
+pub fn foreach<A>(xs: list<A>, f: fn(A): unit): unit =>
+  match xs {
+    case [] => unit
+    case [x .. xs] => {
+      f(x)
+      foreach(xs, f)
+    }
+  }
+
 pub fn List::elem<A>(x: A, xs: list<A>): bool =>
   match xs {
     case [] => false
@@ -88,3 +97,6 @@ pub fn List::tail<A>(xs: list<A>): list<A> =>
     case [x .. xs] => xs
     case [] => []
   }
+
+pub fn range(start: int, end: int): list<int> => 
+  if start > end then [] else [start] + range(start + 1, end)

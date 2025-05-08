@@ -8,6 +8,7 @@ require "../io"
 
 extern fn create_thread<A>(cb: fn(): A): Thread<A>
 extern fn wait_thread<A>(thread: Thread<A>): A
+extern fn create_detached_thread<A>(cb: fn(): A): Thread<A>
 extern fn lock<A>(x: A): int
 extern fn unlock<A>(x: A): int
 
@@ -21,3 +22,6 @@ pub fn Thread::withVariable<A, B>(cb: fn(A): B, x: A): B => {
 
 pub let Thread::new = create_thread
 pub let Thread::wait = wait_thread
+pub let Thread::newDetached = create_detached_thread
+
+pub let wait = wait_thread

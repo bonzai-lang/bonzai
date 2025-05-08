@@ -7,6 +7,8 @@ require "std:datatypes/list"
 require "std:io"
 require "std:datatypes/map"
 require "std:datatypes/unit"
+require "std:datatypes/optional"
+require "std:datatypes/threads"
 
 extern fn start_http_server(port: int): HTTP
 extern fn accept_request(server: HTTP): Request
@@ -15,12 +17,71 @@ extern fn get_buffer(req: Request): string
 pub extern fn send_buffer(req: Request, buffer: string)
 pub extern fn send_buffer_with(req: Request, buffer: string)
 extern fn close_server(server: HTTP)
-pub extern fn fetch(url: string): Throwable<(string, string)>
-extern fn fetch_with(url: string, headers: string): Throwable<(string, string)>
 extern fn redirect_to(req: Request, url: string): unit
 extern fn get_path(req: Request): string
 pub extern fn make_unit(): unit
-pub extern fn post_data(url: string, data: string, headers: string): Throwable<(string, string)>
+
+fn HTTP::create(callback: fn(Request): bool, port: int) => {
+  let server = start_http_server(port)
+  
+  mut running = true
+
+  while running.value {
+    let req = accept_request(server)
+    running = callback(req)
+    close_client(req)
+  }
+
+  close_server(server)
+} 
+
+pub extern fn fetch_helper(url: string, method: string, headers: string): Throwable<(string, string)>
+
+pub fn Dynamic::mapToHeaders(headers: Dynamic): string => {
+  mut headersString = ""
+  mut i = 0
+  
+  match headers {
+    case Dyn::Map(entries) => {
+      let Map(xs) = entries
+
+      while i.value < List::length(xs) {
+        match xs[i.value] {
+          case Tuple(key, val) => {
+            let valAsString = Dynamic::toString(val)
+            headersString = headersString.value + "$key: $valAsString\r\n"
+            i = i.value + 1
+          }
+        }
+      }
+    }
+  }
+
+  headersString.value
+}
+
+pub fn fetch(url: string, options: Optional<Dynamic>): Throwable<(string, string)> => {
+  match options {
+    case Some(options) => {
+      let method = Dynamic::get(options, "method")
+      let body = Dynamic::get(options, "body")
+      let headers = Dynamic::get(options, "headers")
+      
+      let Dyn::String(methodString) = Optional::unwrap_or(method, Dyn::String("GET"))
+      let Dyn::String(bodyString) = Optional::unwrap_or(body, Dyn::String(""))
+
+      match headers {
+        case Some(headers) => {
+          let headersString = Dynamic::mapToHeaders(headers) + "\r\n" + bodyString
+
+          fetch_helper(url, methodString, headersString)
+        }
+        case None => fetch_helper(url, methodString, bodyString)
+      }
+    }
+    case None => fetch_helper(url, "GET", "")
+  }
+}
 
 type Header {
   Header(code: int, reason: string)
@@ -66,10 +127,3 @@ fn respondText(req: Request, ty: string, content: string) =>
     "Content-Length": String::length(content).toString,
     "Connection": "close"
   }, content)
-
-pub fn fetchWithHeaders(url: string, headers: Map<string>): Throwable<(string, string)> => {
-  match fetch_with(url, Map::mapToHeaders(headers)) {
-    case Ok(Tuple(buffer, content)) => Ok(Tuple(buffer, content))
-    case Error(e) => Error(e)
-  }
-}

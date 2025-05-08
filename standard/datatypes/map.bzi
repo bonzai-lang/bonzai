@@ -4,6 +4,7 @@ require "std:datatypes/error"
 require "std:datatypes/list"
 require "std:datatypes/optional"
 require "std:datatypes/unit"
+require "std:datatypes/string"
 
 pub type Map<V> {
   Map(entries: list<Tuple<string, V>>)
@@ -66,6 +67,21 @@ pub fn Map::values<V>(self: Map<V>): list<V> =>
 pub fn Map::fromList<V>(entries: list<Tuple<string, V>>): Map<V> =>
   Map(entries)
 
+pub fn Map::toString<V>(self: Map<V>): string =>
+  match self {
+    case Map(entries) => {
+      let entriesString = List::foldl(
+        fn (entry, acc) => 
+          match entry {
+            case Tuple(k, v) => acc + "$k: $v, "
+          },
+        "",
+        entries
+      )
+      "{ $entriesString }"
+    }
+  }
+
 pub fn Map::toList<V>(self: Map<V>): list<Tuple<string, V>> =>
   match self {
     case Map(entries) => entries
@@ -75,4 +91,34 @@ pub fn Map::size<V>(self: Map<V>): int =>
   match self {
     case Map(entries) => List::length(entries)
   }
-  
+
+pub type Dynamic {
+  Dyn::Integer(x: int),
+  Dyn::Float(x: float),
+  Dyn::String(x: string),
+  Dyn::Bool(x: bool),
+  Dyn::Map(x: Map<Dynamic>),
+  Dyn::List(x: list<Dynamic>),
+  Dyn::Unit
+}
+
+pub fn Dynamic::get(self: Dynamic, key: string): Optional<Dynamic> =>
+  match self {
+    case Dyn::Map(x) => Map::lookup(x, key)
+    case _ => None
+  }
+
+pub fn Dynamic::toString(self: Dynamic): string =>
+  match self {
+    case Dyn::Integer(x) => x.toString()
+    case Dyn::Float(x) => x.toString()
+    case Dyn::String(x) => x
+    case Dyn::Bool(x) => x.toString()
+    case Dyn::Map(x) => Map::toString(x)
+    case Dyn::List(x) => List::foldl(
+      fn (elem, acc) => acc + elem.toString() + ", ",
+      "",
+      x
+    )
+    case Dyn::Unit => "null"
+  }

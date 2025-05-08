@@ -107,20 +107,22 @@ pub fn getJSON(input: string): JSON =>
     case None => Null
   }
 
-pub fn stringify(json: JSON): string =>
+pub fn JSON::parse(input: string): JSON => getJSON(input)
+
+pub fn JSON::stringify(json: JSON): string =>
   match json {
     case Object(fields) => {
       let pairs = List::map(fields, fn (v) => 
         "\"" 
           + Tuple::first(v) 
           + "\":" 
-          + stringify(Tuple::second(v))
+          + JSON::stringify(Tuple::second(v))
       )
 
       "{" + String::join(pairs, ",") + "}"
     }
     case Array(values) => 
-      "[" + String::join(List::map(values, stringify), ",") + "]"
+      "[" + String::join(List::map(values, JSON::stringify), ",") + "]"
     case String(val) => "\"" + val + "\""
     case Integer(val) => val.toString()
     case Float(val) => val.toString()
@@ -155,18 +157,3 @@ pub fn getKeys(json: JSON, keys: list<string>): Optional<JSON> =>
     Some(json),
     keys
   )
-
-pub fn JSON::stringifyMap(json: Map<JSON>): string => {
-  let pairs = Map::toList(json)
-  let fields = List::map(pairs, fn (v) => 
-    "\"" 
-      + Tuple::first(v) 
-      + "\":" 
-      + stringify(Tuple::second(v))
-  )
-
-  "{" + String::join(fields, ",") + "}"
-}
-
-pub fn JSON::fromMap(json: Map<JSON>): JSON =>
-  Object(Map::toList(json))
