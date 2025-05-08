@@ -420,18 +420,25 @@ instance Assemble MLIR.Expression where
   assemble MLIR.MkExprSpecial = do
     pure (LLIR.instr LLIR.Special)
 
-  assemble (MLIR.MkExprTryCatch e n e') = do
-    gs <- readIORef globals
-    locals <- ask
+  assemble (MLIR.MkExprBinary op e1 e2) = do
+    e1' <- assemble e1
+    e2' <- assemble e2
 
-    let instr
-          | Set.member n locals = LLIR.storeLocal n
-          | Set.member n gs = LLIR.storeGlobal n
-          | otherwise = compilerError $ "Variable " <> n <> " not found in globals or locals"
+    let op' = case op of
+          "+" -> LLIR.Add
+          "-" -> LLIR.Sub
+          "*" -> LLIR.Mul
+          "/" -> LLIR.Div
+          "%" -> LLIR.Mod
+          "==" -> LLIR.Compare LLIR.EqualTo
+          "!=" -> LLIR.Compare LLIR.NotEqualTo
+          "<" -> LLIR.Compare LLIR.LessThan
+          ">" -> LLIR.Compare LLIR.GreaterThan
+          "<=" -> LLIR.Compare LLIR.LessThanOrEqualTo
+          ">=" -> LLIR.Compare LLIR.GreaterThanOrEqualTo
+          _ -> error "Impossible"
 
-    e'' <- assemble e
-    e''' <- assemble e'
-    pure $ LLIR.instr (LLIR.TryCatch (length e'')) <> e'' <> LLIR.instr (LLIR.JumpRel (length e''' + 2)) <> instr <> e'''
+    pure $ e1' <> e2' <> LLIR.instr op'
 
 instance Assemble MLIR.Update where
   assemble (MLIR.MkUpdtVariable n) = do
@@ -503,7 +510,6 @@ getGlobals (MLIR.MkExprList es : xs) = getGlobals (es ++ xs)
 getGlobals (MLIR.MkExprIndex e i : xs) = getGlobals (e : i : xs)
 getGlobals (MLIR.MkExprUnpack _ e e' : xs) = getGlobals (e : e' : xs)
 getGlobals (MLIR.MkExprWhile c e : xs) = getGlobals (c : e : xs)
-getGlobals (MLIR.MkExprTryCatch e n e' : xs) = Set.insert n (getGlobals (e : e' : xs))
 getGlobals (_ : xs) = getGlobals xs
 getGlobals [] = mempty
 

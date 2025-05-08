@@ -42,6 +42,9 @@ import qualified Data.List as List
 -- |   panic "non-exhaustive pattern"
 convert :: HLIR.TLIR "expression" -> MLIR.MLIR "expression"
 convert (HLIR.MkExprLiteral l) = MLIR.MkExprLiteral l
+convert (HLIR.MkExprApplication var [x, y]) 
+  | isVariable var, name <- getVariable var, name `elem` operators =
+      MLIR.MkExprBinary name (convert x) (convert y)
 convert (HLIR.MkExprVariable a) = MLIR.MkExprVariable a.name
 convert (HLIR.MkExprApplication f args) = MLIR.MkExprApplication (convert f) (map convert args)
 convert (HLIR.MkExprLet _ (Left ann) e b) = case convert b of
@@ -66,6 +69,21 @@ convert (HLIR.MkExprMatch e cs) = do
   MLIR.MkExprUnpack "scrut" e' (createIfs cases')
 convert (HLIR.MkExprMut e) = MLIR.MkExprMut (convert e)
 convert _ = compilerError "impossible"
+
+operators :: [Text]
+operators =
+  [ "=="
+  , "!="
+  , "<"
+  , "<="
+  , ">"
+  , ">="
+  , "+"
+  , "-"
+  , "*"
+  , "/"
+  , "%"
+  ]
 
 -- | Create a function bsaed on a datatype constructor, the function will return a
 -- | list that starts with a special value, followed by the type name and the
@@ -135,6 +153,16 @@ equalsTo a b = MLIR.MkExprApplication (MLIR.MkExprVariable "==") [a, b]
 
 sliceFrom :: MLIR.MLIR "expression" -> Integer -> MLIR.MLIR "expression"
 sliceFrom e i = MLIR.MkExprApplication (MLIR.MkExprVariable "sliceFrom") [e, MLIR.MkExprLiteral (HLIR.MkLitInt i)]
+
+isVariable :: HLIR.TLIR "expression" -> Bool
+isVariable (HLIR.MkExprVariable _) = True
+isVariable (HLIR.MkExprLoc e _) = isVariable e
+isVariable _ = False
+
+getVariable :: HLIR.TLIR "expression" -> Text
+getVariable (HLIR.MkExprVariable x) = x.name
+getVariable (HLIR.MkExprLoc e _) = getVariable e
+getVariable _ = compilerError "expected variable"
 
 -- | Create a sequence of conditions based on a pattern match
 -- | The function returns a list of conditions and a map of variables that need

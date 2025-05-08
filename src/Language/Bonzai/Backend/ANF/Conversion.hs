@@ -56,7 +56,10 @@ convert (MLIR.MkExprTernary c t e) = do
   (t', stmts2) <- convert t
   (e', stmts3) <- convert e
   
-  pure (MLIR.MkExprTernary c' t' e', stmts1 <> stmts2 <> stmts3)
+  let bl2 = createBlock [(t', stmts2)]
+  let bl3 = createBlock [(e', stmts3)]
+
+  pure (MLIR.MkExprTernary c' (MLIR.MkExprBlock bl2) (MLIR.MkExprBlock bl3), stmts1)
 convert (MLIR.MkExprUpdate u e) = do
   (u', stmts1) <- convertUpdate u
   (e', stmts2) <- convert e
@@ -117,14 +120,17 @@ convert (MLIR.MkExprLoc p e) = do
 convert (MLIR.MkExprWhile c e) = do
   (c', stmts1) <- convert c
   (e', stmts2) <- convert e
+
+  let eBl = createBlock [(e', stmts2)]
+  let cBl = createBlock [(c', stmts1)]
   
-  pure (MLIR.MkExprWhile c' e', stmts1 <> stmts2)
+  pure (MLIR.MkExprWhile (MLIR.MkExprBlock cBl) (MLIR.MkExprBlock eBl), [])
 convert MLIR.MkExprSpecial = pure (MLIR.MkExprSpecial, [])
-convert (MLIR.MkExprTryCatch e n e') = do
-  (e'', stmts1) <- convert e
-  (e''', stmts2) <- convert e'
+convert (MLIR.MkExprBinary op e1 e2) = do
+  (e1', stmts1) <- convert e1
+  (e2', stmts2) <- convert e2
   
-  pure (MLIR.MkExprTryCatch e'' n e''', stmts1 <> stmts2)
+  pure (MLIR.MkExprBinary op e1' e2', stmts1 <> stmts2)
 
 convertUpdate :: MonadIO m => MLIR.MLIR "update" -> m (MLIR.MLIR "update", [(Text, MLIR.MLIR "expression")])
 convertUpdate (MLIR.MkUpdtVariable a) = pure (MLIR.MkUpdtVariable a, [])
