@@ -1,0 +1,26 @@
+require "std:foundation"
+require "std:datatypes/map"
+require "std:datatypes/json"
+require "std:http"
+
+let res = fetch(
+  "http://localhost:3000",
+  Some(Dyn::Map({
+    method: Dyn::String("POST"),
+    headers: Dyn::Map({
+      "Content-Type": Dyn::String("application/json"),
+      "Content-Length": Dyn::String("16")
+    }),
+    body: Dyn::String("{\"key\": \"value\"}")
+  }))
+)
+
+match res {
+  case Ok((body, headers)) => {
+    print(JSON::parse(body))
+  }
+
+  case Error(err) => {
+    print(err)
+  }
+}

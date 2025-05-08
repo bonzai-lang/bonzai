@@ -4,9 +4,7 @@ require "std:language/parser": runParser, explode
  
 let json = read_file("example/data/large-file.json")
 
-mut i = 0
-
-while i.value < 35 {
+range(0, 35).foreach(fn(i) => {
+  let json = read_file("example/data/large-file.json")
   print(getJSON(json))
-  i += 1
-}
+})
