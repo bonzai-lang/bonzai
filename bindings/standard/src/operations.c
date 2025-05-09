@@ -20,21 +20,16 @@ void print_map_values(Value map) {
 
   printf("{ ");
 
-  for (uint32_t i = 0; i < map_ptr->length; i++) {
-    Value tuple = map_ptr->as_ptr[i];
+  for (uint32_t i = 0; i < map_ptr->length; i += 2) {
+    Value key = map_ptr->as_ptr[i];
+    Value value = map_ptr->as_ptr[i + 1];
+    
+    char* key_name = GET_STRING(key);
 
-    if (!IS_PTR(tuple)) return;
+    printf("%s: ", key_name);
+    print_with_level(value, 1);
 
-    HeapValue* tuple_ptr = GET_PTR(tuple);
-
-    if (tuple_ptr->type != TYPE_LIST) return;
-    if (tuple_ptr->length != 5) return;
-
-    print_with_level(tuple_ptr->as_ptr[3], 0);
-    printf(": ");
-    print_with_level(tuple_ptr->as_ptr[4], 1);
-
-    if (i < map_ptr->length - 1) {
+    if (i < map_ptr->length - 2) {
       printf(", ");
     }
   }
