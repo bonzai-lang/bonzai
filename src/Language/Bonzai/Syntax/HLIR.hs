@@ -68,6 +68,11 @@ data Expression f t
   | MkExprData (Annotation [Text]) [DataConstructor t]
   | MkExprMatch (Expression f t) [(Pattern f t, Expression f t, Maybe Position)]
   | MkExprPublic (Expression f t)
+  | MkExprRecordExtension (Expression f t) Text Bool (Expression f t)
+  | MkExprRecordEmpty
+  | MkExprRecordAccess (Expression f t) Text
+  | MkExprReturn (Expression f t)
+  | MkExprSingleIf (Expression f t) (Expression f t)
   deriving Generic
 
 -- | DATA CONSTRUCTOR TYPE
@@ -100,7 +105,7 @@ instance (ToText t, ToText (f t)) => Show (Expression f t) where
 -- | BINARY EXPRESSION PATTERN
 -- | A pattern synonym to represent binary expressions in Bonzai.
 pattern MkExprBinary :: Text -> Expression Maybe t -> Expression Maybe t -> Expression Maybe t
-pattern MkExprBinary op a b = MkExprApplication (MkExprVariable (MkAnnotation op Nothing)) [a, b]
+pattern MkExprBinary op a b = MkExprApplication (MkExprVariable (MkAnnotation op Nothing)) [a, b, MkExprRecordEmpty]
 
 -- | STRING EXPRESSION PATTERN
 -- | A pattern synonym to represent string expressions in Bonzai.
@@ -110,7 +115,7 @@ pattern MkExprString s = MkExprLiteral (MkLitString s)
 -- | TUPLE EXPRESSION PATTERN
 -- | A pattern synonym to represent tuple expressions in Bonzai.
 pattern MkExprTuple :: Expression Maybe t -> Expression Maybe t -> Expression Maybe t
-pattern MkExprTuple a b = MkExprApplication (MkExprVariable (MkAnnotation "Tuple" Nothing)) [a, b]
+pattern MkExprTuple a b = MkExprApplication (MkExprVariable (MkAnnotation "Tuple" Nothing)) [a, b, MkExprRecordEmpty]
 
 pattern MkExprMutableOperation :: Text -> Expression Maybe t -> Expression Maybe t -> Expression Maybe t
 pattern MkExprMutableOperation op a b = MkExprApplication (MkExprVariable (MkAnnotation op Nothing)) [a, b] 
@@ -153,7 +158,13 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprData ann cs) = T.concat ["data ", toText ann.name, "<", T.intercalate ", " (map toText cs), ">"]
   toText (MkExprMatch e cs) = T.concat ["match ", toText e, " { ", T.intercalate ", " (map (\(c, b, _) -> T.concat [toText c, " => ", toText b]) cs), " }"]
   toText (MkExprPublic e) = T.concat ["pub ", toText e]
-
+  toText (MkExprRecordExtension e f False v) = T.concat [toText e, ".", f, " = ", toText v]
+  toText (MkExprRecordExtension e f True v) = T.concat [toText e, "?.", f, " = ", toText v]
+  toText MkExprRecordEmpty = "{}"
+  toText (MkExprRecordAccess e f) = T.concat [toText e, ".", f]
+  toText (MkExprReturn e) = T.concat ["return ", toText e]
+  toText (MkExprSingleIf c t) = T.concat ["if ", toText c, " then { ", toText t, " }"]
+  
 instance ToText t => ToText (DataConstructor t) where
   toText (MkDataVariable v) = v
   toText (MkDataConstructor c ts) = T.concat [c, "<", T.intercalate ", " (map toText ts), ">"]

@@ -33,6 +33,7 @@ data Instruction
   | Add | Sub | Mul | Div | Mod
   | TryCatch Int
   | GetValue
+  | GetRecordAccess Int
   deriving (Eq)
 
 instance ToText Int where
@@ -74,6 +75,7 @@ instance ToText Instruction where
   toText Mod = "Mod"
   toText (TryCatch a) = "TryCatch " <> toText a
   toText GetValue = "GetValue"
+  toText (GetRecordAccess a) = "GetRecordAccess " <> toText a
 
 instance ToText [Instruction] where
   toText xs = T.intercalate "\n" . map format $ couple
