@@ -122,6 +122,19 @@ hoist (MLIR.MkExprBinary op e1 e2) = do
   (e2', hoisted') <- hoist e2
 
   pure (MLIR.MkExprBinary op e1' e2', hoisted <> hoisted')
+hoist (MLIR.MkExprRecordAccess e f) = do
+  (e', hoisted) <- hoist e
+
+  pure (MLIR.MkExprRecordAccess e' f, hoisted)
+hoist (MLIR.MkExprSingleIf c e) = do
+  (c', hoisted) <- hoist c
+  (e', hoisted') <- hoist e
+
+  pure (MLIR.MkExprSingleIf c' e', hoisted <> hoisted')
+hoist (MLIR.MkExprReturn e) = do
+  (e', hoisted) <- hoist e
+
+  pure (MLIR.MkExprReturn e', hoisted)
 
 hoistToplevel :: MonadIO m => MLIR.MLIR "expression" -> m [MLIR.MLIR "expression"]
 hoistToplevel (MLIR.MkExprLoc p e) = do

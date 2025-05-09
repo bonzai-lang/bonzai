@@ -439,8 +439,23 @@ instance Assemble MLIR.Expression where
           _ -> error "Impossible"
 
     pure $ e1' <> e2' <> LLIR.instr op'
+  
+  assemble (MLIR.MkExprRecordAccess e n) = do
+    e' <- assemble e
+    i <- fetchConstant (MLIR.MkLitString n)
+    pure $ e' <> LLIR.instr (LLIR.GetRecordAccess i)
+  
+  assemble (MLIR.MkExprSingleIf c e) = do
+    c' <- assemble c
+    e' <- assemble e
+    pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (length e' + 1)) <> e'
+
+  assemble (MLIR.MkExprReturn e) = do
+    e' <- assemble e
+    pure $ e' <> LLIR.instr LLIR.Return
 
 instance Assemble MLIR.Update where
+  assemble :: MonadIO m => MLIR.Update -> ReaderT (Set Text) m [LLIR.Segment]
   assemble (MLIR.MkUpdtVariable n) = do
     gs <- readIORef globals
     nats <- readIORef natives

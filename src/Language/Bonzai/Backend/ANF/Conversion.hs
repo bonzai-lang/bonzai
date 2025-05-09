@@ -131,6 +131,22 @@ convert (MLIR.MkExprBinary op e1 e2) = do
   (e2', stmts2) <- convert e2
   
   pure (MLIR.MkExprBinary op e1' e2', stmts1 <> stmts2)
+convert (MLIR.MkExprRecordAccess e f) = do
+  (e', stmts) <- convert e
+  
+  pure (MLIR.MkExprRecordAccess e' f, stmts)
+convert (MLIR.MkExprSingleIf c e) = do
+  (c', stmts1) <- convert c
+  (e', stmts2) <- convert e
+  
+  let bl2 = createBlock [(e', stmts2)]
+  let bl1 = createBlock [(c', stmts1)]
+  
+  pure (MLIR.MkExprSingleIf (MLIR.MkExprBlock bl1) (MLIR.MkExprBlock bl2), [])
+convert (MLIR.MkExprReturn e) = do
+  (e', stmts) <- convert e
+  
+  pure (MLIR.MkExprReturn e', stmts)
 
 convertUpdate :: MonadIO m => MLIR.MLIR "update" -> m (MLIR.MLIR "update", [(Text, MLIR.MLIR "expression")])
 convertUpdate (MLIR.MkUpdtVariable a) = pure (MLIR.MkUpdtVariable a, [])

@@ -43,6 +43,9 @@ instance Free MLIR.Expression where
   free (MLIR.MkExprWhile c e) = free c <> free e
   free MLIR.MkExprSpecial = Set.empty
   free (MLIR.MkExprBinary _ e1 e2) = free e1 <> free e2
+  free (MLIR.MkExprRecordAccess e _) = free e
+  free (MLIR.MkExprSingleIf c e) = free c <> free e
+  free (MLIR.MkExprReturn e) = free e
 
 instance Free MLIR.Update where
   free (MLIR.MkUpdtVariable a) = Set.singleton a
@@ -74,6 +77,9 @@ instance Substitutable MLIR.Expression MLIR.Expression where
   substitute r (MLIR.MkExprWhile c e) = MLIR.MkExprWhile (substitute r c) (substitute r e)
   substitute _ MLIR.MkExprSpecial = MLIR.MkExprSpecial
   substitute (a, e) (MLIR.MkExprBinary op e1 e2) = MLIR.MkExprBinary op (substitute (a, e) e1) (substitute (a, e) e2)
+  substitute (a, e) (MLIR.MkExprRecordAccess e' f) = MLIR.MkExprRecordAccess (substitute (a, e) e') f
+  substitute (a, e) (MLIR.MkExprSingleIf c e') = MLIR.MkExprSingleIf (substitute (a, e) c) (substitute (a, e) e')
+  substitute (a, e) (MLIR.MkExprReturn e') = MLIR.MkExprReturn $ substitute (a, e) e'
   
 instance Substitutable MLIR.Update MLIR.Update where
   substitute (a, e) (MLIR.MkUpdtVariable a') = if a == a' then e else MLIR.MkUpdtVariable a'

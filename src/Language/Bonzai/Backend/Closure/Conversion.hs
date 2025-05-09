@@ -141,6 +141,19 @@ convert (MLIR.MkExprBinary op e1 e2) = do
   e2' <- convert e2
 
   pure $ MLIR.MkExprBinary op e1' e2'
+convert (MLIR.MkExprRecordAccess e f) = do
+  e' <- convert e
+
+  pure $ MLIR.MkExprRecordAccess e' f
+convert (MLIR.MkExprSingleIf c e) = do
+  c' <- convert c
+  e' <- convert e
+
+  pure $ MLIR.MkExprSingleIf c' e'
+convert (MLIR.MkExprReturn e) = do
+  e' <- convert e
+
+  pure $ MLIR.MkExprReturn e'
 convert _ = compilerError "unexpected expression"
 
 convertLambda :: MonadIO m => Set Text -> MLIR.Expression -> m MLIR.Expression

@@ -42,7 +42,7 @@ import qualified Data.List as List
 -- |   panic "non-exhaustive pattern"
 convert :: HLIR.TLIR "expression" -> MLIR.MLIR "expression"
 convert (HLIR.MkExprLiteral l) = MLIR.MkExprLiteral l
-convert (HLIR.MkExprApplication var [x, y]) 
+convert (HLIR.MkExprApplication var [x, y, _])
   | isVariable var, name <- getVariable var, name `elem` operators =
       MLIR.MkExprBinary name (convert x) (convert y)
 convert (HLIR.MkExprVariable a) = MLIR.MkExprVariable a.name
@@ -68,7 +68,52 @@ convert (HLIR.MkExprMatch e cs) = do
 
   MLIR.MkExprUnpack "scrut" e' (createIfs cases')
 convert (HLIR.MkExprMut e) = MLIR.MkExprMut (convert e)
-convert _ = compilerError "impossible"
+convert (HLIR.MkExprRecordExtension e k opt v) = do
+  let (xs, e') = reduceObj (HLIR.MkExprRecordExtension e k opt v)
+
+  let obj = MLIR.MkExprList
+        [
+          MLIR.MkExprSpecial, 
+          MLIR.MkExprLiteral (MLIR.MkLitString "Map"), 
+          MLIR.MkExprLiteral (MLIR.MkLitString "Map"), 
+          MLIR.MkExprList (toList' xs)
+        ]
+
+  case e' of
+    Just (MLIR.MkExprList [
+        MLIR.MkExprSpecial, 
+        MLIR.MkExprLiteral (MLIR.MkLitString "Map"), 
+        MLIR.MkExprLiteral (MLIR.MkLitString "Map"), 
+        MLIR.MkExprList []
+      ]) -> obj
+    Just e'' -> MLIR.MkExprBinary "+" obj e''
+    Nothing -> obj
+convert (HLIR.MkExprRecordAccess e k) = do
+  let e' = convert e
+
+  MLIR.MkExprRecordAccess e' k
+convert HLIR.MkExprRecordEmpty = MLIR.MkExprList [
+    MLIR.MkExprSpecial, 
+    MLIR.MkExprLiteral (MLIR.MkLitString "Map"), 
+    MLIR.MkExprLiteral (MLIR.MkLitString "Map"), 
+    MLIR.MkExprList []
+  ]
+convert (HLIR.MkExprSingleIf c t) = MLIR.MkExprSingleIf (convert c) (convert t)
+convert (HLIR.MkExprReturn e) = MLIR.MkExprReturn (convert e)
+convert e = compilerError $ "impossible, received: " <> show e
+
+toList' :: [(Text, MLIR.MLIR "expression")] -> [MLIR.MLIR "expression"]
+toList' [] = []
+toList' ((k, v) : xs) = MLIR.MkExprLiteral (HLIR.MkLitString k) : v : toList' xs
+
+reduceObj :: HLIR.TLIR "expression" -> ([(Text, MLIR.MLIR "expression")], Maybe (MLIR.MLIR "expression"))
+reduceObj (HLIR.MkExprRecordExtension e k _ v) = do
+  let v' = convert v
+  let (xs, e') = reduceObj e
+
+  ((k, v') : xs, e')
+reduceObj (HLIR.MkExprLoc e _) = reduceObj e
+reduceObj x = ([], Just $ convert x)
 
 operators :: [Text]
 operators =
@@ -149,10 +194,10 @@ idx :: MLIR.MLIR "expression" -> Integer -> MLIR.MLIR "expression"
 idx e i = MLIR.MkExprIndex e (MLIR.MkExprLiteral (HLIR.MkLitInt i))
 
 equalsTo :: MLIR.MLIR "expression" -> MLIR.MLIR "expression" -> MLIR.MLIR "expression"
-equalsTo a b = MLIR.MkExprApplication (MLIR.MkExprVariable "==") [a, b]
+equalsTo a b = MLIR.MkExprApplication (MLIR.MkExprVariable "==") [a, b, MLIR.MkExprList []]
 
 sliceFrom :: MLIR.MLIR "expression" -> Integer -> MLIR.MLIR "expression"
-sliceFrom e i = MLIR.MkExprApplication (MLIR.MkExprVariable "sliceFrom") [e, MLIR.MkExprLiteral (HLIR.MkLitInt i)]
+sliceFrom e i = MLIR.MkExprApplication (MLIR.MkExprVariable "sliceFrom") [e, MLIR.MkExprLiteral (HLIR.MkLitInt i), MLIR.MkExprList []]
 
 isVariable :: HLIR.TLIR "expression" -> Bool
 isVariable (HLIR.MkExprVariable _) = True
@@ -190,11 +235,11 @@ createCondition x (HLIR.MkPatLocated y p) = do
 createCondition x (HLIR.MkPatOr y y') = do
   let (conds, maps) = createCondition x y
   let (conds', maps') = createCondition x y'
-  ([MLIR.MkExprApplication (MLIR.MkExprVariable "||") [MLIR.MkExprBlock conds, MLIR.MkExprBlock conds']], maps <> maps')
+  ([MLIR.MkExprApplication (MLIR.MkExprVariable "||") [MLIR.MkExprBlock conds, MLIR.MkExprBlock conds', MLIR.MkExprList []]], maps <> maps')
 createCondition x (HLIR.MkPatCondition e y) = do
   let (conds, maps) = createCondition x y
   let e' = convert e
-  ([MLIR.MkExprApplication (MLIR.MkExprVariable "&&") [MLIR.MkExprBlock conds, susbstituteMap (Map.toList maps) e']], maps)
+  ([MLIR.MkExprApplication (MLIR.MkExprVariable "&&") [MLIR.MkExprBlock conds, susbstituteMap (Map.toList maps) e', MLIR.MkExprList []]], maps)
 createCondition x (HLIR.MkPatList pats slice _) =
   let (conds, maps) =
         unzip $
@@ -207,12 +252,13 @@ createCondition x (HLIR.MkPatList pats slice _) =
       lenCond = case slice of
         Just _ ->
           MLIR.MkExprApplication (MLIR.MkExprVariable ">") [
-              MLIR.MkExprApplication (MLIR.MkExprVariable "length") [x]
+              MLIR.MkExprApplication (MLIR.MkExprVariable "length") [x, MLIR.MkExprList []]
             , MLIR.MkExprLiteral (HLIR.MkLitInt $ patLen - 1)
+            , MLIR.MkExprList []
           ]
         Nothing ->
           equalsTo
-            (MLIR.MkExprApplication (MLIR.MkExprVariable "length") [x])
+            (MLIR.MkExprApplication (MLIR.MkExprVariable "length") [x, MLIR.MkExprList []])
             (MLIR.MkExprLiteral (HLIR.MkLitInt (toInteger patLen)))
    in (lenCond : concat conds <> conds', mconcat maps <> maps')
 

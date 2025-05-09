@@ -125,6 +125,8 @@ encodeInstruction (TryCatch i) =
   encodeInstr 33 >> encodeInteger i >> replicateNull 3
 encodeInstruction GetValue =
   encodeInstr 34 >> replicateNull 4
+encodeInstruction (GetRecordAccess i) =
+  encodeInstr 35 >> encodeInteger i >> replicateNull 3
 
 encodeText :: Text -> Put
 encodeText w = do
