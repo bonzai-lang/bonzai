@@ -123,6 +123,17 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
         ("Expected mutable type", Nothing, pos)
         "Resolution"
 
+    UnexpectedRowType ty ->
+      printErrorFromString
+        Nothing
+        ("Unexpected row type " <> show (toText ty), Nothing, pos)
+        "Resolution"
+    
+    CannotInsertLabel label' ->
+      printErrorFromString
+        Nothing
+        ("Cannot insert label " <> show label', Just "check for missing field in the record", pos)
+        "Resolution"
 
 type ImportStack = [FilePath]
 
@@ -153,6 +164,8 @@ data BonzaiError
   | InvalidPatternUnion (Set Text) (Set Text)
   | InvalidHeader HLIR.Type
   | InvalidUpdate
+  | UnexpectedRowType HLIR.Type
+  | CannotInsertLabel Text
   deriving (Eq, Generic)
 
 instance Show BonzaiError where
@@ -174,6 +187,8 @@ instance Show BonzaiError where
   show (InvalidPatternUnion env1 env2) = "Invalid pattern union between " <> show env1 <> " and " <> show env2
   show (InvalidHeader ty) = "Invalid header " <> show (toText ty)
   show InvalidUpdate = "Invalid update"
+  show (UnexpectedRowType ty) = "Unexpected row type " <> show (toText ty)
+  show (CannotInsertLabel label') = "Cannot insert label " <> show label'
 
 instance ToJSON BonzaiError where
   toJSON e = toJSON (show e :: String)
