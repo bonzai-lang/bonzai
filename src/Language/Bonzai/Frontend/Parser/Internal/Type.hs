@@ -1,6 +1,7 @@
 module Language.Bonzai.Frontend.Parser.Internal.Type where
 import qualified Language.Bonzai.Frontend.Parser as P
 import qualified Language.Bonzai.Syntax.HLIR as HLIR
+import qualified Language.Bonzai.Frontend.Typechecking.Monad as M
 import qualified Language.Bonzai.Frontend.Parser.Lexer as Lex
 
 -- | TYPE
@@ -17,7 +18,9 @@ parseType =
       tys <- Lex.parens $ P.sepBy parseType Lex.comma
       ret <- Lex.symbol ":" *> parseType
 
-      pure $ tys HLIR.:->: ret,
+      kwarg <- M.fresh
+
+      pure $ (tys ++ [kwarg]) HLIR.:->: ret,
 
     -- Actor type constructor
     -- Defined as the following:

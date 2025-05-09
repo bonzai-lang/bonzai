@@ -72,6 +72,36 @@ solveBlock (x : xs) = do
   pure (x' : xs')
 solveBlock [] = pure []
 
+getBlock :: HLIR.HLIR "expression" -> Maybe [HLIR.HLIR "expression"]
+getBlock (HLIR.MkExprBlock es) = Just es
+getBlock (HLIR.MkExprLoc e _) = getBlock e
+getBlock _ = Nothing
+
+insertReturn :: [HLIR.HLIR "expression"] -> [HLIR.HLIR "expression"]
+insertReturn [x] = insertReturn' x
+insertReturn [] = [returnUnit]
+insertReturn (x : xs) = x : xs
+
+insertReturn' :: HLIR.HLIR "expression" -> [HLIR.HLIR "expression"]
+insertReturn' (HLIR.MkExprBlock es) = insertReturn es
+insertReturn' (HLIR.MkExprWhile c e) = 
+  [ HLIR.MkExprWhile   
+      (HLIR.MkExprBlock (insertReturn' c))
+      (HLIR.MkExprBlock (insertReturn' e)), 
+    returnUnit
+  ]
+insertReturn' (HLIR.MkExprSingleIf c t) = 
+  [ HLIR.MkExprSingleIf
+      (HLIR.MkExprBlock (insertReturn' c)) 
+      (HLIR.MkExprBlock (insertReturn' t)), 
+    returnUnit
+  ]
+insertReturn' (HLIR.MkExprLoc e p) = (`HLIR.MkExprLoc` p) <$> insertReturn' e
+insertReturn' e = [e]
+
+returnUnit :: HLIR.HLIR "expression"
+returnUnit = HLIR.MkExprReturn (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
+
 -- | SOLVE EXPRESSION
 -- | Solve an expression by renaming all the variables in the expression with unique names.
 solveExpression :: MonadIO m => HLIR.HLIR "expression" -> m (HLIR.HLIR "expression")
@@ -83,6 +113,14 @@ solveExpression (HLIR.MkExprApplication f args) = do
   args' <- mapM solveExpression args
 
   pure $ HLIR.MkExprApplication f' args'
+solveExpression (HLIR.MkExprLambda args t body) | Just es <- getBlock body = do
+  exprs <- solveBlock es
+
+  let exprs' = insertReturn exprs
+
+  print exprs'
+
+  pure $ HLIR.MkExprLambda args t (HLIR.MkExprBlock exprs')
 solveExpression (HLIR.MkExprLambda args t body) = do
   body' <- solveExpression body
 
@@ -140,6 +178,21 @@ solveExpression (HLIR.MkExprMatch e cs) = do
   cs' <- mapM solveCase cs
 
   pure $ HLIR.MkExprMatch e' cs'
+solveExpression (HLIR.MkExprRecordAccess e f) = do
+  e' <- solveExpression e
+
+  pure $ HLIR.MkExprRecordAccess e' f
+solveExpression HLIR.MkExprRecordEmpty = pure HLIR.MkExprRecordEmpty
+solveExpression (HLIR.MkExprRecordExtension t l opt r) = do
+  t' <- solveExpression t
+  r' <- solveExpression r
+
+  pure $ HLIR.MkExprRecordExtension t' l opt r'
+solveExpression (HLIR.MkExprSingleIf c t) = do
+  c' <- solveExpression c
+  t' <- solveExpression t
+
+  pure $ HLIR.MkExprSingleIf c' t'
 solveExpression e = pure e
 
 -- | SOLVE UPDATE

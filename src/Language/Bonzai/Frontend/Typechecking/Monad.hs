@@ -46,6 +46,7 @@ data CheckerState = MkCheckerState {
   , interfaces :: Map (Text, [HLIR.QuVar]) (Map Text HLIR.Type)
   , varPos :: [(Text, (HLIR.Scheme, HLIR.Position))]
   , dataConstructors :: Set Text
+  , returnType :: Maybe HLIR.Type
 } deriving (Eq, Show)
 
 -- | Helper function to update the state of the typechecker
@@ -65,6 +66,7 @@ checkerState = IO.unsafePerformIO . newIORef $
     Map.empty
     mempty
     mempty
+    Nothing
 
 enterLevel :: (MonadChecker m) => m ()
 enterLevel = modifyIORef' currentLevel (+ 1)
@@ -118,6 +120,14 @@ instantiateWithSub s (HLIR.Forall qvars ty) = do
         HLIR.Unbound name _ -> case Map.lookup name subst of
           Just t -> pure (t, subst)
           Nothing -> pure (HLIR.MkTyVar ref, subst)
+    go subst (HLIR.MkTyRowExtend label fieldTy opt rowTail) = do
+      (fieldTy', subst') <- go subst fieldTy
+      (rowTail', subst'') <- go subst' rowTail
+      pure (HLIR.MkTyRowExtend label fieldTy' opt rowTail', subst'')
+    go subst HLIR.MkTyRowEmpty = pure (HLIR.MkTyRowEmpty, subst)
+    go subst (HLIR.MkTyRecord r) = do
+      (r', subst') <- go subst r
+      pure (HLIR.MkTyRecord r', subst')
 
     goMany :: (MonadChecker m) => Substitution -> [HLIR.Type] -> m ([HLIR.Type], Substitution)
     goMany subst (x : xs) = do
@@ -146,6 +156,12 @@ generalize ty = do
         HLIR.Link t -> getFreeVars t
         HLIR.Unbound name lvl' | lvl' > lvl -> pure $ Set.singleton name
         _ -> pure Set.empty
+    getFreeVars (HLIR.MkTyRowExtend _ fieldTy _ rowTail) = do
+      fieldTy' <- getFreeVars fieldTy
+      rowTail' <- getFreeVars rowTail
+      pure $ fieldTy' <> rowTail'
+    getFreeVars HLIR.MkTyRowEmpty = pure Set.empty
+    getFreeVars (HLIR.MkTyRecord r) = getFreeVars r
     getFreeVars _ = pure Set.empty
 
 instance ToText a => ToText (Map Text a) where

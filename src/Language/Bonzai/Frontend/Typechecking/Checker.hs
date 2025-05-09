@@ -86,6 +86,9 @@ synthesize (HLIR.MkExprLambda args ret body) = do
 
   let schemes = map (second $ HLIR.Forall []) args'
 
+  old <- readIORef M.checkerState <&> M.returnType
+  modifyIORef' M.checkerState $ \st -> st { M.returnType = Just ret' }
+
   body' <- case ret of
     Just retTy -> do
       M.with
@@ -100,6 +103,8 @@ synthesize (HLIR.MkExprLambda args ret body) = do
           (body', ret'') <- synthesize body
           ret' `U.unifiesWith` ret''
           pure body'
+
+  modifyIORef' M.checkerState $ \st -> st { M.returnType = old }
 
   let wfArgs = map (uncurry HLIR.MkAnnotation . second Identity) args'
 
@@ -120,7 +125,7 @@ synthesize (HLIR.MkExprTernary c t e) = do
   pure (HLIR.MkExprTernary c' t' e', thenTy)
 synthesize (HLIR.MkExprLet generics (Left ann) expr body) = do
   M.enterLevel
-  ty <- M.fresh
+  ty <- maybe M.fresh pure ann.value
   let scheme = HLIR.Forall (toList generics) ty
 
   (expr', exprTy) <- M.with
@@ -128,12 +133,12 @@ synthesize (HLIR.MkExprLet generics (Left ann) expr body) = do
     (\st -> st { M.variables = Map.insert ann.name scheme st.variables })
     $ synthesize expr
 
-  ty `U.unifiesWith` exprTy
+  exprTy `U.unifiesWith` ty
   M.exitLevel
 
   newScheme <- if null generics
-    then M.generalize ty
-    else pure $ HLIR.Forall (toList generics) ty
+    then M.generalize exprTy
+    else pure $ HLIR.Forall (toList generics) exprTy
 
   pos <- HLIR.peekPosition'
 
@@ -151,11 +156,9 @@ synthesize (HLIR.MkExprMut expr) = do
 
   pure (HLIR.MkExprMut expr', HLIR.MkTyMutable ty)
 synthesize (HLIR.MkExprBlock es) = do
-  (es', tys) <- unzip <$> traverse synthesize es
+  (es', ty) <- typecheckBlock es Nothing
 
-  retTy <- maybe M.fresh pure (viaNonEmpty last tys)
-
-  pure (HLIR.MkExprBlock es', retTy)
+  pure (HLIR.MkExprBlock es', ty)
 synthesize (HLIR.MkExprUpdate u e) = do
   (u', ty) <- typecheckUpdate u
   e' <- case ty of
@@ -247,8 +250,55 @@ synthesize (HLIR.MkExprData ann constrs) = do
   }
 
   pure (HLIR.MkExprData ann constrs, HLIR.MkTyId name)
+synthesize (HLIR.MkExprRecordExtension e k opt v) = do
+  (e', ty) <- synthesize e
+  (v', vTy) <- synthesize v
+
+  a <- M.fresh
+  r <- M.fresh
+
+  let funTy = [a, HLIR.MkTyRecord r] HLIR.:->: HLIR.MkTyRecord (HLIR.MkTyRowExtend k a opt r)
+
+  ret <- M.fresh
+
+  U.unifiesWith ([vTy, ty] HLIR.:->: ret) funTy
+
+  pure (HLIR.MkExprRecordExtension e' k opt v', ret)
+synthesize (HLIR.MkExprRecordAccess e k) = do
+  (e', ty) <- synthesize e
+
+  a <- M.fresh
+  r <- M.fresh
+
+  let funTy = [HLIR.MkTyRecord $ HLIR.MkTyRowExtend k a False r] HLIR.:->: a
+
+  ret <- M.fresh
+
+  U.unifiesWith ([ty] HLIR.:->: ret) funTy
+
+  pure (HLIR.MkExprRecordAccess e' k, ret)
+synthesize (HLIR.MkExprReturn e) = do
+  (e', ty) <- synthesize e
+  
+  retTy <- readIORef M.checkerState <&> M.returnType
+
+  case retTy of
+    Just retTy' -> do
+      retTy' `U.unifiesWith` ty
+    
+    Nothing -> do
+      modifyIORef' M.checkerState $ \st -> st { M.returnType = Just ty }
+
+  pure (HLIR.MkExprReturn e', ty)
+synthesize HLIR.MkExprRecordEmpty = 
+  pure (HLIR.MkExprRecordEmpty, HLIR.MkTyRecord HLIR.MkTyRowEmpty)
 synthesize (HLIR.MkExprPublic e) = synthesize e
 synthesize (HLIR.MkExprRequire _ _) = compilerError "typecheck: require should not appear in typechecking"
+synthesize (HLIR.MkExprSingleIf c t) = do
+  c' <- check c HLIR.MkTyBool
+  (t', ty) <- synthesize t
+
+  pure (HLIR.MkExprSingleIf c' t', ty)
 
 check :: M.MonadChecker m => HLIR.HLIR "expression" -> HLIR.Type -> m (HLIR.TLIR "expression")
 check (HLIR.MkExprApplication f args) fTy@(argsTys HLIR.:->: _) = do
@@ -269,10 +319,15 @@ check (HLIR.MkExprLambda args ret body) (argsTys HLIR.:->: retTy) = do
 
   let retTy' = fromMaybe retTy ret
 
+  old <- readIORef M.checkerState <&> M.returnType
+  modifyIORef' M.checkerState $ \st -> st { M.returnType = Just retTy' }
+
   body' <- M.with
     M.checkerState
     (\st -> st { M.variables = Map.union (Map.fromList schemes) st.variables })
     $ check body retTy'
+
+  modifyIORef' M.checkerState $ \st -> st { M.returnType = old }
 
   let wfArgs = map (uncurry HLIR.MkAnnotation . second Identity) args'
 
@@ -306,12 +361,9 @@ check (HLIR.MkExprMut expr) (HLIR.MkTyMutable ty) = do
   expr' <- check expr ty
   pure (HLIR.MkExprMut expr')
 check (HLIR.MkExprBlock es) ty = do
-  case unsnoc es of
-    Just (initEs, lastE) -> do
-      (initEs', _) <- unzip <$> traverse synthesize initEs
-      lastE' <- check lastE ty
-      pure (HLIR.MkExprBlock (initEs' <> [lastE']))
-    Nothing -> pure (HLIR.MkExprBlock [])
+  (es', _) <- typecheckBlock es (Just ty)
+      
+  pure (HLIR.MkExprBlock es')
 check (HLIR.MkExprUpdate u e) ty = do
   (u', _) <- typecheckUpdate u
   e' <- check e ty
@@ -320,6 +372,18 @@ check (HLIR.MkExprList es) (HLIR.MkTyList ty) = do
   es' <- traverse (`check` ty) es
 
   pure (HLIR.MkExprList es')
+check (HLIR.MkExprReturn e) expectedTy = do
+  e' <- check e expectedTy
+
+  retTy <- readIORef M.checkerState <&> M.returnType
+
+  case retTy of
+    Just retTy' -> do
+      retTy' `U.unifiesWith` expectedTy
+      pure (HLIR.MkExprReturn e')
+    Nothing -> do
+      modifyIORef' M.checkerState $ \st -> st { M.returnType = Just expectedTy }
+      pure (HLIR.MkExprReturn e')
 check (HLIR.MkExprMatch scrut cases) ty = do
   (scrut', scrutTy) <- synthesize scrut
 
@@ -373,6 +437,27 @@ check (HLIR.MkExprLiteral l) ty = do
         HLIR.MkLitBool _ -> HLIR.MkTyBool
   ty' `U.unifiesWith` ty
   pure (HLIR.MkExprLiteral l)
+check (HLIR.MkExprRecordAccess e k) ty = do
+  r <- M.fresh
+
+  e' <- check e (HLIR.MkTyRecord $ HLIR.MkTyRowExtend k ty False r)
+
+  pure $ HLIR.MkExprRecordAccess e' k
+check (HLIR.MkExprRecordExtension e k opt v) expectedTy = do
+  (e', eTy) <- synthesize e
+  (v', vTy) <- synthesize v
+
+  expectedTy' <- unrecord expectedTy
+  eTy' <- unrecord eTy
+
+  expectedTy' `U.unifiesWith` HLIR.MkTyRowExtend k vTy opt eTy'
+
+  pure (HLIR.MkExprRecordExtension e' k opt v')
+check (HLIR.MkExprSingleIf c t) ty = do
+  c' <- check c HLIR.MkTyBool
+  t' <- check t ty
+
+  pure (HLIR.MkExprSingleIf c' t')
 check (HLIR.MkExprRequire _ _) _ = compilerError "typecheck: require should not appear in typechecking"
 check (HLIR.MkExprPublic e) ty = check e ty
 check e ty = do
@@ -383,6 +468,70 @@ check e ty = do
 unsnoc :: [a] -> Maybe ([a], a)
 unsnoc [] = Nothing
 unsnoc xs = (,) <$> viaNonEmpty init xs <*> viaNonEmpty last xs
+
+typecheckBlock :: M.MonadChecker m => [HLIR.HLIR "expression"] -> Maybe HLIR.Type -> m ([HLIR.TLIR "expression"], HLIR.Type)
+typecheckBlock [] ty = pure ([], fromMaybe HLIR.MkTyUnit ty)
+typecheckBlock (HLIR.MkExprReturn e : _) ty = do
+  (e', ret) <- case ty of
+    Just ty' -> do
+      e' <- check e ty'
+      pure (e', ty')
+    Nothing -> synthesize e
+
+  retTy <- readIORef M.checkerState <&> M.returnType
+
+  case retTy of
+    Just retTy' -> do
+      retTy' `U.unifiesWith` ret
+      pure ([HLIR.MkExprReturn e'], ret)
+    Nothing -> do
+      modifyIORef' M.checkerState $ \st -> st { M.returnType = Just ret }
+      pure ([HLIR.MkExprReturn e'], ret)
+typecheckBlock (HLIR.MkExprLoc e p : _) ty | Just _ <- getReturn e = do
+  HLIR.pushPosition p
+  (e', retTy) <- case ty of
+    Just ty' -> do
+      e' <- check e ty'
+      pure (e', ty')
+    Nothing -> synthesize e
+
+  retTy' <- readIORef M.checkerState <&> M.returnType
+
+  case retTy' of
+    Just retTy'' -> do
+      retTy'' `U.unifiesWith` retTy
+      void HLIR.popPosition
+      pure ([HLIR.MkExprReturn e'], retTy)
+    Nothing -> do
+      modifyIORef' M.checkerState $ \st -> st { M.returnType = Just retTy }
+      void HLIR.popPosition
+      pure ([HLIR.MkExprReturn e'], retTy)
+typecheckBlock (HLIR.MkExprLoc e p : xs) ty = do
+  HLIR.pushPosition p
+  (e', _) <- synthesize e
+  void HLIR.popPosition
+  (xs', retTy) <- typecheckBlock xs ty
+  pure (HLIR.MkExprLoc e' p : xs', retTy)
+typecheckBlock [x] ty = do
+  (x', retTy) <- case ty of
+    Just ty' -> do
+      x' <- check x ty'
+      pure (x', ty')
+    Nothing -> synthesize x
+
+  retTy' <- readIORef M.checkerState <&> M.returnType
+
+  case retTy' of
+    Just retTy'' -> do
+      retTy'' `U.unifiesWith` retTy
+      pure ([x'], retTy)
+    Nothing -> do
+      modifyIORef' M.checkerState $ \st -> st { M.returnType = Just retTy }
+      pure ([x'], retTy)
+typecheckBlock (x:xs) ty = do
+  x' <- fst <$> synthesize x
+  (xs', retTy) <- typecheckBlock xs ty
+  pure (x' : xs', retTy)
 
 typecheckPattern :: M.MonadChecker m => HLIR.HLIR "pattern" -> m (HLIR.TLIR "pattern", HLIR.Type, Map Text HLIR.Scheme)
 typecheckPattern (HLIR.MkPatVariable name varTy) = do
@@ -501,10 +650,14 @@ runTypechecking es = do
           Map.empty
           mempty
           mempty
+          Nothing
+
   writeIORef M.checkerState st
   writeIORef M.typeCounter 0
   writeIORef M.currentLevel 0
+
   res <- M.with M.checkerState (const st) $ runExceptT $ traverse synthesize es
+
   pure $ case res of
     Left err -> Left err
     Right es' -> Right $ map fst es'
@@ -530,3 +683,17 @@ decomposeHeader (HLIR.MkTyVar tv) = do
     HLIR.Link t -> decomposeHeader t
     HLIR.Unbound _ _ -> throw (M.InvalidHeader (HLIR.MkTyVar tv))
 decomposeHeader t = M.throw $ M.InvalidHeader t
+
+unrecord :: MonadIO m => HLIR.Type -> m HLIR.Type
+unrecord (HLIR.MkTyVar tv) = do
+  tv' <- readIORef tv
+  case tv' of
+    HLIR.Link t -> unrecord t
+    HLIR.Unbound _ _ -> pure (HLIR.MkTyVar tv)
+unrecord (HLIR.MkTyRecord t) = pure t
+unrecord t = pure t
+
+getReturn :: HLIR.HLIR "expression" -> Maybe (HLIR.HLIR "expression")
+getReturn (HLIR.MkExprReturn e) = Just e
+getReturn (HLIR.MkExprLoc e _) = getReturn e
+getReturn _ = Nothing

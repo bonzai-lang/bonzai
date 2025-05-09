@@ -50,7 +50,7 @@ data ModuleState = MkModuleState
 -- | the modules.
 {-# NOINLINE moduleState #-}
 moduleState :: IORef ModuleState
-moduleState = IO.unsafePerformIO . newIORef $ 
+moduleState = IO.unsafePerformIO . newIORef $
   MkModuleState "" "" Map.empty [] Map.empty
 
 -- | Result state
@@ -101,7 +101,7 @@ resolveContent content = do
 resolve :: (MonadResolution m) => FilePath -> Bool -> m ModuleUnit
 resolve path isPublic = do
   st <- readIORef moduleState
-  
+
   -- Get the correct path
   newPath <- getCorrectPath path
 
@@ -130,7 +130,7 @@ resolve path isPublic = do
     Just Visited -> do
       case Map.lookup newModuleName st.resolved of
         Just m -> do
-          modifyIORef moduleState $ \st' -> 
+          modifyIORef moduleState $ \st' ->
             st' {
                 initialPath= st.initialPath
               , currentDirectory = st.currentDirectory
@@ -143,12 +143,12 @@ resolve path isPublic = do
     _ -> do
       -- Mark the module as being visited
       modifyIORef moduleState $ \st' ->
-        st' { 
-          visitStateModules = 
-            Map.insert 
-              (fromString newModuleName) 
-              Visiting 
-              st'.visitStateModules 
+        st' {
+          visitStateModules =
+            Map.insert
+              (fromString newModuleName)
+              Visiting
+              st'.visitStateModules
         }
 
       -- Read the content of the file
@@ -180,16 +180,16 @@ resolve path isPublic = do
           modifyIORef moduleState $ \st' ->
             st
               { resolved = Map.insert newModuleName moduleUnit st'.resolved
-              , visitStateModules = 
-                  Map.insert 
+              , visitStateModules =
+                  Map.insert
                     (fromString newModuleName)
                     Visited
                     st'.visitStateModules
               , initialPath = st.initialPath
               , currentDirectory = st.currentDirectory
               }
-              
-          
+
+
           -- Update the result state with the new AST
           modifyIORef' resultState (<> ast)
 
@@ -234,12 +234,18 @@ foldM' f z (x:xs) = do
 
 -- | Main conversion function
 resolveImports :: (MonadResolution m) => ModuleUnit -> HLIR.HLIR "expression" -> m ModuleUnit
+resolveImports m (HLIR.MkExprRecordExtension e _ _ v) = do
+  m1 <- resolveImports m e
+  resolveImports m1 v
+resolveImports m (HLIR.MkExprRecordAccess e _) = do
+  resolveImports m e
+resolveImports m HLIR.MkExprRecordEmpty = pure m
 resolveImports m (HLIR.MkExprApplication f args) = do
   m1 <- resolveImports m f
   foldM' resolveImports m1 args
 resolveImports m (HLIR.MkExprLambda args _ body) = do
   old <- readIORef moduleState
-  modifyIORef' moduleState $ \st -> 
+  modifyIORef' moduleState $ \st ->
     st { boundArgs = boundArgs st <> map (.name) args }
   m' <- resolveImports m body
   writeIORef moduleState old
@@ -257,7 +263,7 @@ resolveImports m (HLIR.MkExprTernary cond then' else') = do
   m1 <- resolveImports m cond
   m2 <- resolveImports m1 then'
   resolveImports m2 else'
-resolveImports m (HLIR.MkExprLoc e pos) = 
+resolveImports m (HLIR.MkExprLoc e pos) =
   HLIR.pushPosition pos *> resolveImports m e <* HLIR.popPosition
 resolveImports m (HLIR.MkExprLiteral _) = pure m
 resolveImports m (HLIR.MkExprVariable name) = do
@@ -313,7 +319,10 @@ resolveImports m (HLIR.MkExprMatch e cs) = do
 
   pure m
 resolveImports m (HLIR.MkExprPublic e) = resolveImports m e
-
+resolveImports m (HLIR.MkExprReturn e) = resolveImports m e
+resolveImports m (HLIR.MkExprSingleIf c t) = do
+  m1 <- resolveImports m c
+  resolveImports m1 t
 
 resolveImportsPattern :: MonadConversion m => ModuleUnit -> HLIR.HLIR "pattern" -> m ModuleUnit
 resolveImportsPattern m (HLIR.MkPatVariable n _) = pure m { variables = Set.insert n m.variables }

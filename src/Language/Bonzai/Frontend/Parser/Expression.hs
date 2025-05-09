@@ -10,6 +10,7 @@ import qualified Text.Megaparsec.Char as P
 import qualified Data.Text as Text
 import qualified Data.Foldable as List
 import qualified GHC.IO as IO
+import qualified Language.Bonzai.Frontend.Typechecking.Monad as M
 
 -- | PARSE ANNOTATION
 -- | Parse an annotation. An annotation is used to attach metadata to an AST node.
@@ -85,7 +86,7 @@ parseInterpolatedString :: (MonadIO m) => P.Parser m (HLIR.HLIR "expression")
 parseInterpolatedString = removeEmptyStrings . buildString . toString <$> Lit.parseString
   where
     toString' :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
-    toString' x = HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "toString" Nothing)) [x]
+    toString' x = HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "toString" Nothing)) [x, HLIR.MkExprRecordEmpty]
 
     buildString :: [Char] -> HLIR.HLIR "expression"
     buildString [] = HLIR.MkExprLiteral (HLIR.MkLitString "")
@@ -124,9 +125,11 @@ parseTernary = localize $ do
   void $ Lex.reserved "then"
   then' <- parseExpression
 
-  void $ Lex.reserved "else"
+  else' <- P.optional $ void (Lex.reserved "else") *> parseExpression
 
-  HLIR.MkExprTernary cond then' <$> parseExpression
+  case else' of
+    Just else'' -> pure $ HLIR.MkExprTernary cond then' else''
+    Nothing -> pure $ HLIR.MkExprSingleIf cond then'
 
 -- | PARSE LIST
 -- | Parse a list expression. A list expression is an expression that consists of
@@ -159,7 +162,9 @@ parseExtern = localize $ do
   args <- Lex.parens $ P.sepBy (parseAnnotation' Typ.parseType) Lex.comma
   ret <- P.option HLIR.MkTyUnit $ Lex.symbol ":" *> Typ.parseType
 
-  let funTy = map (.value) args HLIR.:->: ret
+  kwargs <- M.fresh
+
+  let funTy = (map (.value) args ++ [kwargs]) HLIR.:->: ret
 
   pure $ HLIR.MkExprNative (HLIR.MkAnnotation name gens) funTy
 
@@ -264,9 +269,11 @@ parseDirectData = localize $ do
 
   params <- P.option [] $ Lex.parens (P.sepBy (parseAnnotation' Typ.parseType) Lex.comma)
 
+  kwarg <- M.fresh
+
   pure $ HLIR.MkExprData
     (HLIR.MkAnnotation name gens)
-    [HLIR.MkDataConstructor name (map (.value) params)]
+    [HLIR.MkDataConstructor name (map (.value) params ++ [kwarg])]
 
 -- | PARSE DATA
 -- | Parse a data expression. A data expression is an expression that consists of
@@ -293,9 +300,13 @@ parseDatatype = localize $ do
     -- | - identifier
     parseDataConstructor :: MonadIO m => P.Parser m (HLIR.DataConstructor HLIR.Type)
     parseDataConstructor = P.choice [
-       P.try $ HLIR.MkDataConstructor
-            <$> Lex.identifier
-            <*> Lex.parens (P.sepBy ((.value) <$> parseAnnotation' Typ.parseType) Lex.comma),
+       P.try $ do
+          name <- Lex.identifier
+          args <- Lex.parens (P.sepBy (parseAnnotation' Typ.parseType) Lex.comma)
+
+          kwarg <- M.fresh
+
+          pure $ HLIR.MkDataConstructor name (map (.value) args ++ [kwarg]),
         HLIR.MkDataVariable <$> Lex.identifier
       ]
 
@@ -327,6 +338,32 @@ parseInterface = localize $ do
       let funTy = map (.value) args HLIR.:->: HLIR.MkTyUnit
 
       pure $ HLIR.MkAnnotation name funTy
+
+-- | PARSE RECORD
+-- | Parse a record expression. A record expression is an expression that consists
+-- | of a record of values. It is used to represent a record of values in Bonzai.
+parseExprRecord :: (MonadIO m) => P.Parser m (HLIR.HLIR "expression")
+parseExprRecord = localize $ do
+  void $ Lex.symbol "{"
+  fields <- P.sepBy parseField Lex.comma
+  rest <- P.optional $ do
+    void $ Lex.symbol "|"
+    parseExpression
+  void $ Lex.symbol "}"
+
+  pure $ List.foldl
+    (\acc (idt, ty) -> HLIR.MkExprRecordExtension acc idt False ty)
+    (fromMaybe HLIR.MkExprRecordEmpty rest)
+    fields
+
+  where
+    parseField :: (MonadIO m) => P.Parser m (Text, HLIR.HLIR "expression")
+    parseField = do
+      key <- Lex.identifier
+      void $ Lex.symbol ":"
+      value <- parseExpression
+
+      pure (key, value)
 
 -- | PARSE MATCH EXPRESSION
 -- | Parse a match expression. A match expression is an expression that consists of
@@ -447,6 +484,50 @@ parseBlock = localize $ do
 
   pure $ HLIR.MkExprBlock exprs
 
+argument ::
+  MonadIO m =>
+  P.Parser m (Position
+    (HLIR.HLIR "pattern")
+    (HLIR.Annotation (Maybe HLIR.Type))
+    (HLIR.Annotation (Maybe HLIR.Type))
+  )
+argument = P.choice [
+    P.try $ do
+      name <- Lex.identifier
+      void $ Lex.symbol "_"
+      ty <- P.optional (Lex.symbol ":" *> Typ.parseType)
+
+      pure (Middle' (HLIR.MkAnnotation name ty)),
+    P.try $ do
+      name <- Lex.identifier
+      void $ Lex.symbol ":"
+      Right' . HLIR.MkAnnotation name . Just <$> Typ.parseType,
+    Left' <$> parsePattern
+  ]
+
+data Position a b c
+  = Left' a
+  | Right' b
+  | Middle' c
+  deriving (Show, Eq)
+
+lefts' :: [Position a b c] -> [a]
+lefts' [] = []
+lefts' (Left' x : xs) = x : lefts' xs
+lefts' (Right' _ : xs) = lefts' xs
+lefts' (Middle' _ : xs) = lefts' xs
+
+rights' :: [Position a b c] -> [b]
+rights' [] = []
+rights' (Left' _ : xs) = rights' xs
+rights' (Right' x : xs) = x : rights' xs
+rights' (Middle' _ : xs) = rights' xs
+
+middles' :: [Position a b c] -> [c]
+middles' [] = []
+middles' (Left' _ : xs) = middles' xs
+middles' (Right' _ : xs) = middles' xs
+middles' (Middle' x : xs) = x : middles' xs
 
 -- | PARSE FUNCTION EXPRESSION
 -- | Parse a function expression. A function expression is an expression that consists
@@ -458,17 +539,46 @@ parseFunction :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseFunction = localize $ do
   void $ Lex.reserved "fn"
   name <- Lex.identifier <|> Lex.parens Lex.operator
+
   generics <- P.option [] $ Lex.angles (P.sepBy Lex.identifier Lex.comma)
-  args <- Lex.parens (P.sepBy (parseAnnotation Typ.parseType) Lex.comma)
+  args <- Lex.parens (P.sepBy argument Lex.comma)
   ret <- P.option Nothing $ Just <$> (Lex.symbol ":" *> Typ.parseType)
 
   void $ Lex.symbol "=>"
 
-  let funTy = (HLIR.:->:) <$> mapM HLIR.value args <*> ret
+  let args' = (Left <$> lefts' args) <> (Right <$> rights' args)
+  let labels = middles' args
 
   expr <- parseExpression
 
-  pure $ HLIR.MkExprLet (fromList generics) (Left (HLIR.MkAnnotation name funTy)) (HLIR.MkExprLambda args ret expr) (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
+  (args'', body') <- List.foldlM (\(vars, acc) x -> case x of
+      Right a -> pure (vars <> [a], acc)
+      Left (HLIR.MkPatVariable name' _) ->
+        pure (vars <> [HLIR.MkAnnotation name' Nothing], acc)
+      Left (HLIR.MkPatLocated p _) | Just name' <- getPatVar p ->
+        pure (vars <> [HLIR.MkAnnotation name' Nothing], acc)
+      Left p -> do
+        name' <- freshSymbol
+        pure (vars <> [HLIR.MkAnnotation name' Nothing], HLIR.MkExprMatch (HLIR.MkExprVariable (HLIR.MkAnnotation name' Nothing)) [(p, acc, Nothing)])
+    ) (mempty, expr) args'
+
+  ty <- List.foldlM (\acc x -> do
+      let HLIR.MkAnnotation name' ty = x
+      ty' <- maybe M.fresh pure ty
+      pure $ HLIR.MkTyRowExtend name' ty' True acc
+    ) HLIR.MkTyRowEmpty labels
+
+
+  let funTy =
+        (HLIR.:->:)
+          <$> (
+            (++)
+              <$> mapM HLIR.value args''
+              <*> pure [HLIR.MkTyRecord ty]
+            )
+          <*> ret
+
+  pure $ HLIR.MkExprLet (fromList generics) (Left (HLIR.MkAnnotation name funTy)) (HLIR.MkExprLambda (args'' ++ [HLIR.MkAnnotation "kwargs" (Just (HLIR.MkTyRecord ty))]) ret body') (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
 
 -- | PARSE LAMBDA EXPRESSION
 -- | Parse a lambda expression. A lambda expression is an expression that consists
@@ -480,25 +590,38 @@ parseFunction = localize $ do
 parseLambda :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseLambda = localize $ do
   void $ Lex.reserved "fn"
-  args <- Lex.parens (P.sepBy (Right <$> parsePattern <|> Left <$> parseAnnotation Typ.parseType) Lex.comma)
+  args <- Lex.parens (
+    P.sepBy
+      argument
+      Lex.comma
+    )
   ret <- P.option Nothing $ Just <$> (Lex.symbol ":" *> Typ.parseType)
 
   void $ Lex.symbol "=>"
 
+  let args' = (Left <$> lefts' args) <> (Right <$> rights' args)
+  let labels = middles' args
+
   body <- parseExpression
 
-  (args', body') <- List.foldlM (\(vars, acc) x -> case x of
-      Left a -> pure (vars <> [a], acc)
-      Right (HLIR.MkPatVariable name _) -> 
+  (args'', body') <- List.foldlM (\(vars, acc) x -> case x of
+      Right a -> pure (vars <> [a], acc)
+      Left (HLIR.MkPatVariable name _) ->
         pure (vars <> [HLIR.MkAnnotation name Nothing], acc)
-      Right (HLIR.MkPatLocated p _) | Just name <- getPatVar p -> 
+      Left (HLIR.MkPatLocated p _) | Just name <- getPatVar p ->
         pure (vars <> [HLIR.MkAnnotation name Nothing], acc)
-      Right p -> do
+      Left p -> do
         name <- freshSymbol
         pure (vars <> [HLIR.MkAnnotation name Nothing], HLIR.MkExprMatch (HLIR.MkExprVariable (HLIR.MkAnnotation name Nothing)) [(p, acc, Nothing)])
-    ) (mempty, body) args
+    ) (mempty, body) args'
 
-  pure $ HLIR.MkExprLambda args' ret body'
+  ty <- List.foldlM (\acc x -> do
+      let HLIR.MkAnnotation name' ty = x
+      ty' <- maybe M.fresh pure ty
+      pure $ HLIR.MkTyRowExtend name' ty' True acc
+    ) HLIR.MkTyRowEmpty labels
+
+  pure $ HLIR.MkExprLambda (args'' ++ [HLIR.MkAnnotation "kwargs" (Just (HLIR.MkTyRecord ty))]) ret body'
 
 -- | PARSE UPDATE EXPRESSION
 -- | Parse an update expression. An update expression is an expression that consists
@@ -565,6 +688,7 @@ parseSpawn = localize $ do
 
   pure $ HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "Thread::new" Nothing)) [
       HLIR.MkExprLambda [] Nothing expr
+    , HLIR.MkExprRecordEmpty
     ]
 
 -- | PARSE TERM EXPRESSION
@@ -581,7 +705,7 @@ parseTerm =
     parseMatch,
     parseTernary,
     parseLiteral,
-    P.try parseMap,
+    P.try parseExprRecord,
     parseBlock,
     parseList,
     P.try parseTuple,
@@ -589,13 +713,22 @@ parseTerm =
     Lex.parens parseExpression
   ]
 
+parseReturn :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseReturn = localize $ do
+  void $ Lex.reserved "return"
+  HLIR.MkExprReturn <$> parseExpression
+
 parseStatement :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseStatement = P.choice [
     parseWhile,
+    parseReturn,
     parseFunction,
     P.try parseUpdate,
     parseExpression
   ]
+
+some' :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
+some' e = HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "Some" Nothing)) [e, HLIR.MkExprRecordEmpty]
 
 -- | PARSE EXPRESSION
 -- | Parse an expression. An expression is a piece of code that can be evaluated to
@@ -638,15 +771,46 @@ parseExpression = localize $ P.makeExprParser parseTerm table
         ],
         [
           P.Postfix . Lex.makeUnaryOp $ do
-            args <- Lex.parens (P.sepBy parseExpression Lex.comma)
-            pure $ \e -> HLIR.MkExprApplication e args
+              field <- P.string "->" *> Lex.nonLexedID <* Lex.scn
+              pure $ \e -> HLIR.MkExprRecordAccess e field
+        ],
+        [
+          P.Postfix . Lex.makeUnaryOp $ do
+            let labelledArgument = do
+                  name <- Lex.identifier
+                  void $ Lex.symbol ":"
+                  expr <- parseExpression
+                  pure $ Right (name, expr)
+
+            args <- Lex.parens (P.sepBy (P.try labelledArgument <|> Left <$> parseExpression) Lex.comma)
+
+            let labelledArgs = rights args
+                positionalArgs = lefts args
+
+            let label = List.foldl (\acc (name, expr) -> HLIR.MkExprRecordExtension acc name False (some' expr)) HLIR.MkExprRecordEmpty labelledArgs
+
+            pure $ \e -> HLIR.MkExprApplication e (positionalArgs ++ [label])
         ],
         [
             P.Postfix . Lex.makeUnaryOp $ do
+              let labelledArgument = do
+                    name <- Lex.identifier
+                    void $ Lex.symbol ":"
+                    expr <- parseExpression
+                    pure $ Right (name, expr)
+
+
               field <- P.char '.' *> Lex.nonLexedID <* Lex.scn
-              args <- P.option [] $ Lex.parens (P.sepBy parseExpression Lex.comma)
+              args <- P.option [] $ Lex.parens (P.sepBy (P.try labelledArgument <|> Left <$> parseExpression) Lex.comma)
+
+              let labelledArgs = rights args
+                  positionalArgs = lefts args
+
+              let label = List.foldl (\acc (name, expr) -> HLIR.MkExprRecordExtension acc name False (some' expr)) HLIR.MkExprRecordEmpty labelledArgs
+
               let var = HLIR.MkExprVariable (HLIR.MkAnnotation field Nothing)
-              pure $ \e -> HLIR.MkExprApplication var (e:args)
+
+              pure $ \e -> HLIR.MkExprApplication var (e:positionalArgs ++ [label])
         ],
         [
           P.Postfix . Lex.makeUnaryOp $ do
@@ -705,7 +869,7 @@ parseExpression = localize $ P.makeExprParser parseTerm table
         [
           P.Prefix . Lex.makeUnaryOp $ do
             void $ Lex.symbol "!"
-            pure $ \a -> HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "!" Nothing)) [a]
+            pure $ \a -> HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "!" Nothing)) [a, HLIR.MkExprRecordEmpty]
         ],
         [
           P.InfixL $ do

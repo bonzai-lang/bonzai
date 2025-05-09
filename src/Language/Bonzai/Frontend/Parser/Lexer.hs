@@ -66,11 +66,9 @@ reservedWords =
       "match",
       "case",
       "type",
-      "live",
       "true",
       "false",
-      "try",
-      "catch"
+      "return"
     ]
 
 -- | Lexeme parser that consumes whitespace after the lexeme
