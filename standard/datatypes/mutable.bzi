@@ -1,5 +1,6 @@
 require "std:math"
 require "std:datatypes/unit"
+require "std:datatypes/optional"
 
 extern fn mutable_value<A>(x: mutable<A>): A
 pub let value = mutable_value

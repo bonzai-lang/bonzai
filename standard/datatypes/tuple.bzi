@@ -2,6 +2,7 @@ require "std:datatypes/error"
 require "std:datatypes/list"
 require "std:datatypes/unit"
 require "std:math"
+require "std:datatypes/optional"
 
 pub type Tuple<A, B> {
   Tuple(x: A, y: B)

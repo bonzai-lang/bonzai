@@ -157,3 +157,49 @@ pub fn getKeys(json: JSON, keys: list<string>): Optional<JSON> =>
     Some(json),
     keys
   )
+
+pub fn JSON::prettify(json: JSON, tabs _: Optional<int>): string => {
+  let i = Optional::unwrap_or(kwargs->tabs, 0)  
+
+  match json {
+    case Object(fields) => {
+      let pairs = List::map(fields, fn (v) => 
+        String::concat([
+          String::repeat(" ", i + 2), 
+          "\"", 
+          Tuple::first(v), 
+          "\": ", 
+          JSON::prettify(Tuple::second(v), tabs: i + 2)
+        ])
+      )
+
+      String::concat([
+        "{\n", 
+        String::repeat(" ", i), 
+        String::join(pairs, ",\n"), 
+        "\n", 
+        String::repeat(" ", i), 
+        "}"
+      ])
+    }
+    case Array(values) => {
+      let items = List::map(values, fn (v) => 
+        String::concat([
+          "\n", 
+          String::repeat(" ", i + 2), 
+          JSON::prettify(v, tabs: i + 2)
+        ])
+      )
+
+      String::concat([
+        "[\n", 
+        String::repeat(" ", i), 
+        String::join(items, ",\n"), 
+        "\n", 
+        String::repeat(" ", i), 
+        "]"
+      ])
+    }
+    case _ => JSON::stringify(json)
+  }
+}

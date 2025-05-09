@@ -5,6 +5,7 @@ require "list"
 require "map"
 require "tuple"
 require "../io"
+require "optional"
 
 extern fn create_thread<A>(cb: fn(): A): Thread<A>
 extern fn wait_thread<A>(thread: Thread<A>): A

@@ -1,6 +1,7 @@
 require "std:datatypes/list"
 require "std:math"
 require "std:datatypes/unit"
+require "std:datatypes/optional"
 
 pub extern fn toString<A>(x: A): string
 
@@ -11,3 +12,9 @@ pub fn String::join(xs: list<string>, sep: string): string =>
 
 pub fn String::length(s: string): int =>
   List::length(s.explode())
+
+pub fn String::repeat(s: string, n: int): string =>
+  if n == 0 then "" else s + String::repeat(s, n - 1)
+
+pub fn String::concat(xs: list<string>): string =>
+  List::foldl(fn(x, acc) => acc + x, "", xs)

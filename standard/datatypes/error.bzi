@@ -1,4 +1,5 @@
 require "std:datatypes/unit"
+require "std:datatypes/optional"
 
 pub type Throwable<A> {
   Ok(x: A),
