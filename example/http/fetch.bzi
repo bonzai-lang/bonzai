@@ -5,14 +5,12 @@ require "std:http"
 
 let res = fetch(
   "http://localhost:3000",
-  Some(Dyn::Map({
-    method: Dyn::String("POST"),
-    headers: Dyn::Map({
-      "Content-Type": Dyn::String("application/json"),
-      "Content-Length": Dyn::String("16")
-    }),
-    body: Dyn::String("{\"key\": \"value\"}")
-  }))
+  method: "POST",
+  headers: [
+    "Content-Type: application/json",
+    "Content-Length: 16"
+  ],
+  body: "{\"key\": \"value\"}"
 )
 
 match res {
