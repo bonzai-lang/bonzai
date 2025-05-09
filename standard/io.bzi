@@ -1,4 +1,5 @@
 require "std:datatypes/unit"
+require "std:datatypes/optional"
 
 extern fn exit_with<A>(code: int): A
 pub extern fn print<A>(x: A): unit

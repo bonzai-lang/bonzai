@@ -1,4 +1,5 @@
 require "std:datatypes/unit"
+require "std:datatypes/optional"
 
 extern fn mul_value<A>(x: A, y: A): A
 extern fn add_value<A>(x: A, y: A): A
@@ -17,18 +18,18 @@ extern fn gt_value<A>(x: A, y: A): bool
 extern fn lte_value<A>(x: A, y: A): bool
 extern fn gte_value<A>(x: A, y: A): bool
 
-pub let (==) = eq_value
-pub let (!=) = neq_value
-pub let (<) = lt_value
-pub let (>) = gt_value
-pub let (<=) = lte_value
-pub let (>=) = gte_value
+pub fn (==)<A>(x: A, y: A): bool => eq_value(x, y)
+pub fn (!=)<A>(x: A, y: A): bool => neq_value(x, y)
+pub fn (<)<A>(x: A, y: A): bool => lt_value(x, y)
+pub fn (>)<A>(x: A, y: A): bool => gt_value(x, y)
+pub fn (<=)<A>(x: A, y: A): bool => lte_value(x, y)
+pub fn (>=)<A>(x: A, y: A): bool => gte_value(x, y)
 
-pub let (+) = add_value
-pub let (-) = sub_value
-pub let (*) = mul_value
-pub let (/) = div_value
-pub let (%) = mod_value
+pub fn (+)<A>(x: A, y: A): A => add_value(x, y)
+pub fn (-)<A>(x: A, y: A): A => sub_value(x, y)
+pub fn (*)<A>(x: A, y: A): A => mul_value(x, y)
+pub fn (/)<A>(x: A, y: A): A => div_value(x, y)
+pub fn (%)<A>(x: A, y: A): A => mod_value(x, y)
 
 pub fn (&&) (x: bool, y: bool): bool => if x then y else false
 pub fn (||) (x: bool, y: bool): bool => if x then true else y
