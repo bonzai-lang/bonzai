@@ -67,7 +67,7 @@
   ASSERT_FMT(module, get_type(v) == t, "%s expected %s, but got %s", func, type_to_str(t), type_of(v))
 
 #define ASSERT_ARGC(module, func, argc, n) \
-  ASSERT_FMT(module, argc == n, "%s expected %d arguments, but got %d", func, n, argc)
+  ASSERT_FMT(module, argc == (n + 1), "%s expected %d arguments, but got %d", func, n + 1, argc)
 
 #else
 #define ASSERT(condition, message)

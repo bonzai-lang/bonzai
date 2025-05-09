@@ -33,7 +33,8 @@ void mark_value(Value value) {
   }
 }
 
-void free_value(struct Module* mod, HeapValue* unreached) {
+inline __attribute__((always_inline)) void free_value(struct Module* mod,
+                                                      HeapValue* unreached) {
   if (unreached->type == TYPE_LIST || unreached->type == TYPE_MUTABLE) {
     free(unreached->as_ptr);
   } else if (unreached->type == TYPE_STRING) {

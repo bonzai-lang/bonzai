@@ -61,12 +61,13 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return,
                        &&case_call_native,
                        UNKNOWN,
                        &&case_get_value,
+                       &&case_get_record_access,
                        UNKNOWN};
 
   goto *jmp_table[op];
 
 case_load_local: {
-  safe_point(module);
+  // safe_point(module);
   int bp = module->base_pointer;
   Value value = module->stack->values[bp + i1];
   stack_push(module, value);
@@ -75,7 +76,7 @@ case_load_local: {
 }
 
 case_store_local: {
-  safe_point(module);
+  // safe_point(module);
   int bp = module->base_pointer;
   module->stack->values[bp + i1] = stack_pop(module);
 
@@ -84,7 +85,7 @@ case_store_local: {
 }
 
 case_load_constant: {
-  safe_point(module);
+  // safe_point(module);
   Value value = constants->values[i1];
   stack_push(module, value);
   INCREASE_IP(module);
@@ -92,7 +93,7 @@ case_load_constant: {
 }
 
 case_load_global: {
-  safe_point(module);
+  // safe_point(module);
   Value value = module->stack->values[i1];
   stack_push(module, value);
   INCREASE_IP(module);
@@ -100,7 +101,7 @@ case_load_global: {
 }
 
 case_store_global: {
-  safe_point(module);
+  // safe_point(module);
   Value value = module->stack->values[module->stack->stack_pointer - 1];
   module->stack->values[i1] = value;
 
@@ -111,7 +112,7 @@ case_store_global: {
 }
 
 case_return: {
-  safe_point(module);
+  // safe_point(module);
   struct Frame fr = pop_frame(module);
   Value ret = module->stack->values[module->stack->stack_pointer - 1];
 
@@ -128,7 +129,7 @@ case_return: {
 }
 
 case_compare: {
-  safe_point(module);
+  // safe_point(module);
   Value a = module->stack->values[module->stack->stack_pointer - 2];
   Value b = module->stack->values[module->stack->stack_pointer - 1];
 
@@ -140,7 +141,7 @@ case_compare: {
 }
 
 case_update: {
-  safe_point(module);
+  // safe_point(module);
   Value variable = module->stack->values[module->stack->stack_pointer - 1];
   Value value = module->stack->values[module->stack->stack_pointer - 2];
 
@@ -161,7 +162,7 @@ case_update: {
 }
 
 case_make_list: {
-  safe_point(module);
+  // safe_point(module);
   Value *list = malloc(i1 * sizeof(Value));
 
   // Loop in reverse order to pop values in the correct order
@@ -181,7 +182,7 @@ case_make_list: {
 }
 
 case_list_get: {
-  safe_point(module);
+  // safe_point(module);
   Value list = module->stack->values[module->stack->stack_pointer - 1];
   uint32_t index = i1;
 
@@ -200,7 +201,7 @@ case_list_get: {
 }
 
 case_call: {
-  safe_point(module);
+  // safe_point(module);
   Value callee = stack_pop(module);
 
   ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
@@ -217,7 +218,7 @@ case_call: {
 }
 
 case_call_global: {
-  safe_point(module);
+  // safe_point(module);
 
   Value callee = module->stack->values[i1];
 
@@ -230,7 +231,7 @@ case_call_global: {
 }
 
 case_call_local: {
-  safe_point(module);
+  // safe_point(module);
   Value callee = module->stack->values[module->base_pointer + i1];
 
   ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
@@ -242,7 +243,7 @@ case_call_local: {
 }
 
 case_jump_if_false: {
-  safe_point(module);
+  // safe_point(module);
   Value value = module->stack->values[module->stack->stack_pointer - 1];
   if (GET_INT(value) == 0) {
     INCREASE_IP_BY(module, i1);
@@ -256,13 +257,13 @@ case_jump_if_false: {
 }
 
 case_jump_rel: {
-  safe_point(module);
+  // safe_point(module);
   INCREASE_IP_BY(module, i1);
   goto *jmp_table[op];
 }
 
 case_get_index: {
-  safe_point(module);
+  // safe_point(module);
   Value index = module->stack->values[module->stack->stack_pointer - 1];
   Value list = module->stack->values[module->stack->stack_pointer - 2];
 
@@ -283,21 +284,21 @@ case_get_index: {
 }
 
 case_special: {
-  safe_point(module);
+  // safe_point(module);
   stack_push(module, kNull);
   INCREASE_IP(module);
   goto *jmp_table[op];
 }
 
 case_halt: {
-  safe_point(module);
+  // safe_point(module);
   module->is_terminated = true;
 
   return kNull;
 }
 
 case_make_function_and_store: {
-  safe_point(module);
+  // safe_point(module);
   int32_t new_pc = module->pc + 5;
   Value lambda = MAKE_FUNCTION(module, new_pc, i3);
 
@@ -308,7 +309,7 @@ case_make_function_and_store: {
 }
 
 case_load_native: {
-  safe_point(module);
+  // safe_point(module);
   Value native = module->constants->values[i1];
 
   ASSERT_TYPE(module, "load_native", native, TYPE_STRING);
@@ -321,7 +322,7 @@ case_load_native: {
 }
 
 case_make_mutable: {
-  safe_point(module);
+  // safe_point(module);
   Value x = module->stack->values[module->stack->stack_pointer - 1];
   module->stack->values[module->stack->stack_pointer - 1] =
       MAKE_MUTABLE(module, x);
@@ -330,7 +331,7 @@ case_make_mutable: {
 }
 
 case_loc: {
-  safe_point(module);
+  // safe_point(module);
   module->latest_position[0] = i1;
   module->latest_position[1] = i2;
   module->file = GET_STRING(constants->values[i3]);
@@ -340,7 +341,7 @@ case_loc: {
 }
 
 case_add: {
-  safe_point(module);
+  // safe_point(module);
   Value b = module->stack->values[module->stack->stack_pointer - 1];
   Value a = module->stack->values[module->stack->stack_pointer - 2];
 
@@ -379,6 +380,30 @@ case_add: {
     case TYPE_LIST: {
       HeapValue *l1 = GET_PTR(a);
       HeapValue *l2 = GET_PTR(b);
+
+      if (l1->length == 4 && l2->length == 4 &&
+          strcmp(GET_STRING(l1->as_ptr[1]), "Map") == 0 && 
+          strcmp(GET_STRING(l2->as_ptr[1]), "Map") == 0) {
+        // If the first list is a map, we need to create a new list
+        // with the same length as the second list
+        // and copy the values from the first list to the new list
+
+        Value *list = malloc((l2->length + l1->length) * sizeof(Value));
+
+        HeapValue* map_ptr_1 = GET_PTR(l1->as_ptr[3]);
+        HeapValue* map_ptr_2 = GET_PTR(l2->as_ptr[3]);
+        for (uint32_t i = 0; i < map_ptr_1->length; i++) {
+          list[i] = map_ptr_1->as_ptr[i];
+        }
+        for (uint32_t i = 0; i < map_ptr_2->length; i++) {
+          list[map_ptr_1->length + i] = map_ptr_2->as_ptr[i];
+        }
+        module->stack->values[module->stack->stack_pointer - 2] =
+            MAKE_LIST(module, list, l1->length + l2->length);
+        module->stack->stack_pointer--;
+        break;
+      }
+
       Value *list = malloc((l1->length + l2->length) * sizeof(Value));
       for (uint32_t i = 0; i < l1->length; i++) list[i] = l1->as_ptr[i];
       for (uint32_t i = 0; i < l2->length; i++)
@@ -399,7 +424,7 @@ case_add: {
 }
 
 case_sub: {
-  safe_point(module);
+  // safe_point(module);
   Value a = stack_pop(module);
   Value b = stack_pop(module);
 
@@ -427,7 +452,7 @@ case_sub: {
 }
 
 case_mul: {
-  safe_point(module);
+  // safe_point(module);
   Value a = stack_pop(module);
   Value b = stack_pop(module);
 
@@ -455,7 +480,7 @@ case_mul: {
 }
 
 case_div: {
-  safe_point(module);
+  // safe_point(module);
   Value a = stack_pop(module);
   Value b = stack_pop(module);
 
@@ -483,7 +508,7 @@ case_div: {
 }
 
 case_mod: {
-  safe_point(module);
+  // safe_point(module);
   Value b = stack_pop(module);
   Value a = stack_pop(module);
 
@@ -511,7 +536,7 @@ case_mod: {
 }
 
 case_call_native: {
-  safe_point(module);
+  // safe_point(module);
   Value native = module->constants->values[i1];
 
   direct_native_call(
@@ -520,12 +545,55 @@ case_call_native: {
 }
 
 case_get_value: {
-  safe_point(module);
+  // safe_point(module);
   Value value = module->stack->values[module->stack->stack_pointer - 1];
 
   ASSERT_TYPE(module, "get_value", value, TYPE_MUTABLE);
 
   module->stack->values[module->stack->stack_pointer - 1] = GET_MUTABLE(value);
+
+  INCREASE_IP(module);
+  goto *jmp_table[op];
+}
+
+case_get_record_access: {
+  // safe_point(module);
+  Value record = module->stack->values[module->stack->stack_pointer - 1];
+  Value access = module->constants->values[i1];
+
+  ASSERT_TYPE(module, "get_record_access", record, TYPE_LIST);
+  ASSERT_TYPE(module, "get_record_access", access, TYPE_STRING);
+
+  HeapValue *ptr = GET_PTR(record);
+  char *name = GET_STRING(access);
+
+  // A record is in the following format:
+  // [null, Map, Map, [name1, value1, name2, value2, ...]]
+  // We need to find the index of the name in the list
+  // and return the corresponding value
+  HeapValue* list = GET_PTR(ptr->as_ptr[3]);
+
+  bool found = false;
+
+  // We need to find the index of the name in the list
+  // and return the corresponding value
+  for (uint32_t i = 0; i < list->length; i += 2) {
+    if (strcmp(GET_STRING(list->as_ptr[i]), name) == 0) {
+      module->stack->values[module->stack->stack_pointer - 1] =
+          list->as_ptr[i + 1];
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    Value* none = malloc(3 * sizeof(Value));
+    none[0] = kNull;
+    none[1] = MAKE_STRING_NON_GC(module, "Optional");
+    none[2] = MAKE_STRING_NON_GC(module, "None");
+
+    module->stack->values[module->stack->stack_pointer - 1] = MAKE_LIST(module, none, 3);
+  }
 
   INCREASE_IP(module);
   goto *jmp_table[op];

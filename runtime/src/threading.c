@@ -8,7 +8,7 @@
 #include <value.h>
 
 Value list_get(Module *mod, Value list, uint32_t idx) {
-  safe_point(mod);
+  // safe_point(mod);
   HeapValue *l = GET_PTR(list);
   if (idx < 0 || idx >= l->length) {
     THROW_FMT(mod, "Invalid index, received %d", idx);
