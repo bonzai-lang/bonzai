@@ -154,6 +154,10 @@ convert (MLIR.MkExprReturn e) = do
   e' <- convert e
 
   pure $ MLIR.MkExprReturn e'
+convert (MLIR.MkExprRecord m) = do
+  m' <- mapM convert m
+
+  pure $ MLIR.MkExprRecord m'
 convert _ = compilerError "unexpected expression"
 
 convertLambda :: MonadIO m => Set Text -> MLIR.Expression -> m MLIR.Expression

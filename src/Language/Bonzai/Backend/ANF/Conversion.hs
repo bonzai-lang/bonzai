@@ -147,6 +147,10 @@ convert (MLIR.MkExprReturn e) = do
   (e', stmts) <- convert e
   
   pure (MLIR.MkExprReturn e', stmts)
+convert (MLIR.MkExprRecord m) = do
+  (stmts, m') <- mapM swap <$> mapM convert m
+  
+  pure (MLIR.MkExprRecord m', stmts)
 
 convertUpdate :: MonadIO m => MLIR.MLIR "update" -> m (MLIR.MLIR "update", [(Text, MLIR.MLIR "expression")])
 convertUpdate (MLIR.MkUpdtVariable a) = pure (MLIR.MkUpdtVariable a, [])

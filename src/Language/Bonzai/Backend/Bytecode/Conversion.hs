@@ -108,6 +108,8 @@ instance Assemble LLIR.Instruction where
 
   assemble (LLIR.GetRecordAccess index) = pure [BC.GetRecordAccess index]
 
+  assemble (LLIR.MakeRecord size) = pure [BC.MakeRecord size]
+
 instance Assemble LLIR.Segment where
   assemble (LLIR.EventOn id' arity bodyLength ls instructions) = do
     let freed' = Map.fromList ls

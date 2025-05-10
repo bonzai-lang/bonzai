@@ -71,33 +71,17 @@ convert (HLIR.MkExprMut e) = MLIR.MkExprMut (convert e)
 convert (HLIR.MkExprRecordExtension e k opt v) = do
   let (xs, e') = reduceObj (HLIR.MkExprRecordExtension e k opt v)
 
-  let obj = MLIR.MkExprList
-        [
-          MLIR.MkExprSpecial, 
-          MLIR.MkExprLiteral (MLIR.MkLitString "Map"), 
-          MLIR.MkExprLiteral (MLIR.MkLitString "Map"), 
-          MLIR.MkExprList (toList' xs)
-        ]
+  let obj = MLIR.MkExprRecord (Map.fromList xs)
 
   case e' of
-    Just (MLIR.MkExprList [
-        MLIR.MkExprSpecial, 
-        MLIR.MkExprLiteral (MLIR.MkLitString "Map"), 
-        MLIR.MkExprLiteral (MLIR.MkLitString "Map"), 
-        MLIR.MkExprList []
-      ]) -> obj
+    Just (MLIR.MkExprRecord m) | m == mempty -> obj
     Just e'' -> MLIR.MkExprBinary "+" obj e''
     Nothing -> obj
 convert (HLIR.MkExprRecordAccess e k) = do
   let e' = convert e
 
   MLIR.MkExprRecordAccess e' k
-convert HLIR.MkExprRecordEmpty = MLIR.MkExprList [
-    MLIR.MkExprSpecial, 
-    MLIR.MkExprLiteral (MLIR.MkLitString "Map"), 
-    MLIR.MkExprLiteral (MLIR.MkLitString "Map"), 
-    MLIR.MkExprList []
-  ]
+convert HLIR.MkExprRecordEmpty = MLIR.MkExprRecord mempty
 convert (HLIR.MkExprSingleIf c t) = MLIR.MkExprSingleIf (convert c) (convert t)
 convert (HLIR.MkExprReturn e) = MLIR.MkExprReturn (convert e)
 convert e = compilerError $ "impossible, received: " <> show e

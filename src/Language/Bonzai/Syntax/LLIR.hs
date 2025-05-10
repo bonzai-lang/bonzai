@@ -55,6 +55,7 @@ data Instruction
   | TryCatch Int
   | GetValue
   | GetRecordAccess Int
+  | MakeRecord Int
   deriving (Eq)
 
 data Library = MkLibrary Int (Set FunctionLibrary)
@@ -113,6 +114,7 @@ instance ToText Instruction where
   toText (TryCatch i) = T.concat ["try_catch ", T.pack (show i)]
   toText GetValue = "get_value"
   toText (GetRecordAccess n) = T.concat ["get_record_access ", T.pack (show n)]
+  toText (MakeRecord n) = T.concat ["make_record ", T.pack (show n)]
 
 instance ToText Segment where
   toText (Function n as _ _ is) = T.concat ["function ", n, "(", T.intercalate ", " as, ") { ", T.intercalate "; " (map toText is), " }"]

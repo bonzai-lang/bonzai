@@ -135,6 +135,10 @@ hoist (MLIR.MkExprReturn e) = do
   (e', hoisted) <- hoist e
 
   pure (MLIR.MkExprReturn e', hoisted)
+hoist (MLIR.MkExprRecord m) = do
+  (hoisted, m') <- mapM swap <$> mapM hoist m
+
+  pure (MLIR.MkExprRecord m', hoisted)
 
 hoistToplevel :: MonadIO m => MLIR.MLIR "expression" -> m [MLIR.MLIR "expression"]
 hoistToplevel (MLIR.MkExprLoc p e) = do

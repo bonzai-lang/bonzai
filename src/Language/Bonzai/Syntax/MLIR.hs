@@ -23,6 +23,7 @@ import Language.Bonzai.Syntax.Internal.Position as Pos
 import Language.Bonzai.Syntax.Internal.Type as Ty
 import qualified Data.Text as T
 import GHC.TypeLits (Symbol)
+import qualified Data.Map as Map
 
 -- | UPDATE TYPE
 -- | Untyped representation of an update operation in Bonzai.
@@ -59,6 +60,7 @@ data Expression
   | MkExprWhile Expression Expression
   | MkExprSpecial
   | MkExprRecordAccess Expression Text
+  | MkExprRecord (Map Text Expression)
   | MkExprSingleIf Expression Expression
   | MkExprReturn Expression
   deriving (Eq)
@@ -103,6 +105,7 @@ instance ToText Expression where
   toText (MkExprRecordAccess e f) = T.concat [toText e, ".", f]
   toText (MkExprSingleIf c e) = T.concat ["if ", toText c, " { ", toText e, " }"]
   toText (MkExprReturn e) = T.concat ["return ", toText e]  
+  toText (MkExprRecord m) = T.concat ["{", T.intercalate ", " (map (\(k, v) -> k <> ": " <> toText v) (Map.toList m)), "}"]
 
 instance ToText [Expression] where
   toText = T.intercalate "\n" . map toText

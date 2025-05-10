@@ -453,6 +453,17 @@ instance Assemble MLIR.Expression where
   assemble (MLIR.MkExprReturn e) = do
     e' <- assemble e
     pure $ e' <> LLIR.instr LLIR.Return
+  
+  assemble (MLIR.MkExprRecord m) = do
+    let list = Map.toList m
+
+    let fields = concatMap (\(k, v) -> [MLIR.MkExprLiteral (MLIR.MkLitString k), v]) list
+
+    es <- assemble fields
+
+    let len = length list
+
+    pure $ es <> LLIR.instr (LLIR.MakeRecord len)
 
 instance Assemble MLIR.Update where
   assemble :: MonadIO m => MLIR.Update -> ReaderT (Set Text) m [LLIR.Segment]

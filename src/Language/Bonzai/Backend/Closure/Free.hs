@@ -46,6 +46,7 @@ instance Free MLIR.Expression where
   free (MLIR.MkExprRecordAccess e _) = free e
   free (MLIR.MkExprSingleIf c e) = free c <> free e
   free (MLIR.MkExprReturn e) = free e
+  free (MLIR.MkExprRecord m) = foldMap free m
 
 instance Free MLIR.Update where
   free (MLIR.MkUpdtVariable a) = Set.singleton a
@@ -80,6 +81,7 @@ instance Substitutable MLIR.Expression MLIR.Expression where
   substitute (a, e) (MLIR.MkExprRecordAccess e' f) = MLIR.MkExprRecordAccess (substitute (a, e) e') f
   substitute (a, e) (MLIR.MkExprSingleIf c e') = MLIR.MkExprSingleIf (substitute (a, e) c) (substitute (a, e) e')
   substitute (a, e) (MLIR.MkExprReturn e') = MLIR.MkExprReturn $ substitute (a, e) e'
+  substitute (a, e) (MLIR.MkExprRecord m) = MLIR.MkExprRecord $ fmap (substitute (a, e)) m
   
 instance Substitutable MLIR.Update MLIR.Update where
   substitute (a, e) (MLIR.MkUpdtVariable a') = if a == a' then e else MLIR.MkUpdtVariable a'
