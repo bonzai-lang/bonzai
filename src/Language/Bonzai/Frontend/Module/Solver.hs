@@ -118,8 +118,6 @@ solveExpression (HLIR.MkExprLambda args t body) | Just es <- getBlock body = do
 
   let exprs' = insertReturn exprs
 
-  print exprs'
-
   pure $ HLIR.MkExprLambda args t (HLIR.MkExprBlock exprs')
 solveExpression (HLIR.MkExprLambda args t body) = do
   body' <- solveExpression body

@@ -443,16 +443,6 @@ check (HLIR.MkExprRecordAccess e k) ty = do
   e' <- check e (HLIR.MkTyRecord $ HLIR.MkTyRowExtend k ty False r)
 
   pure $ HLIR.MkExprRecordAccess e' k
-check (HLIR.MkExprRecordExtension e k opt v) expectedTy = do
-  (e', eTy) <- synthesize e
-  (v', vTy) <- synthesize v
-
-  expectedTy' <- unrecord expectedTy
-  eTy' <- unrecord eTy
-
-  expectedTy' `U.unifiesWith` HLIR.MkTyRowExtend k vTy opt eTy'
-
-  pure (HLIR.MkExprRecordExtension e' k opt v')
 check (HLIR.MkExprSingleIf c t) ty = do
   c' <- check c HLIR.MkTyBool
   t' <- check t ty
