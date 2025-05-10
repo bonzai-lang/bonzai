@@ -62,6 +62,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return,
                        UNKNOWN,
                        &&case_get_value,
                        &&case_get_record_access,
+                       &&case_make_record,
                        UNKNOWN};
 
   goto *jmp_table[op];
@@ -162,6 +163,12 @@ case_update: {
 }
 
 case_make_list: {
+  if (i1 == 0) {
+    stack_push(module, EMPTY_LIST);
+    INCREASE_IP(module);
+    goto *jmp_table[op];
+  }
+
   // safe_point(module);
   Value *list = malloc(i1 * sizeof(Value));
 
@@ -377,32 +384,51 @@ case_add: {
       break;
     }
 
-    case TYPE_LIST: {
-      HeapValue *l1 = GET_PTR(a);
-      HeapValue *l2 = GET_PTR(b);
-
-      if (l1->length == 4 && l2->length == 4 &&
-          strcmp(GET_STRING(l1->as_ptr[1]), "Map") == 0 && 
-          strcmp(GET_STRING(l2->as_ptr[1]), "Map") == 0) {
-        // If the first list is a map, we need to create a new list
-        // with the same length as the second list
-        // and copy the values from the first list to the new list
-
-        Value *list = malloc((l2->length + l1->length) * sizeof(Value));
-
-        HeapValue* map_ptr_1 = GET_PTR(l1->as_ptr[3]);
-        HeapValue* map_ptr_2 = GET_PTR(l2->as_ptr[3]);
-        for (uint32_t i = 0; i < map_ptr_1->length; i++) {
-          list[i] = map_ptr_1->as_ptr[i];
-        }
-        for (uint32_t i = 0; i < map_ptr_2->length; i++) {
-          list[map_ptr_1->length + i] = map_ptr_2->as_ptr[i];
-        }
-        module->stack->values[module->stack->stack_pointer - 2] =
-            MAKE_LIST(module, list, l1->length + l2->length);
+    case TYPE_RECORD: {
+      if (IS_EMPTY_RECORD(a)) {
+        module->stack->values[module->stack->stack_pointer - 2] = b;
+        module->stack->stack_pointer--;
+        break;
+      } else if (IS_EMPTY_RECORD(b)) {
+        module->stack->values[module->stack->stack_pointer - 2] = a;
         module->stack->stack_pointer--;
         break;
       }
+
+      HeapValue *r1 = GET_PTR(a);
+      HeapValue *r2 = GET_PTR(b);
+
+      char **keys = malloc((r1->length + r2->length) * sizeof(char *));
+      Value *values = malloc((r1->length + r2->length) * sizeof(Value));
+
+      for (uint32_t i = 0; i < r1->length; i++) {
+        keys[i] = r1->as_record.keys[i];
+        values[i] = r1->as_record.values[i + 1];
+      }
+      for (uint32_t i = 0; i < r2->length; i++) {
+        keys[r1->length + i] = r2->as_record.keys[i];
+        values[r1->length + i] = r2->as_record.values[i + 1];
+      }
+
+      module->stack->values[module->stack->stack_pointer - 2] =
+          MAKE_RECORD(module, keys, values, r1->length + r2->length);
+      module->stack->stack_pointer--;
+      break;
+    }
+
+    case TYPE_LIST: {
+      if (IS_EMPTY_LIST(a)) {
+        module->stack->values[module->stack->stack_pointer - 2] = b;
+        module->stack->stack_pointer--;
+        break;
+      } else if (IS_EMPTY_LIST(b)) {
+        module->stack->values[module->stack->stack_pointer - 2] = a;
+        module->stack->stack_pointer--;
+        break;
+      }
+
+      HeapValue *l1 = GET_PTR(a);
+      HeapValue *l2 = GET_PTR(b);
 
       Value *list = malloc((l1->length + l2->length) * sizeof(Value));
       for (uint32_t i = 0; i < l1->length; i++) list[i] = l1->as_ptr[i];
@@ -561,8 +587,21 @@ case_get_record_access: {
   Value record = module->stack->values[module->stack->stack_pointer - 1];
   Value access = module->constants->values[i1];
 
-  ASSERT_TYPE(module, "get_record_access", record, TYPE_LIST);
+  ASSERT_TYPE(module, "get_record_access", record, TYPE_RECORD);
   ASSERT_TYPE(module, "get_record_access", access, TYPE_STRING);
+
+  if (IS_EMPTY_RECORD(record)) {
+    Value *none = malloc(3 * sizeof(Value));
+    none[0] = kNull;
+    none[1] = MAKE_STRING_NON_GC(module, "Optional");
+    none[2] = MAKE_STRING_NON_GC(module, "None");
+
+    module->stack->values[module->stack->stack_pointer - 1] =
+        MAKE_LIST(module, none, 3);
+
+    INCREASE_IP(module);
+    goto *jmp_table[op];
+  }
 
   HeapValue *ptr = GET_PTR(record);
   char *name = GET_STRING(access);
@@ -571,16 +610,11 @@ case_get_record_access: {
   // [null, Map, Map, [name1, value1, name2, value2, ...]]
   // We need to find the index of the name in the list
   // and return the corresponding value
-  HeapValue* list = GET_PTR(ptr->as_ptr[3]);
-
   bool found = false;
-
-  // We need to find the index of the name in the list
-  // and return the corresponding value
-  for (uint32_t i = 0; i < list->length; i += 2) {
-    if (strcmp(GET_STRING(list->as_ptr[i]), name) == 0) {
+  for (int i = 0; i < ptr->length; i++) {
+    if (strcmp(ptr->as_record.keys[i], name) == 0) {
       module->stack->values[module->stack->stack_pointer - 1] =
-          list->as_ptr[i + 1];
+          ptr->as_record.values[i];
       found = true;
       break;
     }
@@ -594,6 +628,40 @@ case_get_record_access: {
 
     module->stack->values[module->stack->stack_pointer - 1] = MAKE_LIST(module, none, 3);
   }
+
+  INCREASE_IP(module);
+  goto *jmp_table[op];
+}
+
+case_make_record: {
+  if (i1 == 0) {
+    stack_push(module, EMPTY_RECORD);
+    INCREASE_IP(module);
+    goto *jmp_table[op];
+  }
+
+  // safe_point(module);
+  char** keys = malloc(i1 * sizeof(char*));
+  Value *values = malloc(i1 * sizeof(Value));
+
+  // Records are in the following format:
+  // [key1, value1, key2, value2, ...]
+  // We need to split the stack into keys and values
+  // We can loop in reverse order to pop values in the correct order
+  // There is i1 * 2 values to pop from the stack
+  for (int i = (i1 * 2) - 1; i >= 0; i -= 2) {
+    values[i / 2] =
+        module->stack->values[module->stack->stack_pointer - i1 * 2 + i];
+    keys[i / 2] =
+        GET_STRING(module->stack->values[module->stack->stack_pointer - i1 * 2 + i - 1]);
+  }
+
+  int sp = module->stack->stack_pointer - i1 * 2;
+
+  module->stack->values[sp] =
+      MAKE_RECORD(module, keys, values, i1);
+
+  module->stack->stack_pointer = sp + 1;
 
   INCREASE_IP(module);
   goto *jmp_table[op];

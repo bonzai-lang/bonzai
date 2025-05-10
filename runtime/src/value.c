@@ -233,6 +233,16 @@ Value MAKE_STRING(struct Module* mod, char* x) {
   return MAKE_PTR(v);
 }
 
+Value MAKE_RECORD(struct Module* mod, char** keys, Value* values,
+                  int size) {
+  HeapValue* v = allocate(mod, TYPE_RECORD);
+  v->as_record.keys = keys;
+  v->as_record.values = values;
+  v->length = size;
+
+  return MAKE_PTR(v);
+}
+
 Value MAKE_STRING_NON_GC(struct Module* mod, char* x) {
   HeapValue* v = allocate(mod, TYPE_STRING);
   v->as_string = x;
@@ -458,6 +468,11 @@ void debug_value(Value v) {
       break;
 
     case TYPE_LIST: {
+      if (IS_EMPTY_LIST(v)) {
+        printf("[]");
+        break;
+      }
+
       HeapValue* list = GET_PTR(v);
       printf("[");
       for (uint32_t i = 0; i < list->length; i++) {
@@ -490,6 +505,25 @@ void debug_value(Value v) {
 
     case TYPE_NATIVE: {
       printf("Native(%s)", GET_NATIVE(v).name);
+      break;
+    }
+
+    case TYPE_RECORD: {
+      if (IS_EMPTY_RECORD(v)) {
+        printf("{}");
+        break;
+      }
+
+      HeapValue* record = GET_PTR(v);
+      printf("{ ");
+      for (int i = 0; i < record->length; i++) {
+        printf("%s: ", record->as_record.keys[i]);
+        debug_value(record->as_record.values[i]);
+        if (i < record->length - 1) {
+          printf(", ");
+        }
+      }
+      printf(" }");
       break;
     }
 

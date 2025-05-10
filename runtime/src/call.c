@@ -5,7 +5,8 @@
 #include <threading.h>
 #include <value.h>
 
-void op_call(Module* module, Value callee, int32_t argc) {
+inline __attribute__((always_inline)) void op_call(Module* module, Value callee,
+                                                  int32_t argc) {
   // ASSERT_FMT(module, module->callstack < MAX_FRAMES,
   //            "Call stack overflow, reached %d", module->callstack);
 

@@ -36,6 +36,8 @@ typedef uint64_t Value;
 #define MASK_TYPE_STRING 0x0003000000000000
 #define MASK_TYPE_FUNCTION 0x0004000000000000
 #define MASK_TYPE_FUNCENV 0x0005000000000000
+#define MASK_TYPE_EMPTY_LIST 0x0006000000000000
+#define MASK_TYPE_EMPTY_RECORD 0x0007000000000000
 
 // Constant short encoded values
 #define kNaN (MASK_EXPONENT | MASK_QUIET)
@@ -49,6 +51,8 @@ typedef uint64_t Value;
 #define SIGNATURE_FUNCTION (kNaN | MASK_TYPE_FUNCTION)
 #define SIGNATURE_FUNCENV (kNaN | MASK_TYPE_FUNCENV)
 #define SIGNATURE_POINTER (kNaN | MASK_SIGN)
+#define SIGNATURE_EMPTY_LIST (kNaN | MASK_TYPE_EMPTY_LIST)
+#define SIGNATURE_EMPTY_RECORD (kNaN | MASK_TYPE_EMPTY_RECORD)
 
 typedef int32_t reg;
 
@@ -70,7 +74,8 @@ typedef enum {
   TYPE_EVENT,
   TYPE_FRAME,
   TYPE_EVENT_ON,
-  TYPE_NATIVE
+  TYPE_NATIVE,
+  TYPE_RECORD,
 } ValueType;
 
 #define GET_PTR(x) ((HeapValue*)((x) & MASK_PAYLOAD_PTR))
@@ -147,6 +152,11 @@ struct Function {
   int local_space;
 };
 
+struct Record {
+  char** keys;
+  Value* values;
+};
+
 // Container type for values
 typedef struct HeapValue {
   ValueType type;
@@ -161,6 +171,7 @@ typedef struct HeapValue {
     char* as_string;
     Value* as_ptr;
     void* as_any;
+    struct Record as_record;
     struct Event as_event;
     struct EventOn as_event_on;
     struct Frame as_frame;
@@ -189,10 +200,14 @@ typedef struct {
 
 #define IS_PTR(x) (((x) & MASK_SIGNATURE) == SIGNATURE_POINTER)
 #define IS_FUN(x) (((x) & MASK_SIGNATURE) == SIGNATURE_FUNCTION)
+#define IS_EMPTY_LIST(x) (((x) & MASK_SIGNATURE) == SIGNATURE_EMPTY_LIST)
+#define IS_EMPTY_RECORD(x) (((x) & MASK_SIGNATURE) == SIGNATURE_EMPTY_RECORD)
 
 #define MAKE_INTEGER(x) (SIGNATURE_INTEGER | (uint32_t)(x))
 #define MAKE_FLOAT(x) (*(Value*)(&(x)))
 #define MAKE_PTR(x) (SIGNATURE_POINTER | (uint64_t)(x))
+#define EMPTY_LIST (SIGNATURE_EMPTY_LIST | 0)
+#define EMPTY_RECORD (SIGNATURE_EMPTY_RECORD | 0)
 
 // #define MAKE_FUNCTION(x, y) \
 //   (SIGNATURE_FUNCTION | (uint32_t)(x) | ((uint16_t)(y) << 32))
@@ -209,6 +224,8 @@ Value MAKE_NATIVE(struct Module* mod, char* name, int addr);
 Value MAKE_EVENT_ON(struct Module* mod, int id, Value func);
 Value MAKE_STRING_NON_GC(struct Module* mod, char* x);
 Value MAKE_FUNCTION(struct Module* mod, int32_t ip, uint16_t local_space);
+Value MAKE_RECORD(struct Module* mod, char** keys, Value* values,
+                  int size);
 void gc(struct Module* vm);
 void force_sweep(struct Module* vm);
 HeapValue* allocate(struct Module* mod, ValueType type);
@@ -269,6 +286,10 @@ inline static ValueType get_type(Value value) {
       return TYPE_FUNCTION;
     case SIGNATURE_FUNCENV:
       return TYPE_FUNCENV;
+    case SIGNATURE_EMPTY_LIST: 
+      return TYPE_LIST;
+    case SIGNATURE_EMPTY_RECORD:
+      return TYPE_RECORD;
   }
 
   return TYPE_UNKNOWN;
@@ -304,6 +325,8 @@ inline static char* type_to_str(ValueType t) {
       return "event_on";
     case TYPE_NATIVE:
       return "native";
+    case TYPE_RECORD:
+      return "record";
   }
 }
 
