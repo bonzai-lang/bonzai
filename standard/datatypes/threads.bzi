@@ -21,8 +21,11 @@ pub fn Thread::withVariable<A, B>(cb: fn(A): B, x: A): B => {
   res
 }
 
-pub let Thread::new = create_thread
-pub let Thread::wait = wait_thread
-pub let Thread::newDetached = create_detached_thread
+pub fn Thread::new<A>(cb: fn(): A): Thread<A> => create_thread(cb)
+// pub let Thread::wait = wait_thread
+pub fn Thread::wait<A>(thread: Thread<A>): A => wait_thread(thread)
+// pub let Thread::newDetached = create_detached_thread
+pub fn Thread::newDetached<A>(cb: fn(): A): Thread<A> => create_detached_thread(cb)
 
-pub let wait = wait_thread
+// pub let wait = wait_thread
+pub fn wait<A>(thread: Thread<A>): A => wait_thread(thread)

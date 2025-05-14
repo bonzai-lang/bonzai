@@ -2,10 +2,17 @@ require "std:datatypes/list"
 require "std:math"
 require "std:datatypes/unit"
 require "std:datatypes/optional"
+require "std:datatypes/mutable"
+require "std:io"
 
 pub extern fn toString<A>(x: A): string
 
 extern fn explode(s: string): list<char>
+extern fn implode(xs: list<char>): string
+
+pub fn String::explode(s: string): list<char> => explode(s)
+
+pub fn String::implode(xs: list<char>): string => implode(xs)
 
 pub fn String::join(xs: list<string>, sep: string): string =>
   List::foldl(fn(x, acc) => if acc == "" then x else acc + sep + x, "", xs)
@@ -18,3 +25,43 @@ pub fn String::repeat(s: string, n: int): string =>
 
 pub fn String::concat(xs: list<string>): string =>
   List::foldl(fn(x, acc) => acc + x, "", xs)
+
+pub fn String::map(s: string, f: fn(char): char): string => {
+  let array = s.explode()
+  let mapped = List::map(array, f)
+  return implode(mapped)
+}
+
+pub fn String::slice(s: string, start _?: int, end _?: int): string => {
+  let start = Optional::unwrap_or(kwargs->start, 0)
+  let end = Optional::unwrap_or(kwargs->end, String::length(s))
+
+  let array = s.explode()
+  return implode(List::slice(array, start: start, end: end))
+}
+
+pub fn String::startsWith(s: string, prefix: string): bool => {
+  let prefixLength = String::length(prefix)
+  let sLength = String::length(s)
+
+  if prefixLength > sLength then {
+    return false
+  }
+
+  let prefixSlice = String::slice(s, start: 0, end: prefixLength)
+  return prefixSlice == prefix
+}
+
+pub fn String::split(s: string, sep: string): list<string> => {
+  mut result = []
+  mut i = 0
+
+  let sep_ = sep.explode()
+  let sepLength = List::length(sep_)
+
+  if i.value > 0 then {
+    result += [String::slice(s, start: 0, end: i.value)]
+  }
+
+  return result.value
+}

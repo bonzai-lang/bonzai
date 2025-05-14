@@ -20,29 +20,56 @@ extern fn close_server(server: HTTP)
 extern fn redirect_to(req: Request, url: string): unit
 extern fn get_path(req: Request): string
 pub extern fn make_unit(): unit
-extern fn map_headers_to_string<A>(headers: A): string
 
-fn HTTP::create(callback: fn(Request): bool, port: int) => {
+fn containsContentLength(headers: list<string>): bool => {
+  let contentLengthHeader = "Content-Length: "
+  
+  List::any(
+    headers, 
+    fn(header) => String::startsWith(header, contentLengthHeader)
+  )
+}
+
+pub fn HTTP::create(callback: fn({
+  send: fn(string): unit,
+  sendWith: fn(string): unit,
+  get: fn(): string,
+  getPath: fn(): string,
+  redirect: fn(string): unit
+}): bool, port: int) => {
   let server = start_http_server(port)
   
   mut running = true
 
+  fn generateRequest(req: Request) => {
+    send: fn(buffer: string) => send_buffer(req, buffer),
+    sendWith: fn(buffer: string) => send_buffer_with(req, buffer),
+    get: fn() => get_buffer(req),
+    getPath: fn() => get_path(req),
+    redirect: fn(url: string) => redirect_to(req, url)
+  }
+
   while running.value {
     let req = accept_request(server)
-    running = callback(req)
+    running = callback(generateRequest(req))
     close_client(req)
   }
 
   close_server(server)
 } 
 
-pub extern fn fetch_helper(url: string, method: string, headers: string): Throwable<(string, string)>
+pub fn Request::getPath(req: Request): string => get_path(req)
+pub fn Request::getBuffer(req: Request): string => get_buffer(req)
+pub fn Request::send(req: Request, buffer: string): unit => send_buffer(req, buffer)
+pub fn Request::redirect(req: Request, url: string): unit => redirect_to(req, url)
+
+extern fn fetch_helper(url: string, method: string, headers: string): Throwable<(string, string)>
 
 pub fn fetch(
   url: string, 
-  method _: Optional<string>,
-  body _: Optional<string>,
-  headers _: Optional<list<string>>
+  method _?: string,
+  body _?: string,
+  headers _?: list<string>
 ): Throwable<(string, string)> => {
   let method = kwargs->method
   let body = kwargs->body
@@ -53,7 +80,13 @@ pub fn fetch(
 
   match headers {
     case Some(headers) => {
-      let headersString = String::join(headers, "\r\n") + "\r\n" + bodyString
+      mut newHeaders = headers
+      if !containsContentLength(headers) then {
+        let len = String::length(bodyString)
+        newHeaders += ["Content-Length: $len"]
+      }
+
+      let headersString = String::join(newHeaders.value, "\r\n") + "\r\n\r\n" + bodyString
 
       fetch_helper(url, methodString, headersString)
     }
@@ -62,9 +95,13 @@ pub fn fetch(
 }
 
 type Header {
-  Header(code: int, reason: string)
+  Header(rules: list<(string, string)>, content: string)
 }
 
-pub fn Header::show(header: Header): string => match header {
-  case Header(code, reason) => "HTTP/1.1 $code $reason"
+pub fn Header::from(headers: string): Optional<Header> => {
+  let result = String::split(headers, "\r\n")
+
+  print(result)
+
+  return None
 }

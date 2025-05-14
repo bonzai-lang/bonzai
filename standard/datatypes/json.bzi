@@ -12,6 +12,7 @@ require "std:datatypes/string"
 require "std:math"
 require "std:datatypes/error"
 require "std:datatypes/unit"
+require "std:io"
 
 pub type JSON {
   Object(fields: list<(string, JSON)>),
@@ -23,7 +24,17 @@ pub type JSON {
   Null
 }
 
-pub fn jsonParser(): Parser<JSON> => {
+pub let json = {
+  object: fn(fields: list<(string, JSON)>) => Object(fields),
+  array: fn(values: list<JSON>) => Array(values),
+  string: fn(value: string) => String(value),
+  integer: fn(value: int) => Integer(value),
+  float: fn(value: float) => Float(value),
+  boolean: fn(value: bool) => Boolean(value),
+  null: Null
+}
+
+fn jsonParser(): Parser<JSON> => {
   let charLiteral = choice([
     char('\\') :right: char('\\'),
     char('\\') :right: char('"'),
@@ -89,19 +100,19 @@ pub fn jsonParser(): Parser<JSON> => {
   choice([object, array, value])
 }
 
-pub fn parseJsonWithError(input: string): Throwable<JSON> => 
+fn parseJsonWithError(input: string): Throwable<JSON> => 
   match jsonParser().runParser(input.explode()) {
     case ParseResult(x, _) => Ok(x)
     case ParseError(msg, _) => Error(msg)
   }
 
-pub fn parseJSON(input: string): Optional<JSON> => 
+fn parseJSON(input: string): Optional<JSON> => 
   match jsonParser().runParser(input.explode()) {
     case ParseResult(x, _) => Some(x)
     case ParseError(_, _) => None
   }
 
-pub fn getJSON(input: string): JSON =>
+fn getJSON(input: string): JSON =>
   match parseJSON(input) {
     case Some(x) => x
     case None => Null
@@ -158,7 +169,7 @@ pub fn getKeys(json: JSON, keys: list<string>): Optional<JSON> =>
     keys
   )
 
-pub fn JSON::prettify(json: JSON, tabs _: Optional<int>): string => {
+pub fn JSON::prettify(json: JSON, tabs _?: int): string => {
   let i = Optional::unwrap_or(kwargs->tabs, 0)  
 
   match json {

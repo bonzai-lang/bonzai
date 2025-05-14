@@ -4,6 +4,7 @@ require "std:datatypes/string"
 require "std:datatypes/unit"
 require "std:datatypes/mutable"
 require "std:io"
+require "std:datatypes/optional"
 
 extern fn is_whitespace(c: char): bool
 extern fn is_digit(c: char): bool
@@ -83,9 +84,9 @@ fn string(s: string): Parser<string> =>
   Parser(fn(input) => {
     let len = String::length(s)
     let inputLen = List::length(input)
-    let str = List::slice(input, 0, len)
+    let str = List::slice(input, end: len)
     if str.implode == s 
-      then ParseResult(s, List::slice(input, len, inputLen)) 
+      then ParseResult(s, List::slice(input, start: len, end: inputLen)) 
       else ParseError("Unexpected string $s", input)
   })
 
