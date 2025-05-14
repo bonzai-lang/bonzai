@@ -5,7 +5,6 @@ module Language.Bonzai.Syntax.MLIR (
   Expression(..),
 
   pattern MkExprFunction,
-  pattern MkExprEventDef,
 
   -- Re-exports
   module Lit,
@@ -47,10 +46,6 @@ data Expression
   | MkExprUpdate Update Expression
   | MkExprLet Text Expression
   | MkExprBlock [Expression]
-  | MkExprEvent [Expression]
-  | MkExprOn Text [Text] Expression
-  | MkExprSend Expression Text [Expression]
-  | MkExprSpawn Expression
   | MkExprList [Expression]
   | MkExprNative (Annotation [Text]) Ty.Type
   | MkExprIndex Expression Expression
@@ -67,9 +62,6 @@ data Expression
 
 pattern MkExprFunction :: Text -> [Text] -> Expression -> Expression
 pattern MkExprFunction f args b = MkExprLet f (MkExprLambda args b)
-
-pattern MkExprEventDef :: Text -> [Expression] -> Expression
-pattern MkExprEventDef n es = MkExprLet n (MkExprEvent es)
 
 type family MLIR (s :: Symbol) where
   MLIR "update" = Update
@@ -89,10 +81,6 @@ instance ToText Expression where
   toText (MkExprUpdate u e) = T.concat [toText u, " = ", toText e]
   toText (MkExprLet a e) = T.concat ["let ", toText a, " = ", toText e]
   toText (MkExprBlock es) = T.concat ["{", T.intercalate "; " (map toText es), "}"]
-  toText (MkExprEvent e) = T.concat ["event ", toText e]
-  toText (MkExprOn n as e) = T.concat ["on ", n, "(", T.intercalate ", " (map toText as), ") { ", toText e, " }"]
-  toText (MkExprSend e n e') = T.concat ["(", toText e, ") -> ", n, "(", T.intercalate ", " (map toText e'), ")"]
-  toText (MkExprSpawn e) = T.concat ["spawn ", toText e]
   toText (MkExprList es) = T.concat ["[", T.intercalate ", " (map toText es), "]"]
   toText (MkExprNative ann ty) = T.concat ["native ", toText ann.name, "<", T.intercalate ", " ann.value, "> ", toText ty]
   toText (MkExprIndex e e') = T.concat [toText e, "[", toText e', "]"]
