@@ -118,7 +118,7 @@ pattern MkExprTuple :: Expression Maybe t -> Expression Maybe t -> Expression Ma
 pattern MkExprTuple a b = MkExprApplication (MkExprVariable (MkAnnotation "Tuple" Nothing)) [a, b, MkExprRecordEmpty]
 
 pattern MkExprMutableOperation :: Text -> Expression Maybe t -> Expression Maybe t -> Expression Maybe t
-pattern MkExprMutableOperation op a b = MkExprApplication (MkExprVariable (MkAnnotation op Nothing)) [a, b] 
+pattern MkExprMutableOperation op a b = MkExprApplication (MkExprVariable (MkAnnotation op Nothing)) [a, b, MkExprRecordEmpty] 
 
 type family HLIR (s :: Symbol) where
   HLIR "update" = Update Maybe Type
