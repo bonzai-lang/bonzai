@@ -84,18 +84,16 @@ Value get_buffer(Module* module, Value* args, int argc) {
   ASSERT_TYPE(module, "get_buffer", args[0], TYPE_INTEGER);
 
   int client_socket = GET_INT(args[0]);
-  HeapValue* buffer = allocate(module, TYPE_STRING);
-  buffer->length = BUFFER_SIZE;
-  int bytes_read = recv(client_socket, buffer->as_string, BUFFER_SIZE - 1, 0);
-
+  char* buffer = malloc(BUFFER_SIZE);
+  int bytes_read = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
   if (bytes_read < 0) {
-    free_value(module, buffer);
+    free(buffer);
     return MAKE_STRING_NON_GC(module, "");
   }
 
-  buffer->as_string[bytes_read] = '\0';
-
-  return MAKE_PTR(buffer);
+  buffer[bytes_read] = '\0';
+  
+  return MAKE_STRING(module, buffer);
 }
 
 Value get_path(Module* module, Value* args, int argc) {
@@ -137,7 +135,7 @@ Value send_buffer(Module* module, Value* args, int argc) {
   char* buf = GET_STRING(args[1]);
 
   // Get length of strlen(buf)
-  size_t len = sprintf(NULL, "%d", strlen(buf));
+  size_t len = snprintf(NULL, 0, "%lu", strlen(buf));
 
   char* response = malloc(strlen(buf) + len + 69);
   sprintf(response,
@@ -164,7 +162,7 @@ Value redirect_to(Module* module, Value* args, int argc) {
   char* buf = GET_STRING(args[1]);
 
   // Get length of strlen(buf)
-  size_t len = sprintf(NULL, "%d", strlen(buf));
+  size_t len = snprintf(NULL, 0, "%lu", strlen(buf));
 
   char* response = malloc(strlen(buf) + len + 167);
   sprintf(response,

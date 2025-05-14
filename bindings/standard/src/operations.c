@@ -37,6 +37,38 @@ void print_map_values(Value map) {
   printf(" }");
 }
 
+Value split(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "split", argc, 2);
+  ASSERT_TYPE(mod, "split", args[0], TYPE_STRING);
+  ASSERT_TYPE(mod, "split", args[1], TYPE_STRING);
+
+  char* str = GET_STRING(args[0]);
+  char* delim = GET_STRING(args[1]);
+
+  char* token = strtok(str, delim);
+  int capacity = 0;
+
+  Value* tokens = malloc(0 * sizeof(Value));
+  int count = 0;
+
+  while (token != NULL) {
+    if (capacity == count) {
+      capacity = capacity == 0 ? 1 : capacity * 2;
+      tokens = realloc(tokens, capacity * sizeof(Value));
+    }
+
+    tokens[count++] = MAKE_STRING_NON_GC(mod, token);
+    token = strtok(NULL, delim);
+  }
+
+  if (capacity == 0) {
+    free(tokens);
+    return EMPTY_LIST;
+  }
+
+  return MAKE_LIST(mod, tokens, count);
+}
+
 void print_with_level(Value value, int level) {
   if (value == 0) {
     printf("null");
@@ -60,21 +92,39 @@ void print_with_level(Value value, int level) {
         printf("\"%s\"", GET_STRING(value));
       }
       break;
+    
+    case TYPE_RECORD: {
+      HeapValue* record = GET_PTR(value);
+      if (IS_EMPTY_RECORD(value) || record->length == 0) {
+        printf("{}");
+        break;
+      }
+
+      printf("{ ");
+      for (uint32_t i = 0; i < record->length; i++) {
+        char* key_name = record->as_record.keys[i];
+        Value key_value = record->as_record.values[i];
+
+        printf("%s: ", key_name);
+        print_with_level(key_value, level + 1);
+        if (i < record->length - 1) {
+          printf(", ");
+        }
+      }
+      printf(" }");
+      break;
+    }
+
     case TYPE_LIST: {
       HeapValue* list = GET_PTR(value);
 
-      if (list->length == 0) {
+      if (IS_EMPTY_LIST(value) || list->length == 0) {
         printf("[]");
         break;
       }
 
       if (list->as_ptr[0] == kNull) {
         char* data_name = GET_STRING(list->as_ptr[1]);
-
-        if (strcmp(data_name, "Map") == 0) {
-          print_map_values(list->as_ptr[3]);
-          break;
-        }
 
         printf("%s::%s(", GET_STRING(list->as_ptr[1]),
                GET_STRING(list->as_ptr[2]));
@@ -320,11 +370,19 @@ Value implode(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "implode", argc, 1);
   ASSERT_TYPE(mod, "implode", args[0], TYPE_LIST);
 
+  if (IS_EMPTY_LIST(args[0])) {
+    return MAKE_STRING_NON_GC(mod, "");
+  }
+
   HeapValue* list = GET_PTR(args[0]);
+
+  debug_value(args[0]); printf("\n");
+  
   char* str = malloc(list->length + 1);
 
   for (uint32_t i = 0; i < list->length; i++) {
-    str[i] = GET_STRING(list->as_ptr[i])[0];
+    char c = GET_STRING(list->as_ptr[i])[0]; 
+    str[i] = c;
   }
 
   str[list->length] = '\0';
@@ -581,9 +639,7 @@ Value write_file(Module* mod, Value* args, int argc) {
 Value run_gc(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "run_gc", argc, 0);
 
-  stop_the_world(mod, true);
-  gc(mod);
-  stop_the_world(mod, false);
+  atomic_store(&gc_is_requested, 1);
 
   return MAKE_INTEGER(0);
 }

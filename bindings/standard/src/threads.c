@@ -24,11 +24,7 @@ void* value_to_function(void* value) {
   //        GLOBALS_SIZE * sizeof(Value));
 
   for (int i = 0; i < GLOBALS_SIZE; i++) {
-    Value v = module->stack->values[i];
-
-    if (v != kNull || v != NULL) {
-      new_module->stack->values[i] = clone_value(module, v);
-    }
+    new_module->stack->values[i] = module->stack->values[i];
   }
 
   new_module->instr_count = module->instr_count;
@@ -48,13 +44,12 @@ void* value_to_function(void* value) {
   new_module->callstack = 1;
   pthread_mutex_init(&new_module->module_mutex, NULL);
 
-  Value ret = module->call_function(new_module, function, 0, NULL);
+  // printf("Thread %p\n", new_module->stack->values);
 
-  pthread_mutex_lock(&module->module_mutex);
-  Value object = clone_value(module, ret);
-  pthread_mutex_unlock(&module->module_mutex);
+  Value ret = new_module->call_function(new_module, function, 0, NULL);
 
   new_module->gc->stacks.stacks[sc] = NULL;
+  rearrange_stacks(new_module);
 
   // Free the stack and the module
   free(new_module->stack->values);
@@ -66,14 +61,9 @@ void* value_to_function(void* value) {
 
   Value* object_as_ptr = malloc(sizeof(Value));
 
-  *object_as_ptr = object;
+  *object_as_ptr = ret;
 
   return object_as_ptr;
-}
-
-void thread_finalizer(Module* mod, HeapValue* hp) {
-  pthread_t thread = hp->as_any;
-  pthread_join(thread, NULL);
 }
 
 Value create_thread(Module* mod, Value* args, int argc) {
@@ -82,7 +72,7 @@ Value create_thread(Module* mod, Value* args, int argc) {
 
   pthread_t thread;
   struct thread_data_t* data = malloc(sizeof(struct thread_data_t));
-  data->function = clone_value(mod, args[0]);
+  data->function = args[0];
   data->mod = mod;
   pthread_create(&thread, NULL, value_to_function, data);
 
@@ -98,7 +88,7 @@ Value create_detached_thread(Module* mod, Value* args, int argc) {
 
   pthread_t thread;
   struct thread_data_t* data = malloc(sizeof(struct thread_data_t));
-  data->function = clone_value(mod, args[0]);
+  data->function = args[0];
   data->mod = mod;
   pthread_create(&thread, NULL, value_to_function, data);
   pthread_detach(thread);
@@ -116,9 +106,10 @@ Value wait_thread(Module* mod, Value* args, int argc) {
 
   HeapValue* thread_value = GET_PTR(args[0]);
   pthread_t thread = thread_value->as_any;
-  // printf("Waiting for thread\n");
+  atomic_store(&mod->stack->is_stopped, true);
   Value* thread_returned;
-  pthread_join(thread, (void**) &thread_returned);
+  pthread_join(thread, (void**)&thread_returned);
+  atomic_store(&mod->stack->is_stopped, false);
 
   Value object = *thread_returned;
 
