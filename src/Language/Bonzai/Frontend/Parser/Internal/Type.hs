@@ -3,12 +3,28 @@ import qualified Language.Bonzai.Frontend.Parser as P
 import qualified Language.Bonzai.Syntax.HLIR as HLIR
 import qualified Language.Bonzai.Frontend.Typechecking.Monad as M
 import qualified Language.Bonzai.Frontend.Parser.Lexer as Lex
+import qualified Data.List as List
 
 -- | TYPE
 -- | Parse a type.
 parseType :: (MonadIO m) => P.Parser m HLIR.Type
 parseType =
   P.choice [
+    Lex.braces $ do
+      -- Record type constructor
+      -- Defined as the following:
+      --
+      -- "{" (identifier ":" type (",")?)* "}"
+      fields <- flip P.sepBy Lex.comma $ do
+        idt <- Lex.identifier
+        opt <- P.option False $ Lex.symbol "?" $> True
+        void $ Lex.symbol ":"
+        (opt,idt,) <$> parseType
+
+      let fields' = List.foldl (\acc (o, k, v) -> HLIR.MkTyRowExtend k v o acc) HLIR.MkTyRowEmpty fields
+
+      pure $ HLIR.MkTyRecord fields',
+
     -- Function type constructor
     -- Defined as the following:
     --
@@ -21,14 +37,6 @@ parseType =
       kwarg <- M.fresh
 
       pure $ (tys ++ [kwarg]) HLIR.:->: ret,
-
-    -- Actor type constructor
-    -- Defined as the following:
-    --
-    -- "actor" type
-    do
-      void $ Lex.reserved "actor"
-      HLIR.MkTyActor <$> parseType,
 
     -- Mutable type constructor
     -- Defined as the following:

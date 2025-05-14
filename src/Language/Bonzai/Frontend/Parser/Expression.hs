@@ -470,6 +470,62 @@ parseWhile = localize $ do
 
   pure $ HLIR.MkExprWhile cond (HLIR.MkExprBlock body)
 
+-- | PARSE FOR-IN EXPRESSION
+-- | Parse a for-in expression. A for-in expression is an expression that consists of
+-- | a for loop. It is used to loop over a collection of values in Bonzai.
+-- | The syntax of a for-in expression is as follows:
+-- |
+-- | "for" (identifier | pattern) "in" expression "{" expression* "}"
+parseForIn :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
+parseForIn = localize $ do
+  void $ Lex.reserved "for"
+  name <- (Right <$> parsePattern) <|> (Left <$> (Lex.identifier <|> Lex.parens Lex.operator))
+  let name' = case name of
+        Left n -> Left (HLIR.MkAnnotation n Nothing)
+        Right pat | isPatVar pat, Just name'' <- getPatVar pat -> Left (HLIR.MkAnnotation name'' Nothing)
+        Right pat -> Right pat
+  void $ Lex.reserved "in"
+  expr <- parseExpression
+
+  void $ Lex.symbol "{"
+  body <- P.sepEndBy parseStatement (P.optional (Lex.symbol ";"))
+  void $ Lex.symbol "}"
+
+  let mutable = HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "value" Nothing)) [
+          HLIR.MkExprVariable (HLIR.MkAnnotation "@i" Nothing)
+        , HLIR.MkExprRecordEmpty
+        ]
+  let len = HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "List::length" Nothing)) [
+          HLIR.MkExprVariable (HLIR.MkAnnotation "@array" Nothing)
+        , HLIR.MkExprRecordEmpty
+        ]
+  let cond = HLIR.MkExprBinary "<" mutable len
+
+  pure $ HLIR.MkExprBlock [
+      HLIR.MkExprLet 
+        mempty 
+        (Left (HLIR.MkAnnotation "@i" Nothing))
+        (HLIR.MkExprMut (HLIR.MkExprLiteral (HLIR.MkLitInt 0)))
+        (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
+    , HLIR.MkExprLet 
+        mempty 
+        (Left (HLIR.MkAnnotation "@array" Nothing)) 
+        expr 
+        (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing)) 
+    , HLIR.MkExprWhile cond (
+        HLIR.MkExprBlock $ [
+            HLIR.MkExprLet
+              mempty
+              name'
+              (HLIR.MkExprIndex (HLIR.MkExprVariable (HLIR.MkAnnotation "@array" Nothing)) mutable)
+              (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
+          ] <> body <> [
+            HLIR.MkExprMutableOperation "+=" (HLIR.MkExprVariable (HLIR.MkAnnotation "@i" Nothing)) (HLIR.MkExprLiteral (HLIR.MkLitInt 1))
+          ]
+      )
+    , HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing)
+    ]
+
 -- | PARSE BLOCK EXPRESSION
 -- | Parse a block expression. A block expression is an expression that consists of
 -- | a block of code. It is used to group a set of expressions together in Bonzai.
@@ -489,15 +545,16 @@ argument ::
   P.Parser m (Position
     (HLIR.HLIR "pattern")
     (HLIR.Annotation (Maybe HLIR.Type))
-    (HLIR.Annotation (Maybe HLIR.Type))
+    (Bool, HLIR.Annotation (Maybe HLIR.Type))
   )
 argument = P.choice [
     P.try $ do
       name <- Lex.identifier
       void $ Lex.symbol "_"
+      opt <- P.option False $ Lex.symbol "?" $> True
       ty <- P.optional (Lex.symbol ":" *> Typ.parseType)
 
-      pure (Middle' (HLIR.MkAnnotation name ty)),
+      pure (Middle' (opt, HLIR.MkAnnotation name ty)),
     P.try $ do
       name <- Lex.identifier
       void $ Lex.symbol ":"
@@ -562,10 +619,10 @@ parseFunction = localize $ do
         pure (vars <> [HLIR.MkAnnotation name' Nothing], HLIR.MkExprMatch (HLIR.MkExprVariable (HLIR.MkAnnotation name' Nothing)) [(p, acc, Nothing)])
     ) (mempty, expr) args'
 
-  ty <- List.foldlM (\acc x -> do
+  ty <- List.foldlM (\acc (opt, x) -> do
       let HLIR.MkAnnotation name' ty = x
       ty' <- maybe M.fresh pure ty
-      pure $ HLIR.MkTyRowExtend name' ty' True acc
+      pure $ HLIR.MkTyRowExtend name' (HLIR.MkTyApp (HLIR.MkTyId "Optional") [ty']) opt acc
     ) HLIR.MkTyRowEmpty labels
 
 
@@ -615,10 +672,10 @@ parseLambda = localize $ do
         pure (vars <> [HLIR.MkAnnotation name Nothing], HLIR.MkExprMatch (HLIR.MkExprVariable (HLIR.MkAnnotation name Nothing)) [(p, acc, Nothing)])
     ) (mempty, body) args'
 
-  ty <- List.foldlM (\acc x -> do
+  ty <- List.foldlM (\acc (opt, x) -> do
       let HLIR.MkAnnotation name' ty = x
       ty' <- maybe M.fresh pure ty
-      pure $ HLIR.MkTyRowExtend name' ty' True acc
+      pure $ HLIR.MkTyRowExtend name' (HLIR.MkTyApp (HLIR.MkTyId "Optional") [ty']) opt acc
     ) HLIR.MkTyRowEmpty labels
 
   pure $ HLIR.MkExprLambda (args'' ++ [HLIR.MkAnnotation "kwargs" (Just (HLIR.MkTyRecord ty))]) ret body'
@@ -721,6 +778,7 @@ parseReturn = localize $ do
 parseStatement :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseStatement = P.choice [
     parseWhile,
+    parseForIn,
     parseReturn,
     parseFunction,
     P.try parseUpdate,
@@ -922,7 +980,6 @@ parseToplevel =
     parseDirectData,
     parseRequire,
     parseExtern,
-    parseTopLet,
     parseTopMut,
     parseStatement
   ]
