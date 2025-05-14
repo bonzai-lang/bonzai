@@ -17,20 +17,33 @@ renamedVariables = IO.unsafePerformIO $ newIORef Set.empty
 -- | Solve a module by renaming all the variables in the module with unique names.
 solveModule :: MonadIO m => [HLIR.HLIR "expression"] -> m [HLIR.HLIR "expression"]
 solveModule (HLIR.MkExprLoc e p : xs) = do
-  e' <- solveModule [e]
-  xs' <- solveModule xs
+  es' <- solveModule (e : xs)
 
-  pure ((HLIR.MkExprLoc <$> e' <*> pure p) <> xs')
+  pure (HLIR.MkExprLoc <$> es' <*> pure p)
 solveModule (HLIR.MkExprPublic e : xs) = do
-  e' <- solveModule [e]
+  e' <- solveModule (e : xs)
+  
+  pure $ case e' of
+    [HLIR.MkExprMatch e'' cs] -> [HLIR.MkExprMatch e'' cs]
+    (x:xs') -> [HLIR.MkExprPublic x] <> xs'
+    [] -> []
+solveModule (HLIR.MkExprLet g a e b : xs) = do
+  a' <- case a of
+    Left ann -> Left <$> freshSymbol ann
+    _ -> pure a
+  e' <- solveExpression e
+  b' <- solveExpression b
+
   xs' <- solveModule xs
 
-  pure (HLIR.MkExprPublic <$> e' <> xs')
-solveModule (e:es) = do
-  e' <- solveExpression e
-  es' <- solveModule es
+  case a of
+    Left _ -> pure $ HLIR.MkExprLet g a' e' b' : xs'
+    Right p -> pure [HLIR.MkExprMatch e' [(p, HLIR.MkExprBlock xs', Nothing)]]
+solveModule (x : xs) = do
+  x' <- solveExpression x
+  xs' <- solveModule xs
 
-  pure (e' : es')
+  pure (x' : xs')
 solveModule [] = pure []
 
 freshSymbol :: MonadIO m => HLIR.Annotation a -> m (HLIR.Annotation a)

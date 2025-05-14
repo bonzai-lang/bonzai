@@ -255,7 +255,7 @@ resolveImports m (HLIR.MkExprLet _ (Left name) expr b) = do
   let m' = m {variables = Set.singleton name.name <> variables m}
   void $ resolveImports m' expr
   resolveImports m' b
-resolveImports _ (HLIR.MkExprLet _ (Right _) _ _) = compilerError "impossible"
+resolveImports _ (HLIR.MkExprLet _ (Right p) _ _) = compilerError $ "impossible: pattern match (" <> show p <> ") in let binding"
 resolveImports m (HLIR.MkExprBlock exprs) = do
   void $ foldlM resolveImports m exprs
   pure m
