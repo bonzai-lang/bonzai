@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
 module Language.Bonzai.Backend.LLIR.Conversion where
 
 -- | LLIR ASSEMBLER
@@ -146,31 +145,8 @@ instance Assemble MLIR.Expression where
 
     pure [LLIR.Function name args localSpaceSize localSpace finalBody]
 
-  assemble (MLIR.MkExprEventDef name body) = do
-    writeIORef isFunctionCurrently True
-    glbs <- readIORef globals
-    ntvs <- readIORef natives
-    let reserved = glbs <> ntvs
-
-    let env = M.free reserved body
-
-    let ons = getOns body
-
-    ons' <- local (<> env) $ assemble ons
-
-    let localSpaceSize = Set.size env
-
-    let body'' = filter shouldNotBeLabel ons'
-
-    let locals = List.nub $ Set.toList env
-        localSpace = zip locals [0..]
-
-    writeIORef isFunctionCurrently False
-
-    pure [LLIR.Event name localSpaceSize localSpace body'' (length ons)]
-
   assemble (MLIR.MkExprLet n e) = do
-    if isFunction e || isEvent e then do
+    if isFunction e then do
       assemble (MLIR.MkExprLet n (removeLoc e))
     else do
       e' <- assemble e
@@ -187,10 +163,6 @@ instance Assemble MLIR.Expression where
       isFunction (MLIR.MkExprLoc _ e') = isFunction e'
       isFunction (MLIR.MkExprLambda {}) = True
       isFunction _ = False
-
-      isEvent (MLIR.MkExprEvent _) = True
-      isEvent (MLIR.MkExprLoc _ e') = isEvent e'
-      isEvent _ = False
 
       removeLoc (MLIR.MkExprLoc _ e') = removeLoc e'
       removeLoc e' = e'
@@ -315,53 +287,6 @@ instance Assemble MLIR.Expression where
     pure $ e' <> LLIR.instr LLIR.MakeMutable
 
   assemble (MLIR.MkExprBlock es) = assemble es
-
-  assemble (MLIR.MkExprEvent es) = do
-    glbs <- readIORef globals
-    ntvs <- readIORef natives
-    let reserved = glbs <> ntvs
-    let env = M.free reserved es
-
-    let locals = Set.toList env
-        localSpace = zip locals [0..]
-
-    let ons = filter (\case MLIR.MkExprOn {} -> True; _ -> False) es
-    let lets = filter (\case MLIR.MkExprLet {} -> True; _ -> False) es
-
-    ons' <- local (<> env) $ assemble ons
-    lets' <- local (<> env) $ assemble lets
-
-    let len = length ons' + length lets'
-
-    pure $ LLIR.instr (LLIR.MakeEvent len (length ons) localSpace) <> ons' <> lets'
-
-  assemble (MLIR.MkExprOn event args body) = do
-    glbs <- readIORef globals
-    ntvs <- readIORef natives
-    let reserved = glbs <> ntvs <> Set.fromList args
-    let env = M.free reserved body
-
-    let locals = args <> Set.toList env
-        localSpace = zip locals [0..]
-
-    body' <- assemble body
-    event' <- fetchEvent event
-
-    let instrs = filter shouldNotBeLabel body'
-        instrs' = concatMap extractFrom instrs
-
-    pure [LLIR.EventOn event' (length args) (length instrs' + 1) localSpace (instrs' <> [LLIR.Return])]
-
-  assemble (MLIR.MkExprSend e event es) = do
-    e' <- assemble e
-    es' <- assemble es
-    event' <- fetchEvent event
-
-    pure $ e' <> es' <> LLIR.instr (LLIR.Send (length es) event')
-
-  assemble (MLIR.MkExprSpawn e) = do
-    e' <- assemble e
-    pure $ e' <> LLIR.instr LLIR.Spawn
 
   assemble (MLIR.MkExprList es) = do
     es' <- assemble es
@@ -517,7 +442,6 @@ getInteger (MLIR.MkExprLoc _ e) = getInteger e
 getInteger _ = error "Not an integer"
 
 getOns :: [MLIR.Expression] -> [MLIR.Expression]
-getOns (MLIR.MkExprOn n args e : xs) = MLIR.MkExprOn n args e : getOns xs
 getOns (MLIR.MkExprLoc _ e : xs) = getOns (e : xs)
 getOns (_ : xs) = getOns xs
 getOns [] = []
@@ -530,8 +454,6 @@ getGlobals (MLIR.MkExprLoc _ e : xs) = getGlobals (e : xs)
 getGlobals (MLIR.MkExprTernary c t e : xs) = getGlobals (c : t : e : xs)
 getGlobals (MLIR.MkExprBlock es : xs) = getGlobals (es <> xs)
 getGlobals (MLIR.MkExprApplication f args : xs) = getGlobals (f : args ++ xs)
-getGlobals (MLIR.MkExprSend e _ es : xs) = getGlobals (e : es ++ xs)
-getGlobals (MLIR.MkExprSpawn e : xs) = getGlobals (e : xs)
 getGlobals (MLIR.MkExprList es : xs) = getGlobals (es ++ xs)
 getGlobals (MLIR.MkExprIndex e i : xs) = getGlobals (e : i : xs)
 getGlobals (MLIR.MkExprUnpack _ e e' : xs) = getGlobals (e : e' : xs)

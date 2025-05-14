@@ -158,7 +158,6 @@ convert (MLIR.MkExprRecord m) = do
   m' <- mapM convert m
 
   pure $ MLIR.MkExprRecord m'
-convert _ = compilerError "unexpected expression"
 
 convertLambda :: MonadIO m => Set Text -> MLIR.Expression -> m MLIR.Expression
 convertLambda reserved (MLIR.MkExprLambda args body) = do
@@ -207,6 +206,11 @@ convertToplevel (MLIR.MkExprLet x e) | isLambda e = do
       pure $ MLIR.MkExprLet x (MLIR.MkExprLambda args body')
 
     _ -> compilerError "expected lambda"
+convertToplevel (MLIR.MkExprLet x e) = do
+  modifyIORef' globals (Map.insert x (-1))
+
+  e' <- convert e
+  pure $ MLIR.MkExprLet x e'
 convertToplevel (MLIR.MkExprNative n ty) = do
   let arity = case ty of
         args MLIR.:->: _ -> length args

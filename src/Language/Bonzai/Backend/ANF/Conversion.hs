@@ -78,23 +78,6 @@ convert (MLIR.MkExprBlock es) = do
   let exprs = createBlock es'
   
   pure (MLIR.MkExprBlock exprs, [])
-convert (MLIR.MkExprEvent es) = do
-  (es', stmts) <- mapAndUnzipM convert es
-  
-  pure (MLIR.MkExprEvent es', concat stmts)
-convert (MLIR.MkExprOn ev args e) = do
-  (e', stmts) <- convert e
-  
-  pure (MLIR.MkExprOn ev args e', stmts)
-convert (MLIR.MkExprSend e ev es) = do
-  (e', stmts1) <- convert e
-  (es', stmts2) <- mapAndUnzipM convert es
-  
-  pure (MLIR.MkExprSend e' ev es', stmts1 <> concat stmts2)
-convert (MLIR.MkExprSpawn e) = do
-  (e', stmts) <- convert e
-  
-  pure (MLIR.MkExprSpawn e', stmts)
 convert (MLIR.MkExprList es) = do
   (es', stmts) <- mapAndUnzipM convert es
   

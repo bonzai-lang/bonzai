@@ -30,10 +30,6 @@ instance Free MLIR.Expression where
       freeBlock r (MLIR.MkExprMut e:es') = free r e <> freeBlock r es'
       freeBlock r (MLIR.MkExprLoc _ e:es') = free r e <> freeBlock r es'
       freeBlock r (e:es') = free r e <> freeBlock r es'
-  free res (MLIR.MkExprEvent es) = free res es
-  free res (MLIR.MkExprOn _ as e) = free res e <> Set.fromList as
-  free res (MLIR.MkExprSend e _ es) = free res e <> free res es
-  free res (MLIR.MkExprSpawn e) = free res e
   free res (MLIR.MkExprList es) = free res es
   free _ (MLIR.MkExprNative _ _) = mempty
   free res (MLIR.MkExprIndex e i) = free res e <> free res i

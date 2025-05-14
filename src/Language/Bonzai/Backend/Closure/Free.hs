@@ -30,10 +30,6 @@ instance Free MLIR.Expression where
       freeBlock (MLIR.MkExprLet a e:es') = (free e <> freeBlock es') Set.\\ Set.singleton a
       freeBlock (MLIR.MkExprLoc _ e:es') = freeBlock (e : es')
       freeBlock (e:es') = free e <> freeBlock es'
-  free (MLIR.MkExprEvent es) = free es
-  free (MLIR.MkExprOn _ as e) = free e Set.\\ Set.fromList as
-  free (MLIR.MkExprSend e _ es) = free e <> free es
-  free (MLIR.MkExprSpawn e) = free e
   free (MLIR.MkExprList es) = free es
   free (MLIR.MkExprNative n _) = Set.singleton n.name
   free (MLIR.MkExprIndex e i) = free e <> free i
@@ -65,10 +61,6 @@ instance Substitutable MLIR.Expression MLIR.Expression where
   substitute (a, e) (MLIR.MkExprLet a' e') = MLIR.MkExprLet a' $ if a == a' then e' else substitute (a, e) e'
   substitute (a, e) (MLIR.MkExprMut e') = MLIR.MkExprMut $ substitute (a, e) e'
   substitute (a, e) (MLIR.MkExprBlock es) = MLIR.MkExprBlock $ map (substitute (a, e)) es
-  substitute (a, e) (MLIR.MkExprEvent es) = MLIR.MkExprEvent $ map (substitute (a, e)) es
-  substitute (a, e) (MLIR.MkExprOn ev as e') = MLIR.MkExprOn ev as $ if a `elem` as then e' else substitute (a, e) e'
-  substitute (a, e) (MLIR.MkExprSend e' ev es) = MLIR.MkExprSend (substitute (a, e) e') ev $ map (substitute (a, e)) es
-  substitute (a, e) (MLIR.MkExprSpawn e') = MLIR.MkExprSpawn $ substitute (a, e) e'
   substitute (a, e) (MLIR.MkExprList es) = MLIR.MkExprList $ map (substitute (a, e)) es
   substitute _ (MLIR.MkExprNative n ty) = MLIR.MkExprNative n ty
   substitute _ (MLIR.MkExprLiteral l) = MLIR.MkExprLiteral l
