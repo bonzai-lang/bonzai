@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <threading.h>
+#include <value.h>
 
 typedef struct LibraryOption {
   char* name;
@@ -73,6 +74,8 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  atomic_store(&gc_is_requested, false);
+
   // Loading libraries
   LibraryOption* libraries = get_libraries(argc, argv);
   int num_libs = count_libraries(libraries);
@@ -106,9 +109,11 @@ int main(int argc, char* argv[]) {
   }
   module.argv = args;
 
-  run_interpreter(&module, 0, false, 0);
+  pthread_t id = start_gc(&module);
 
-  // pthread_join(gc_thread, NULL);
+  module.gc->gc_thread = id;
+
+  run_interpreter(&module, 0, false, 0);
 
   // Closing and freeing resources
   fclose(file);

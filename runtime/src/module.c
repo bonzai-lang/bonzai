@@ -56,14 +56,13 @@ void init_gc(gc_t* gc, Module* mod) {
   gc->max_objects = INIT_OBJECTS;  // Example default size
   gc->num_objects = 0;
   gc->gc_enabled = true;
-  gc->gc_running = false;
 
   pthread_cond_init(&gc->gc_cond, NULL);
   pthread_mutex_init(&gc->gc_mutex, NULL);
 
   gc->stacks.stack_count = 0;
   gc->stacks.stack_capacity = STACKS_SIZE;
-  gc->stacks.stacks = malloc(sizeof(Stack*) * STACKS_SIZE);
+  gc->stacks.stacks = calloc(STACKS_SIZE, sizeof(Stack*));
 
   mod->gc = gc;
 }

@@ -6,35 +6,39 @@
 #include <string.h>
 #include <threading.h>
 #include <value.h>
+#include <unistd.h>
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-void mark_value(Value value) {
+void mark_value(Module* mod, Value value) {
   if (!IS_PTR(value)) return;
 
   HeapValue* ptr = GET_PTR(value);
 
   if (ptr->is_marked) return;
 
+  // printf("Marking object (%p): ", ptr);
+  // debug_value(value);
+  // printf("\n");
+
   ptr->is_marked = true;
   if (ptr->type == TYPE_LIST) {
     for (uint32_t i = 0; i < ptr->length; i++) {
-      mark_value(ptr->as_ptr[i]);
+      mark_value(mod, ptr->as_ptr[i]);
     }
   } else if (ptr->type == TYPE_MUTABLE) {
-    mark_value(*(ptr->as_ptr));
-  } else if (ptr->type == TYPE_EVENT) {
-    for (int i = 0; i < ptr->as_event.ons_count; i++) {
-      mark_value(ptr->as_event.ons[i]);
+    mark_value(mod, *(ptr->as_ptr));
+  } else if (ptr->type == TYPE_RECORD) {
+    for (uint32_t i = 0; i < ptr->length; i++) {
+      mark_value(mod, ptr->as_record.values[i]);
     }
-  } else if (ptr->type == TYPE_EVENT_ON) {
-    mark_value(ptr->as_event_on.func);
+  } else if (ptr->type == TYPE_API && ptr->mark) {
+    ptr->mark(mod, ptr);
   }
 }
 
-inline __attribute__((always_inline)) void free_value(struct Module* mod,
-                                                      HeapValue* unreached) {
+void free_value(struct Module* mod, HeapValue* unreached) {
   if (unreached->type == TYPE_LIST || unreached->type == TYPE_MUTABLE) {
     free(unreached->as_ptr);
   } else if (unreached->type == TYPE_STRING) {
@@ -45,6 +49,35 @@ inline __attribute__((always_inline)) void free_value(struct Module* mod,
     unreached->destructor(mod, unreached);
   }
   free(unreached);
+}
+
+bool are_all_threads_stopped(struct Module* vm) {
+  for (int i = 0; i < vm->gc->stacks.stack_count; i++) {
+    Stack* stack = vm->gc->stacks.stacks[i];
+    if (!stack) continue;
+
+    if (atomic_load(&stack->is_halted)) {
+      continue;
+    }
+
+    if (!atomic_load(&stack->is_stopped)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool is_at_least_one_programs_running(struct Module* vm) {
+  // printf("sc: %d\n", vm->gc->stacks.stack_count);
+  for (int i = 0; i < vm->gc->stacks.stack_count; i++) {
+    Stack* stack = vm->gc->stacks.stacks[i];
+    if (!stack) continue;
+
+    if (!atomic_load(&stack->is_halted)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void gc_free(struct Module* mod, Value value) {
@@ -59,24 +92,20 @@ void gc_free(struct Module* mod, Value value) {
 
 void mark_all(struct Module* vm) {
   for (int i = 0; i < vm->argc; i++) {
-    mark_value(vm->argv[i]);
+    mark_value(vm, vm->argv[i]);
   }
 
   for (int i = 0; i < vm->gc->stacks.stack_count; i++) {
     Stack* stack = vm->gc->stacks.stacks[i];
 
     // printf("Marking stack %d (sp: %d)\n", i, stack->stack_pointer);
+
+    // DEBUG_STACK_FROM(stack, 0);
     if (!stack || !stack->values) continue;
     pthread_mutex_lock(&stack->mutex);
 
-    for (int j = 0; j <= stack->stack_capacity; j++) {
-      if (j <= stack->stack_pointer) {
-        mark_value(stack->values[j]);
-
-        continue;
-      }
-
-      stack->values[j] = kNull;
+    for (int j = 0; j <= stack->stack_pointer; j++) {
+      mark_value(vm, stack->values[j]);
     }
 
     pthread_mutex_unlock(&stack->mutex);
@@ -100,6 +129,10 @@ static void sweep(struct Module* vm) {
         vm->gc->first_object = object;
       }
 
+      // printf("Unreachable object (%p): ", unreached);
+      // debug_value(MAKE_PTR(unreached));
+      // printf("\n");
+
       free_value(vm, unreached);
       vm->gc->num_objects--;
     }
@@ -107,12 +140,9 @@ static void sweep(struct Module* vm) {
 }
 
 void gc(struct Module* vm) {
-  // printf("Requested GC from thread %ld\n", pthread_self());
+  // printf("Requested from %p\n", vm->stack->values);
   gc_t* gc_ = vm->gc;
-  pthread_mutex_lock(&gc_->gc_mutex);
-  vm->gc->gc_running = true;
   // int numObjects = gc_->num_objects;
-  pthread_mutex_unlock(&gc_->gc_mutex);
 
   mark_all(vm);
   sweep(vm);
@@ -120,15 +150,12 @@ void gc(struct Module* vm) {
   pthread_mutex_lock(&gc_->gc_mutex);
   gc_->max_objects =
       gc_->num_objects < INIT_OBJECTS ? INIT_OBJECTS : gc_->num_objects * 2;
+  pthread_mutex_unlock(&gc_->gc_mutex);
 
   // printf("Collected %d objects, %d max objects (sp: %d)\n",
   //        numObjects - gc_->num_objects, gc_->max_objects,
   //        vm->stack->stack_pointer);
-
-  pthread_cond_signal(&gc_->gc_cond);
-
-  vm->gc->gc_running = false;
-  pthread_mutex_unlock(&gc_->gc_mutex);
+  atomic_store(&gc_is_requested, false);
 }
 
 void force_sweep(struct Module* vm) {
@@ -144,35 +171,42 @@ void force_sweep(struct Module* vm) {
 }
 
 void request_gc(struct Module* vm) {
-  gc_t* gc_ = vm->gc;
-  if (gc_->num_objects >= gc_->max_objects) {
-    stop_the_world(vm, true);
-    gc(vm);
-    stop_the_world(vm, false);
+  if (vm->gc->gc_enabled) {
+    atomic_store(&gc_is_requested, true);
   }
+}
+
+void* gc_thread(void* data) {
+  struct Module* vm = (struct Module*)data;
+  while (is_at_least_one_programs_running(vm)) {
+    if (atomic_load(&gc_is_requested) 
+        && are_all_threads_stopped(vm) 
+        && vm->gc->gc_enabled
+      ) {
+      gc(vm);
+    }
+  }
+
+  // printf("Stopping GC thread\n");
+
+  return NULL;
+}
+
+pthread_t start_gc(struct Module* vm) {
+  pthread_t gc_thread_id;
+  pthread_create(&gc_thread_id, NULL, gc_thread, vm);
+  
+  return gc_thread_id;
 }
 
 HeapValue* allocate(struct Module* mod, ValueType type) {
   gc_t* gc_ = mod->gc;
-  pthread_mutex_lock(&gc_->gc_mutex);
-  while (gc_->gc_running) {
-    pthread_cond_wait(&gc_->gc_cond, &gc_->gc_mutex);
-  }
   int numObjects = gc_->num_objects;
   int maxObjects = gc_->max_objects;
-  pthread_mutex_unlock(&gc_->gc_mutex);
 
-  if (numObjects >= maxObjects) {
+  if (numObjects > maxObjects) {
     if (gc_->gc_enabled) {
-      pthread_mutex_lock(&gc_->gc_mutex);
-      int is_running = gc_->gc_running;
-      pthread_mutex_unlock(&gc_->gc_mutex);
-
-      if (!is_running) {
-        stop_the_world(mod, true);
-        gc(mod);
-        stop_the_world(mod, false);
-      }
+      atomic_store(&gc_is_requested, true);
     } else {
       gc_->max_objects += 2;
     }
@@ -187,8 +221,10 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
   pthread_mutex_init(&v->mutex, NULL);
   pthread_cond_init(&v->cond, NULL);
 
+  pthread_mutex_lock(&gc_->gc_mutex);
   gc_->first_object = v;
   gc_->num_objects++;
+  pthread_mutex_unlock(&gc_->gc_mutex);
 
   return v;
 }
@@ -364,55 +400,19 @@ char* type_of(Value value) {
 
 Stack* stack_new() {
   Stack* stack = malloc(sizeof(Stack));
+
   stack->stack_pointer = GLOBALS_SIZE;
   stack->stack_capacity = MAX_STACK_SIZE;
   stack->values = calloc(stack->stack_capacity, sizeof(Value));
+
+  atomic_store(&stack->is_stopped, false);
+  atomic_store(&stack->is_halted, false);
+
   pthread_mutex_init(&stack->mutex, NULL);
+
+  stack->thread = pthread_self();
+
   return stack;
-}
-
-void enqueue(MessageQueue* queue, Message* msg) {
-  pthread_mutex_lock(&queue->mutex);
-  if (queue->tail) {
-    queue->tail->next = msg;
-  } else {
-    queue->head = msg;
-  }
-  queue->tail = msg;
-  pthread_cond_signal(&queue->cond);
-  pthread_mutex_unlock(&queue->mutex);
-}
-
-Message* dequeue(MessageQueue* queue) {
-  pthread_mutex_lock(&queue->mutex);
-  while (!queue->head) {
-    pthread_cond_wait(&queue->cond, &queue->mutex);
-  }
-  Message* msg = queue->head;
-  queue->head = msg->next;
-  if (!queue->head) {
-    queue->tail = NULL;
-  }
-  pthread_mutex_unlock(&queue->mutex);
-  return msg;
-}
-
-MessageQueue* create_message_queue() {
-  MessageQueue* queue = malloc(sizeof(MessageQueue));
-  queue->head = NULL;
-  queue->tail = NULL;
-  pthread_mutex_init(&queue->mutex, NULL);
-  pthread_cond_init(&queue->cond, NULL);
-  return queue;
-}
-
-void print_message_queue(MessageQueue* queue) {
-  Message* msg = queue->head;
-  while (msg) {
-    printf("%d ", msg->name);
-    msg = msg->next;
-  }
-  printf("\n");
 }
 
 int value_eq(Module* mod, Value a, Value b) {
@@ -527,6 +527,11 @@ void debug_value(Value v) {
       break;
     }
 
+    case TYPE_API: {
+      printf("API(%p)", GET_PTR(v)->as_any);
+      break;
+    }
+
     case TYPE_UNKNOWN:
     default:
       printf("Unknown");
@@ -535,17 +540,19 @@ void debug_value(Value v) {
 }
 
 void safe_point(Module* mod) {
-  pthread_mutex_lock(&mod->gc->gc_mutex);
-  while (mod->gc->gc_running) {
-    pthread_cond_wait(&mod->gc->gc_cond, &mod->gc->gc_mutex);
+  if (atomic_load(&gc_is_requested)) {
+    printf("Safe point requested from %p\n", mod->stack->values);
   }
-  pthread_mutex_unlock(&mod->gc->gc_mutex);
-}
 
-void stop_the_world(Module* mod, bool stop) {
-  if (!stop) {
-    pthread_cond_signal(&mod->gc->gc_cond);
+  atomic_store(&mod->stack->is_stopped, true);
+
+  while (atomic_load(&gc_is_requested)) {
+    if (atomic_load(&mod->stack->is_halted)) {
+      break;
+    }
   }
+
+  atomic_store(&mod->stack->is_stopped, false);
 }
 
 Value clone_value(Module* mod, Value value) {
@@ -560,7 +567,27 @@ Value clone_value(Module* mod, Value value) {
       strcpy(new_str, str->as_string);
       return MAKE_STRING(mod, new_str);
     }
+
+    case TYPE_RECORD: {
+      if (IS_EMPTY_RECORD(value)) {
+        return EMPTY_RECORD;
+      }
+
+      HeapValue* record = GET_PTR(value);
+      char** keys = malloc(record->length * sizeof(char*));
+      Value* values = malloc(record->length * sizeof(Value));
+      for (uint32_t i = 0; i < record->length; i++) {
+        keys[i] = record->as_record.keys[i];
+        values[i] = clone_value(mod, record->as_record.values[i]);
+      }
+      return MAKE_RECORD(mod, keys, values, record->length);
+    }
+
     case TYPE_LIST: {
+      if (IS_EMPTY_LIST(value)) {
+        return EMPTY_LIST;
+      }
+
       HeapValue* list = GET_PTR(value);
       Value* new_list = malloc(list->length * sizeof(Value));
       for (uint32_t i = 0; i < list->length; i++) {
@@ -581,4 +608,31 @@ Value clone_value(Module* mod, Value value) {
     default:
       return value;
   }
+}
+
+void rearrange_stacks(Module* mod) {
+  #define st mod->gc->stacks
+  int new_size = 0;
+
+  for (int i = 0; i < st.stack_count; i++) {
+    if (st.stacks[i] == NULL) continue;
+    new_size++;
+  }
+
+  Stack** new_stacks = calloc(new_size, sizeof(Stack*));
+  if (new_stacks == NULL) {
+    perror("Failed to allocate memory for new stacks");
+    exit(EXIT_FAILURE);
+  }
+
+  int j = 0;
+  for (int i = 0; i < st.stack_count; i++) {
+    if (st.stacks[i] == NULL) continue;
+    new_stacks[j++] = st.stacks[i];
+  }
+
+  // Free the old stacks
+  free(st.stacks);
+  st.stacks = new_stacks;
+  st.stack_count = new_size;
 }

@@ -124,6 +124,11 @@ typedef struct Stack {
   int32_t stack_pointer;
   int32_t stack_capacity;
   pthread_mutex_t mutex;
+
+  atomic_bool is_stopped;
+  atomic_bool is_halted;
+
+  pthread_t thread;
 } Stack;
 
 #define MAX_FRAMES 16384
@@ -164,6 +169,7 @@ typedef struct HeapValue {
   bool is_marked, is_constant;
   struct HeapValue* next;
   void (*destructor)(struct Module*, struct HeapValue*);
+  void (*mark)(struct Module*, struct HeapValue*);
   pthread_mutex_t mutex;
   pthread_cond_t cond;
 
@@ -190,9 +196,9 @@ typedef struct {
   HeapValue* first_object;
   int num_objects, max_objects;
   bool gc_enabled;
-  bool gc_running;
 
   stacks_t stacks;
+  pthread_t gc_thread;
 
   pthread_cond_t gc_cond;
   pthread_mutex_t gc_mutex;
@@ -226,14 +232,19 @@ Value MAKE_STRING_NON_GC(struct Module* mod, char* x);
 Value MAKE_FUNCTION(struct Module* mod, int32_t ip, uint16_t local_space);
 Value MAKE_RECORD(struct Module* mod, char** keys, Value* values,
                   int size);
-void gc(struct Module* vm);
+// void gc(struct Module* vm);
 void force_sweep(struct Module* vm);
 HeapValue* allocate(struct Module* mod, ValueType type);
-void mark_value(Value value);
+void mark_value(struct Module* mod, Value value);
 Value clone_value(struct Module* mod, Value value);
 void request_gc(struct Module* vm);
 void free_value(struct Module* mod, HeapValue* unreached);
 void safe_point(struct Module* mod);
+pthread_t start_gc(struct Module* vm);
+void rearrange_stacks(struct Module* mod);
+bool is_at_least_one_programs_running(struct Module* vm);
+
+static atomic_int gc_is_requested;
 
 #define MAKE_SPECIAL() kNull
 #define MAKE_ADDRESS(x) MAKE_INTEGER(x)

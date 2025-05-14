@@ -26,7 +26,28 @@ Value compare_eq(Module *mod, Value a, Value b) {
     case TYPE_FUNCTION: case TYPE_FUNCENV: case TYPE_MUTABLE: {
       return MAKE_INTEGER(a == b);
     }
+    
+    case TYPE_RECORD: {
+      if (IS_EMPTY_RECORD(a) && IS_EMPTY_RECORD(b)) return MAKE_INTEGER(1);
+      if (IS_EMPTY_RECORD(a) || IS_EMPTY_RECORD(b)) return MAKE_INTEGER(0);
+
+      HeapValue* a_ptr = GET_PTR(a);
+      HeapValue* b_ptr = GET_PTR(b);
+
+      if (a_ptr->length != b_ptr->length) return MAKE_INTEGER(0);
+
+      for (uint32_t i = 0; i < a_ptr->length; i++) {
+        if (strcmp(a_ptr->as_record.keys[i], b_ptr->as_record.keys[i]) != 0) return MAKE_INTEGER(0);
+        if (!compare_eq(mod, a_ptr->as_record.values[i + 1], b_ptr->as_record.values[i + 1])) return MAKE_INTEGER(0);
+      }
+
+      return MAKE_INTEGER(1);
+    }
+
     case TYPE_LIST: {
+      if (IS_EMPTY_LIST(a) && IS_EMPTY_LIST(b)) return MAKE_INTEGER(1);
+      if (IS_EMPTY_LIST(a) || IS_EMPTY_LIST(b)) return MAKE_INTEGER(0);
+
       HeapValue* a_ptr = GET_PTR(a);
       HeapValue* b_ptr = GET_PTR(b);
 

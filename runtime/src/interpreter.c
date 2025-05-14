@@ -8,9 +8,8 @@
 #include <threading.h>
 #include <value.h>
 
-// Increase IP might also check if gc is lock
 #define INCREASE_IP_BY(mod, x) (mod->pc += ((x) * 5));
-#define INCREASE_IP(mod) INCREASE_IP_BY(mod, 1)
+#define INCREASE_IP(mod) INCREASE_IP_BY(mod, 1);
 
 Value run_interpreter(Module *module, int32_t ipc, bool does_return,
                       int callstack) {
@@ -163,13 +162,12 @@ case_update: {
 }
 
 case_make_list: {
+  // safe_point(module);
   if (i1 == 0) {
     stack_push(module, EMPTY_LIST);
     INCREASE_IP(module);
     goto *jmp_table[op];
   }
-
-  // safe_point(module);
   Value *list = malloc(i1 * sizeof(Value));
 
   // Loop in reverse order to pop values in the correct order
@@ -193,6 +191,8 @@ case_list_get: {
   Value list = module->stack->values[module->stack->stack_pointer - 1];
   uint32_t index = i1;
 
+  // debug_value(list); printf("\n");
+
   ASSERT_TYPE(module, "list_get", list, TYPE_LIST);
 
   Value *list_ptr = GET_LIST(list);
@@ -214,10 +214,6 @@ case_call: {
   ASSERT(module, IS_FUN(callee) || IS_PTR(callee), "Invalid callee type");
 
   ValueType callee_type = get_type(callee);
-
-  if (callee_type == TYPE_NATIVE) {
-    module->gc->gc_enabled = false;
-  }
 
   interpreter_table[callee_type == TYPE_FUNCTION](module, callee, i1);
 
@@ -298,9 +294,10 @@ case_special: {
 }
 
 case_halt: {
-  // safe_point(module);
+  atomic_store(&module->stack->is_halted, true);
+  pthread_join(module->gc->gc_thread, NULL);
   module->is_terminated = true;
-
+  
   return kNull;
 }
 
@@ -634,13 +631,12 @@ case_get_record_access: {
 }
 
 case_make_record: {
+  // safe_point(module);
   if (i1 == 0) {
     stack_push(module, EMPTY_RECORD);
     INCREASE_IP(module);
     goto *jmp_table[op];
   }
-
-  // safe_point(module);
   char** keys = malloc(i1 * sizeof(char*));
   Value *values = malloc(i1 * sizeof(Value));
 
@@ -650,13 +646,14 @@ case_make_record: {
   // We can loop in reverse order to pop values in the correct order
   // There is i1 * 2 values to pop from the stack
   for (int i = (i1 * 2) - 1; i >= 0; i -= 2) {
-    values[i / 2] =
+    int idx = (i - 1) / 2;
+    values[idx] =
         module->stack->values[module->stack->stack_pointer - i1 * 2 + i];
-    keys[i / 2] =
-        GET_STRING(module->stack->values[module->stack->stack_pointer - i1 * 2 + i - 1]);
+    keys[idx] = GET_STRING(
+        module->stack->values[module->stack->stack_pointer - i1 * 2 + i - 1]);
   }
 
-  int sp = module->stack->stack_pointer - i1 * 2;
+  int sp = module->stack->stack_pointer - (i1 * 2);
 
   module->stack->values[sp] =
       MAKE_RECORD(module, keys, values, i1);
