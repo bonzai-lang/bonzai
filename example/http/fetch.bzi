@@ -4,18 +4,28 @@ require "std:datatypes/json"
 require "std:http"
 
 let res = fetch(
-  "http://localhost:3000",
+  "http://localhost:8080/",
   method: "POST",
   headers: [
-    "Content-Type: application/json",
-    "Content-Length: 16"
+    "Content-Type: application/json"
   ],
-  body: "{\"key\": \"value\"}"
+  body: JSON::stringify(
+    json->object([
+      ("name", json->string("John Doe")),
+      ("age", json->integer(30)),
+      ("is_student", json->boolean(false)),
+      ("courses", json->array([
+        json->string("Math"),
+        json->string("Science")
+      ]))
+    ])
+  )
 )
 
 match res {
   case Ok((body, headers)) => {
-    print(JSON::parse(body))
+    let json = JSON::parse(body)
+    print(JSON::prettify(json))
   }
 
   case Error(err) => {

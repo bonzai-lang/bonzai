@@ -1,15 +1,36 @@
-require "std:http": HTTP::create, get_path, send_buffer, redirect_to
+require "std:http"
 require "std:foundation"
+require "std:datatypes/json"
 
 let thread = spawn HTTP::create(
   fn(req) => {
-    req.send_buffer("Hello, world!")
-    
-    true
+    let headers = req->get()
+
+    match Header::from(headers) {
+      case Some(Header(_, _, content)) => {
+        let json = JSON::parse(content)
+        print(JSON::prettify(json))
+        req->send(JSON::stringify(json))
+
+        true
+      }
+
+      case None => {
+        print("Invalid JSON")
+        req->send(JSON::stringify(
+            json->object([
+                ("error", json->string("Invalid JSON")),
+                ("status", json->string("400 Bad Request"))
+            ])
+        ))
+
+        false
+      }
+    }
   },
   8080
 )
 
-print("Server started on port 8080")
+print("Server started on port 8000")
 
 thread.wait()
