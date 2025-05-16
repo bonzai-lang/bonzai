@@ -104,8 +104,16 @@ void mark_all(struct Module* vm) {
     if (!stack || !stack->values) continue;
     pthread_mutex_lock(&stack->mutex);
 
-    for (int j = 0; j <= stack->stack_pointer; j++) {
-      mark_value(vm, stack->values[j]);
+    for (int j = 0; j <= stack->stack_capacity; j++) {
+      if (j <= stack->stack_pointer) {
+        Value value = stack->values[j];
+        if (value == kNull) continue;
+        mark_value(vm, value);
+
+        continue;
+      }
+
+      stack->values[j] = kNull;
     }
 
     pthread_mutex_unlock(&stack->mutex);
@@ -393,6 +401,8 @@ char* type_of(Value value) {
       return "frame";
     case TYPE_EVENT_ON:
       return "event_on";
+    case TYPE_RECORD: 
+      return "record";
     case TYPE_NATIVE:
       return "native";
   }
@@ -540,9 +550,9 @@ void debug_value(Value v) {
 }
 
 void safe_point(Module* mod) {
-  if (atomic_load(&gc_is_requested)) {
-    printf("Safe point requested from %p\n", mod->stack->values);
-  }
+  // if (atomic_load(&gc_is_requested)) {
+  //   printf("Safe point requested from %p\n", mod->stack->values);
+  // }
 
   atomic_store(&mod->stack->is_stopped, true);
 
