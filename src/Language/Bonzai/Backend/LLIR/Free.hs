@@ -31,7 +31,7 @@ instance Free MLIR.Expression where
       freeBlock r (MLIR.MkExprLoc _ e:es') = free r e <> freeBlock r es'
       freeBlock r (e:es') = free r e <> freeBlock r es'
   free res (MLIR.MkExprList es) = free res es
-  free _ (MLIR.MkExprNative _ _) = mempty
+  free _ (MLIR.MkExprNative {}) = mempty
   free res (MLIR.MkExprIndex e i) = free res e <> free res i
   free _ (MLIR.MkExprLiteral _) = Set.empty
   free res (MLIR.MkExprUnpack n e e') = free res e <> free res e' <> Set.singleton n

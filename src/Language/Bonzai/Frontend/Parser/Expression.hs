@@ -770,16 +770,10 @@ parseTerm =
     Lex.parens parseExpression
   ]
 
-parseReturn :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
-parseReturn = localize $ do
-  void $ Lex.reserved "return"
-  HLIR.MkExprReturn <$> parseExpression
-
 parseStatement :: MonadIO m => P.Parser m (HLIR.HLIR "expression")
 parseStatement = P.choice [
     parseWhile,
     parseForIn,
-    parseReturn,
     parseFunction,
     P.try parseUpdate,
     parseExpression

@@ -24,6 +24,20 @@ freshLambda prefix = do
 globals :: IORef (Map Text Int)
 globals = IO.unsafePerformIO $ newIORef mempty
 
+{-# NOINLINE locals #-}
+locals :: IORef (Set Text)
+locals = IO.unsafePerformIO $ newIORef mempty
+
+local' :: MonadIO m => m a -> m a
+local' f = do
+  old <- readIORef locals
+
+  res <- f
+
+  writeIORef locals old
+
+  pure res
+
 -- | CLOSURE CONVERSION
 -- | Closure conversion may be one of the most important steps in the
 -- | compilation process. It converts all anonymous functions and closures
@@ -72,20 +86,23 @@ globals = IO.unsafePerformIO $ newIORef mempty
 convert :: MonadIO m => MLIR.Expression -> m MLIR.Expression
 convert (MLIR.MkExprVariable x) = do
   natives' <- readIORef natives
+  locals' <- readIORef locals
 
   case Map.lookup x natives' of
-    Just arity -> do
+    Just arity | x `Set.notMember` locals' -> do
       let args = ["arg" <> show i | i <- [0..arity-1]]
       let argsAsExpr = map MLIR.MkExprVariable args
 
       convert $ MLIR.MkExprLambda args (MLIR.MkExprApplication (MLIR.MkExprVariable x) argsAsExpr)
-    Nothing -> pure $ MLIR.MkExprVariable x
+    _ -> pure $ MLIR.MkExprVariable x
 convert (MLIR.MkExprLiteral x) = pure $ MLIR.MkExprLiteral x
-convert (MLIR.MkExprLet x e) | isLambda e = case getLambda e of
-  MLIR.MkExprLambda args body -> do
-    b <- convertLambda (Set.singleton x) (MLIR.MkExprLambda args body)
-    pure $ MLIR.MkExprLet x b
-  _ -> compilerError "expected lambda"
+convert (MLIR.MkExprLet x e) | isLambda e = do
+  modifyIORef' locals (Set.insert x)
+  case getLambda e of
+    MLIR.MkExprLambda args body -> do
+      b <- convertLambda (Set.singleton x) (MLIR.MkExprLambda args body)
+      pure $ MLIR.MkExprLet x b
+    _ -> compilerError "expected lambda"
 convert (MLIR.MkExprLambda args body) = convertLambda Set.empty (MLIR.MkExprLambda args body)
 convert (MLIR.MkExprApplication f args) | isVariable f, name <- getVariable f = do
   natives' <- readIORef natives
@@ -119,12 +136,14 @@ convert (MLIR.MkExprApplication f args) = do
   let call = MLIR.MkExprApplication function (env : args')
 
   pure $ MLIR.MkExprUnpack name f' call
-convert (MLIR.MkExprLet x e) = MLIR.MkExprLet x <$> convert e
+convert (MLIR.MkExprLet x e) = do
+  modifyIORef' locals (Set.insert x)
+  MLIR.MkExprLet x <$> convert e
 convert (MLIR.MkExprMut e) = MLIR.MkExprMut <$> convert e
 convert (MLIR.MkExprList xs) = MLIR.MkExprList <$> mapM convert xs
 convert (MLIR.MkExprTernary c t e) = MLIR.MkExprTernary <$> convert c <*> convert t <*> convert e
 convert (MLIR.MkExprUpdate u e) = MLIR.MkExprUpdate <$> convertUpdate u <*> convert e
-convert (MLIR.MkExprBlock es) = MLIR.MkExprBlock <$> mapM convert es
+convert (MLIR.MkExprBlock es) = local' $ MLIR.MkExprBlock <$> mapM convert es
 convert (MLIR.MkExprNative n ty) = do
   let arity = case ty of
         args MLIR.:->: _ -> length args
@@ -173,8 +192,10 @@ convertLambda reserved (MLIR.MkExprLambda args body) = do
   let prefixBody = zipWith (\n i -> do
           MLIR.MkExprLet n (MLIR.MkExprIndex (MLIR.MkExprVariable "env") (MLIR.MkExprLiteral (MLIR.MkLitInt i)))
         ) envAsList [0..]
-
-  body' <- convert body
+  
+  body' <- local' $ do
+    modifyIORef' locals (<> Set.fromList args)
+    convert body
 
   let finalBody = case removeLoc body' of
           MLIR.MkExprBlock es -> MLIR.MkExprBlock $ prefixBody <> es

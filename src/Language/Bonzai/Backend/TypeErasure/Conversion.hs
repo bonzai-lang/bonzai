@@ -83,7 +83,6 @@ convert (HLIR.MkExprRecordAccess e k) = do
   MLIR.MkExprRecordAccess e' k
 convert HLIR.MkExprRecordEmpty = MLIR.MkExprRecord mempty
 convert (HLIR.MkExprSingleIf c t) = MLIR.MkExprSingleIf (convert c) (convert t)
-convert (HLIR.MkExprReturn e) = MLIR.MkExprReturn (convert e)
 convert e = compilerError $ "impossible, received: " <> show e
 
 toList' :: [(Text, MLIR.MLIR "expression")] -> [MLIR.MLIR "expression"]
@@ -178,10 +177,10 @@ idx :: MLIR.MLIR "expression" -> Integer -> MLIR.MLIR "expression"
 idx e i = MLIR.MkExprIndex e (MLIR.MkExprLiteral (HLIR.MkLitInt i))
 
 equalsTo :: MLIR.MLIR "expression" -> MLIR.MLIR "expression" -> MLIR.MLIR "expression"
-equalsTo a b = MLIR.MkExprApplication (MLIR.MkExprVariable "==") [a, b, MLIR.MkExprList []]
+equalsTo = MLIR.MkExprBinary "=="
 
 sliceFrom :: MLIR.MLIR "expression" -> Integer -> MLIR.MLIR "expression"
-sliceFrom e i = MLIR.MkExprApplication (MLIR.MkExprVariable "sliceFrom") [e, MLIR.MkExprLiteral (HLIR.MkLitInt i), MLIR.MkExprList []]
+sliceFrom e i = MLIR.MkExprApplication (MLIR.MkExprVariable "sliceFrom") [e, MLIR.MkExprLiteral (HLIR.MkLitInt i), MLIR.MkExprRecord mempty]
 
 isVariable :: HLIR.TLIR "expression" -> Bool
 isVariable (HLIR.MkExprVariable _) = True
@@ -219,11 +218,11 @@ createCondition x (HLIR.MkPatLocated y p) = do
 createCondition x (HLIR.MkPatOr y y') = do
   let (conds, maps) = createCondition x y
   let (conds', maps') = createCondition x y'
-  ([MLIR.MkExprApplication (MLIR.MkExprVariable "||") [MLIR.MkExprBlock conds, MLIR.MkExprBlock conds', MLIR.MkExprList []]], maps <> maps')
+  ([MLIR.MkExprApplication (MLIR.MkExprVariable "||") [MLIR.MkExprBlock conds, MLIR.MkExprBlock conds', MLIR.MkExprRecord mempty]], maps <> maps')
 createCondition x (HLIR.MkPatCondition e y) = do
   let (conds, maps) = createCondition x y
   let e' = convert e
-  ([MLIR.MkExprApplication (MLIR.MkExprVariable "&&") [MLIR.MkExprBlock conds, susbstituteMap (Map.toList maps) e', MLIR.MkExprList []]], maps)
+  ([MLIR.MkExprApplication (MLIR.MkExprVariable "&&") [MLIR.MkExprBlock conds, susbstituteMap (Map.toList maps) e', MLIR.MkExprRecord mempty]], maps)
 createCondition x (HLIR.MkPatList pats slice _) =
   let (conds, maps) =
         unzip $
@@ -236,13 +235,13 @@ createCondition x (HLIR.MkPatList pats slice _) =
       lenCond = case slice of
         Just _ ->
           MLIR.MkExprApplication (MLIR.MkExprVariable ">") [
-              MLIR.MkExprApplication (MLIR.MkExprVariable "length") [x, MLIR.MkExprList []]
+              MLIR.MkExprApplication (MLIR.MkExprVariable "length") [x, MLIR.MkExprRecord mempty]
             , MLIR.MkExprLiteral (HLIR.MkLitInt $ patLen - 1)
-            , MLIR.MkExprList []
+            , MLIR.MkExprRecord mempty
           ]
         Nothing ->
           equalsTo
-            (MLIR.MkExprApplication (MLIR.MkExprVariable "length") [x, MLIR.MkExprList []])
+            (MLIR.MkExprApplication (MLIR.MkExprVariable "length") [x, MLIR.MkExprRecord mempty])
             (MLIR.MkExprLiteral (HLIR.MkLitInt (toInteger patLen)))
    in (lenCond : concat conds <> conds', mconcat maps <> maps')
 

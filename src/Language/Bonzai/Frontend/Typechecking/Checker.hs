@@ -156,9 +156,11 @@ synthesize (HLIR.MkExprMut expr) = do
 
   pure (HLIR.MkExprMut expr', HLIR.MkTyMutable ty)
 synthesize (HLIR.MkExprBlock es) = do
-  (es', ty) <- typecheckBlock es Nothing
+  (es', tys) <- unzip <$> traverse synthesize es
 
-  pure (HLIR.MkExprBlock es', ty)
+  retTy <- maybe M.fresh pure (viaNonEmpty last tys)
+
+  pure (HLIR.MkExprBlock es', retTy)
 synthesize (HLIR.MkExprUpdate u e) = do
   (u', ty) <- typecheckUpdate u
   e' <- case ty of
@@ -277,19 +279,6 @@ synthesize (HLIR.MkExprRecordAccess e k) = do
   U.unifiesWith ([ty] HLIR.:->: ret) funTy
 
   pure (HLIR.MkExprRecordAccess e' k, ret)
-synthesize (HLIR.MkExprReturn e) = do
-  (e', ty) <- synthesize e
-  
-  retTy <- readIORef M.checkerState <&> M.returnType
-
-  case retTy of
-    Just retTy' -> do
-      retTy' `U.unifiesWith` ty
-    
-    Nothing -> do
-      modifyIORef' M.checkerState $ \st -> st { M.returnType = Just ty }
-
-  pure (HLIR.MkExprReturn e', ty)
 synthesize HLIR.MkExprRecordEmpty = 
   pure (HLIR.MkExprRecordEmpty, HLIR.MkTyRecord HLIR.MkTyRowEmpty)
 synthesize (HLIR.MkExprPublic e) = synthesize e
@@ -361,29 +350,16 @@ check (HLIR.MkExprMut expr) (HLIR.MkTyMutable ty) = do
   expr' <- check expr ty
   pure (HLIR.MkExprMut expr')
 check (HLIR.MkExprBlock es) ty = do
-  (es', _) <- typecheckBlock es (Just ty)
-      
-  pure (HLIR.MkExprBlock es')
-check (HLIR.MkExprUpdate u e) ty = do
-  (u', _) <- typecheckUpdate u
-  e' <- check e ty
-  pure (HLIR.MkExprUpdate u' e')
+  case unsnoc es of
+    Just (initEs, lastE) -> do
+      (initEs', _) <- unzip <$> traverse synthesize initEs
+      lastE' <- check lastE ty
+      pure (HLIR.MkExprBlock (initEs' <> [lastE']))
+    Nothing -> pure (HLIR.MkExprBlock [])
 check (HLIR.MkExprList es) (HLIR.MkTyList ty) = do
   es' <- traverse (`check` ty) es
 
   pure (HLIR.MkExprList es')
-check (HLIR.MkExprReturn e) expectedTy = do
-  e' <- check e expectedTy
-
-  retTy <- readIORef M.checkerState <&> M.returnType
-
-  case retTy of
-    Just retTy' -> do
-      retTy' `U.unifiesWith` expectedTy
-      pure (HLIR.MkExprReturn e')
-    Nothing -> do
-      modifyIORef' M.checkerState $ \st -> st { M.returnType = Just expectedTy }
-      pure (HLIR.MkExprReturn e')
 check (HLIR.MkExprMatch scrut cases) ty = do
   (scrut', scrutTy) <- synthesize scrut
 
@@ -473,70 +449,6 @@ check e ty = do
 unsnoc :: [a] -> Maybe ([a], a)
 unsnoc [] = Nothing
 unsnoc xs = (,) <$> viaNonEmpty init xs <*> viaNonEmpty last xs
-
-typecheckBlock :: M.MonadChecker m => [HLIR.HLIR "expression"] -> Maybe HLIR.Type -> m ([HLIR.TLIR "expression"], HLIR.Type)
-typecheckBlock [] ty = pure ([], fromMaybe HLIR.MkTyUnit ty)
-typecheckBlock (HLIR.MkExprReturn e : _) ty = do
-  (e', ret) <- case ty of
-    Just ty' -> do
-      e' <- check e ty'
-      pure (e', ty')
-    Nothing -> synthesize e
-
-  retTy <- readIORef M.checkerState <&> M.returnType
-
-  case retTy of
-    Just retTy' -> do
-      retTy' `U.unifiesWith` ret
-      pure ([HLIR.MkExprReturn e'], ret)
-    Nothing -> do
-      modifyIORef' M.checkerState $ \st -> st { M.returnType = Just ret }
-      pure ([HLIR.MkExprReturn e'], ret)
-typecheckBlock (HLIR.MkExprLoc e p : _) ty | Just _ <- getReturn e = do
-  HLIR.pushPosition p
-  (e', retTy) <- case ty of
-    Just ty' -> do
-      e' <- check e ty'
-      pure (e', ty')
-    Nothing -> synthesize e
-
-  retTy' <- readIORef M.checkerState <&> M.returnType
-
-  case retTy' of
-    Just retTy'' -> do
-      retTy'' `U.unifiesWith` retTy
-      void HLIR.popPosition
-      pure ([HLIR.MkExprReturn e'], retTy)
-    Nothing -> do
-      modifyIORef' M.checkerState $ \st -> st { M.returnType = Just retTy }
-      void HLIR.popPosition
-      pure ([HLIR.MkExprReturn e'], retTy)
-typecheckBlock (HLIR.MkExprLoc e p : xs) ty = do
-  HLIR.pushPosition p
-  (e', _) <- synthesize e
-  void HLIR.popPosition
-  (xs', retTy) <- typecheckBlock xs ty
-  pure (HLIR.MkExprLoc e' p : xs', retTy)
-typecheckBlock [x] ty = do
-  (x', retTy) <- case ty of
-    Just ty' -> do
-      x' <- check x ty'
-      pure (x', ty')
-    Nothing -> synthesize x
-
-  retTy' <- readIORef M.checkerState <&> M.returnType
-
-  case retTy' of
-    Just retTy'' -> do
-      retTy'' `U.unifiesWith` retTy
-      pure ([x'], retTy)
-    Nothing -> do
-      modifyIORef' M.checkerState $ \st -> st { M.returnType = Just retTy }
-      pure ([x'], retTy)
-typecheckBlock (x:xs) ty = do
-  x' <- fst <$> synthesize x
-  (xs', retTy) <- typecheckBlock xs ty
-  pure (x' : xs', retTy)
 
 typecheckPattern :: M.MonadChecker m => HLIR.HLIR "pattern" -> m (HLIR.TLIR "pattern", HLIR.Type, Map Text HLIR.Scheme)
 typecheckPattern (HLIR.MkPatVariable name varTy) = do
@@ -697,8 +609,3 @@ unrecord (HLIR.MkTyVar tv) = do
     HLIR.Unbound _ _ -> pure (HLIR.MkTyVar tv)
 unrecord (HLIR.MkTyRecord t) = pure t
 unrecord t = pure t
-
-getReturn :: HLIR.HLIR "expression" -> Maybe (HLIR.HLIR "expression")
-getReturn (HLIR.MkExprReturn e) = Just e
-getReturn (HLIR.MkExprLoc e _) = getReturn e
-getReturn _ = Nothing

@@ -71,7 +71,6 @@ data Expression f t
   | MkExprRecordExtension (Expression f t) Text Bool (Expression f t)
   | MkExprRecordEmpty
   | MkExprRecordAccess (Expression f t) Text
-  | MkExprReturn (Expression f t)
   | MkExprSingleIf (Expression f t) (Expression f t)
   deriving Generic
 
@@ -162,7 +161,6 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprRecordExtension e f True v) = T.concat [toText e, "?.", f, " = ", toText v]
   toText MkExprRecordEmpty = "{}"
   toText (MkExprRecordAccess e f) = T.concat [toText e, ".", f]
-  toText (MkExprReturn e) = T.concat ["return ", toText e]
   toText (MkExprSingleIf c t) = T.concat ["if ", toText c, " then { ", toText t, " }"]
   
 instance ToText t => ToText (DataConstructor t) where

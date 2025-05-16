@@ -319,7 +319,6 @@ resolveImports m (HLIR.MkExprMatch e cs) = do
 
   pure m
 resolveImports m (HLIR.MkExprPublic e) = resolveImports m e
-resolveImports m (HLIR.MkExprReturn e) = resolveImports m e
 resolveImports m (HLIR.MkExprSingleIf c t) = do
   m1 <- resolveImports m c
   resolveImports m1 t
