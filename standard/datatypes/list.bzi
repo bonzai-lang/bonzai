@@ -71,6 +71,12 @@ pub fn List::foldr<A, B>(f: fn(A, B): B, acc: B, xs: list<A>): B =>
     case [y .. ys] => f(y, List::foldr(f, acc, ys))
   }
 
+pub fn List::filter<A>(f: fn(A): bool, xs: list<A>): list<A> =>
+  match xs {
+    case [] => []
+    case [y .. ys] => if f(y) then [y] + List::filter(f, ys) else List::filter(f, ys)
+  }
+
 pub fn List::join<A>(xs: list<A>, sep: A): list<A> =>
   match xs {
     case [] => []
@@ -131,3 +137,22 @@ pub fn List::lookup<A, B>(key: A, xs: list<(A, B)>): Optional<B> =>
     case [] => None
     case [(k, v) .. xs] => if key == k then Some(v) else List::lookup(key, xs)
   }
+
+pub type State<A> {
+  Break,
+  Continue,
+  Return(x: A)
+}
+
+pub fn List::while<A>(cond: fn(): bool, f: fn(): State<A>): State<A> => {
+  if cond() then {
+    let res = f()
+    match res {
+      case Break => Break
+      case Continue => List::while(cond, f)
+      case Return(x) => Return(x)
+    }
+  }
+  
+  Break
+}

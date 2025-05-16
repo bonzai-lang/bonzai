@@ -9,6 +9,9 @@ pub extern fn toString<A>(x: A): string
 
 extern fn explode(s: string): list<char>
 extern fn implode(xs: list<char>): string
+extern fn split(str: string, sep: string): list<string>
+extern fn getIndex(s: string, i: int): string
+extern fn getIndexChar(s: string, i: int): char
 
 pub fn String::explode(s: string): list<char> => explode(s)
 
@@ -17,8 +20,55 @@ pub fn String::implode(xs: list<char>): string => implode(xs)
 pub fn String::join(xs: list<string>, sep: string): string =>
   List::foldl(fn(x, acc) => if acc == "" then x else acc + sep + x, "", xs)
 
-pub fn String::length(s: string): int =>
-  List::length(s.explode())
+pub fn String::length(s: string): int => {
+  mut i = 0
+  mut str = ""
+
+  while str.value != s {
+    str += (getIndex(s, i.value))
+    i += 1
+  }
+
+  i.value
+}
+
+pub fn String::map(s: string, f: fn(char): char): string => {
+  let sLength = String::length(s)
+  mut i = 0
+  mut str = ""
+
+  while i.value < sLength {
+    let c = getIndexChar(s, i.value)
+    str += (f(c).toString())
+    i += 1
+  }
+
+  str.value
+}
+
+pub fn String::slice(s: string, start _?: int, end _?: int): string => {
+  let start = Optional::unwrap_or(kwargs->start, 0)
+  let end = Optional::unwrap_or(kwargs->end, String::length(s))
+
+  let sLength = String::length(s)
+  if start < 0 || end < 0 || start > sLength || end > sLength then {
+    ""
+  } else {
+    mut i = 0
+    mut str = ""
+
+    while i.value < sLength {
+      let c = getIndex(s, i.value)
+      if i.value >= start && i.value < end then {
+        str += c
+      }
+      i += 1
+    }
+
+    str.value
+  }
+}
+
 
 pub fn String::repeat(s: string, n: int): string =>
   if n == 0 then "" else s + String::repeat(s, n - 1)
@@ -26,42 +76,84 @@ pub fn String::repeat(s: string, n: int): string =>
 pub fn String::concat(xs: list<string>): string =>
   List::foldl(fn(x, acc) => acc + x, "", xs)
 
-pub fn String::map(s: string, f: fn(char): char): string => {
-  let array = s.explode()
-  let mapped = List::map(array, f)
-  return implode(mapped)
+pub fn String::trimStart(s: string): string => {
+  let sLength = String::length(s)
+  mut i = 0
+  mut break = false
+
+  // Trouver le premier caractère non-blanc
+  while i.value < sLength && (!break.value) {
+    let c = getIndexChar(s, i.value)
+    if c == ' ' && c == '\n' && c == '\t' then {
+      i += 1
+    } else {
+      break = true
+    }
+  }
+
+  // Retourner la sous-chaîne jusqu'à ce point
+  String::slice(s, start: i.value)
 }
 
-pub fn String::slice(s: string, start _?: int, end _?: int): string => {
-  let start = Optional::unwrap_or(kwargs->start, 0)
-  let end = Optional::unwrap_or(kwargs->end, String::length(s))
+pub fn String::trimEnd(s: string): string => {
+  let sLength = String::length(s)
 
-  let array = s.explode()
-  return implode(List::slice(array, start: start, end: end))
+  if sLength == 0 then {
+    ""
+  } else {
+    mut i = sLength - 1
+    mut break = false
+
+    // Trouver le dernier caractère non-blanc
+    while i.value >= 0 && (!break.value) {
+      let c = getIndexChar(s, i.value)
+      if c == ' ' && c == '\n' && c == '\t' then {
+        i -= 1
+      } else {
+        break = true
+      }
+    }
+
+    // Retourner la sous-chaîne jusqu'à ce point
+    String::slice(s, start: 0, end: i.value + 1)
+  }
 }
+
+pub fn String::trim(s: string): string => 
+  String::trimEnd(String::trimStart(s))
 
 pub fn String::startsWith(s: string, prefix: string): bool => {
   let prefixLength = String::length(prefix)
   let sLength = String::length(s)
 
   if prefixLength > sLength then {
-    return false
+    false
+  } else {
+    let prefixSlice = String::slice(s, start: 0, end: prefixLength)
+    prefixSlice == prefix
   }
-
-  let prefixSlice = String::slice(s, start: 0, end: prefixLength)
-  return prefixSlice == prefix
 }
 
-pub fn String::split(s: string, sep: string): list<string> => {
-  mut result = []
-  mut i = 0
+pub fn String::indexOf(s: string, sub: string): int => {
+  let subLength = String::length(sub)
+  let sLength = String::length(s)
 
-  let sep_ = sep.explode()
-  let sepLength = List::length(sep_)
-
-  if i.value > 0 then {
-    result += [String::slice(s, start: 0, end: i.value)]
+  fn indexOfHelper(s: string, sub: string, index: int): int => {
+    let pre = String::slice(s, start: index)
+    if String::startsWith(pre, sub) then {
+      index
+    } else if index + subLength >= sLength then {
+      -1
+    } else {
+      indexOfHelper(s, sub, index + 1)
+    }
   }
 
-  return result.value
+  if subLength == 0 || sLength == 0 then {
+    -1
+  } else {
+    indexOfHelper(s, sub, 0)
+  }
 }
+
+pub fn String::split(str: string, sep: string): list<string> => split(str, sep)

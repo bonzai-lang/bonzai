@@ -95,13 +95,42 @@ pub fn fetch(
 }
 
 type Header {
-  Header(rules: list<(string, string)>, content: string)
+  Header(toplevel: string, rules: list<(string, string)>, content: string)
 }
 
 pub fn Header::from(headers: string): Optional<Header> => {
-  let result = String::split(headers, "\r\n")
+  let result = String::split(headers, "\r\n\r\n")
 
-  print(result)
+  match result {
+    case [headers, content .. _] => {
+      let headerLines = String::split(headers, "\r\n")
+      match headerLines {
+        case [toplevel .. headerLines] => {
+          let rules = List::map(headerLines, fn(line) => {
+            let parts = String::split(line, ": ");
 
-  return None
+            match parts {
+              case [key, value] => (key, value)
+              case _ => ("", "")
+            }
+          })
+
+          Some(Header(toplevel, rules, content))
+        }
+
+        case [] => None
+      }
+    }
+
+    case _ => None
+  }
+}
+
+pub fn Header::show(Header(toplevel, rules, content)): string => {
+  let rulesString = List::map(rules, fn(rule) => {
+    let (key, value) = rule
+    "$key: $value"
+  })
+
+  toplevel + "\n" + String::join(rulesString, "\n") + "\n\n" + content
 }

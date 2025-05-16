@@ -203,9 +203,9 @@ pub fn JSON::prettify(json: JSON, tabs _?: int): string => {
       )
 
       String::concat([
-        "[\n", 
+        "[", 
         String::repeat(" ", i), 
-        String::join(items, ",\n"), 
+        String::join(items, ","), 
         "\n", 
         String::repeat(" ", i), 
         "]"
