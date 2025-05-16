@@ -17,9 +17,14 @@ module.exports = grammar({
     [$._statements],
   ],
 
+  extras: ($) => [/\s+/, $.comment],
+
   rules: {
     // TODO: add the actual grammar rules
     source_file: ($) => repeat1($.toplevel),
+
+    comment: ($) =>
+      choice(seq("//", /.*/), seq("/*", /[^*]*\*+([^/*][^*]*\*+)*\//)),
 
     toplevel: ($) =>
       choice(

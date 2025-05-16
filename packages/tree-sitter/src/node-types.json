@@ -1,5 +1,10 @@
 [
   {
+    "type": "comment",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "expr_binary",
     "named": true,
     "fields": {
@@ -1087,6 +1092,14 @@
   },
   {
     "type": "/",
+    "named": false
+  },
+  {
+    "type": "/*",
+    "named": false
+  },
+  {
+    "type": "//",
     "named": false
   },
   {
