@@ -107,7 +107,7 @@ module.exports = grammar({
         "fn",
         field("name", $._header),
         "(",
-        commaSep($._opt_annotation),
+        commaSep($.argument),
         ")",
         field("return_type", optional(seq(":", $.type))),
         "=>",
@@ -278,7 +278,7 @@ module.exports = grammar({
       seq(
         "fn",
         "(",
-        commaSep1($._opt_annotation),
+        commaSep1($.argument),
         ")",
         "=>",
         field("body", $.expression),
@@ -289,13 +289,15 @@ module.exports = grammar({
         0,
         seq(
           "let",
-          field("name", $._identifier),
+          $.let_name,
           optional(seq(":", field("type", $.type))),
           "=",
           field("value", $.expression),
           field("body", optional(seq("in", $.expression))),
         ),
       ),
+
+    let_name: ($) => choice($.pat_constructor, $.pat_wildcard),
 
     expr_spawn: ($) => seq("spawn", $.expression),
 
@@ -304,7 +306,7 @@ module.exports = grammar({
         0,
         seq(
           "mut",
-          field("name", $._identifier),
+          $.let_name,
           optional(seq(":", field("type", $.type))),
           "=",
           field("value", $.expression),
@@ -390,6 +392,22 @@ module.exports = grammar({
         field("generics", optional($._generics)),
       ),
 
+    argument: ($) =>
+      choice(
+        field("pattern", $.pattern),
+        field("annotation", $._opt_annotation),
+        field("labelled", $.labelled_arg),
+      ),
+
+    labelled_arg: ($) =>
+      seq(
+        field("name", $._identifier),
+        "_",
+        field("optional_field", "?"),
+        ":",
+        field("type", $.type),
+      ),
+
     _string: ($) => /\"([^"\\]|\\.)*\"/,
     _identifier: ($) => /[a-zA-Z\$_][a-zA-Z0-9\:\$_]*/,
     _generics: ($) => seq("<", commaSep1($._identifier), ">"),
@@ -399,10 +417,14 @@ module.exports = grammar({
     pat_wildcard: ($) => "_",
     pat_literal: ($) => $.expr_literal,
     pat_constructor: ($) =>
-      seq(
-        field("name", $._identifier),
-        optional(seq("(", commaSep1($.pattern), ")")),
+      prec(
+        10,
+        seq(
+          field("name", $.pat_variable),
+          optional(seq("(", commaSep1($.pattern), ")")),
+        ),
       ),
+    pat_variable: ($) => prec(10, $._identifier),
 
     _operator: ($) => {
       const validOperators = [

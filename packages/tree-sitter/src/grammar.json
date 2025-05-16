@@ -447,7 +447,7 @@
               "members": [
                 {
                   "type": "SYMBOL",
-                  "name": "_opt_annotation"
+                  "name": "argument"
                 },
                 {
                   "type": "REPEAT",
@@ -460,7 +460,7 @@
                       },
                       {
                         "type": "SYMBOL",
-                        "name": "_opt_annotation"
+                        "name": "argument"
                       }
                     ]
                   }
@@ -1342,7 +1342,7 @@
           "members": [
             {
               "type": "SYMBOL",
-              "name": "_opt_annotation"
+              "name": "argument"
             },
             {
               "type": "REPEAT",
@@ -1355,7 +1355,7 @@
                   },
                   {
                     "type": "SYMBOL",
-                    "name": "_opt_annotation"
+                    "name": "argument"
                   }
                 ]
               }
@@ -1391,12 +1391,8 @@
             "value": "let"
           },
           {
-            "type": "FIELD",
-            "name": "name",
-            "content": {
-              "type": "SYMBOL",
-              "name": "_identifier"
-            }
+            "type": "SYMBOL",
+            "name": "let_name"
           },
           {
             "type": "CHOICE",
@@ -1463,6 +1459,19 @@
         ]
       }
     },
+    "let_name": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "pat_constructor"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "pat_wildcard"
+        }
+      ]
+    },
     "expr_spawn": {
       "type": "SEQ",
       "members": [
@@ -1487,12 +1496,8 @@
             "value": "mut"
           },
           {
-            "type": "FIELD",
-            "name": "name",
-            "content": {
-              "type": "SYMBOL",
-              "name": "_identifier"
-            }
+            "type": "SYMBOL",
+            "name": "let_name"
           },
           {
             "type": "CHOICE",
@@ -2076,6 +2081,72 @@
         }
       ]
     },
+    "argument": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "pattern",
+          "content": {
+            "type": "SYMBOL",
+            "name": "pattern"
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "annotation",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_opt_annotation"
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "labelled",
+          "content": {
+            "type": "SYMBOL",
+            "name": "labelled_arg"
+          }
+        }
+      ]
+    },
+    "labelled_arg": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_identifier"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "_"
+        },
+        {
+          "type": "FIELD",
+          "name": "optional_field",
+          "content": {
+            "type": "STRING",
+            "value": "?"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": ":"
+        },
+        {
+          "type": "FIELD",
+          "name": "type",
+          "content": {
+            "type": "SYMBOL",
+            "name": "type"
+          }
+        }
+      ]
+    },
     "_string": {
       "type": "PATTERN",
       "value": "\\\"([^\"\\\\]|\\\\.)*\\\""
@@ -2148,63 +2219,75 @@
       "name": "expr_literal"
     },
     "pat_constructor": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "FIELD",
-          "name": "name",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_identifier"
-          }
-        },
-        {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "SEQ",
-              "members": [
-                {
-                  "type": "STRING",
-                  "value": "("
-                },
-                {
-                  "type": "SEQ",
-                  "members": [
-                    {
-                      "type": "SYMBOL",
-                      "name": "pattern"
-                    },
-                    {
-                      "type": "REPEAT",
-                      "content": {
-                        "type": "SEQ",
-                        "members": [
-                          {
-                            "type": "STRING",
-                            "value": ","
-                          },
-                          {
-                            "type": "SYMBOL",
-                            "name": "pattern"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "type": "STRING",
-                  "value": ")"
-                }
-              ]
-            },
-            {
-              "type": "BLANK"
+      "type": "PREC",
+      "value": 10,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "FIELD",
+            "name": "name",
+            "content": {
+              "type": "SYMBOL",
+              "name": "pat_variable"
             }
-          ]
-        }
-      ]
+          },
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": "("
+                  },
+                  {
+                    "type": "SEQ",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "pattern"
+                      },
+                      {
+                        "type": "REPEAT",
+                        "content": {
+                          "type": "SEQ",
+                          "members": [
+                            {
+                              "type": "STRING",
+                              "value": ","
+                            },
+                            {
+                              "type": "SYMBOL",
+                              "name": "pattern"
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "STRING",
+                    "value": ")"
+                  }
+                ]
+              },
+              {
+                "type": "BLANK"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "pat_variable": {
+      "type": "PREC",
+      "value": 10,
+      "content": {
+        "type": "SYMBOL",
+        "name": "_identifier"
+      }
     },
     "_operator": {
       "type": "PATTERN",
