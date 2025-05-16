@@ -37,36 +37,102 @@ void print_map_values(Value map) {
   printf(" }");
 }
 
+int starts_with(const char* str, const char* delim) {
+  while (*delim) {
+    if (*str != *delim) return 0;
+    str++;
+    delim++;
+  }
+  return 1;
+}
+
 Value split(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "split", argc, 2);
   ASSERT_TYPE(mod, "split", args[0], TYPE_STRING);
   ASSERT_TYPE(mod, "split", args[1], TYPE_STRING);
 
-  char* str = GET_STRING(args[0]);
+  char* string = GET_STRING(args[0]);
   char* delim = GET_STRING(args[1]);
 
-  char* token = strtok(str, delim);
-  int capacity = 0;
+  uint32_t len = strlen(string);
+  uint32_t delim_len = strlen(delim);
 
-  Value* tokens = malloc(0 * sizeof(Value));
-  int count = 0;
-
-  while (token != NULL) {
-    if (capacity == count) {
-      capacity = capacity == 0 ? 1 : capacity * 2;
-      tokens = realloc(tokens, capacity * sizeof(Value));
+  uint32_t count = 0;
+  for (uint32_t i = 0; i < len; i++) {
+    if (starts_with(&string[i], delim)) {
+      count++;
+      i += delim_len - 1;
     }
-
-    tokens[count++] = MAKE_STRING_NON_GC(mod, token);
-    token = strtok(NULL, delim);
   }
-
-  if (capacity == 0) {
-    free(tokens);
+  count++; // For the last token
+  if (count == 0) {
     return EMPTY_LIST;
   }
 
-  return MAKE_LIST(mod, tokens, count);
+  Value* parts = malloc(count * sizeof(Value));
+  for (uint32_t i = 0; i < count; i++) {
+    parts[i] = kNull;
+  }
+  
+  int i = 0, token_start = 0, j = 0;
+
+  while (i <= len) {
+    // Check if current position matches the delimiter or end of string
+    if (starts_with(&string[i], delim) || string[i] == '\0') {
+      // Print the token
+      char* token = malloc((i - token_start + 1) * sizeof(char));
+      strncpy(token, &string[token_start], i - token_start);
+      token[i - token_start] = '\0';
+
+      Value token_value = MAKE_STRING(mod, token);
+      parts[j++] = token_value;
+
+      i += delim_len;
+      token_start = i;
+    } else {
+      i++;
+    }
+  }
+
+  return MAKE_LIST(mod, parts, count);
+}
+
+Value getIndex(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "getIndex", argc, 2);
+  ASSERT_TYPE(mod, "getIndex", args[0], TYPE_STRING);
+  ASSERT_TYPE(mod, "getIndex", args[1], TYPE_INTEGER);
+
+  char* str = GET_STRING(args[0]);
+  uint32_t index = GET_INT(args[1]);
+
+  if (index < 0 || index >= strlen(str)) {
+    THROW(mod, "Index out of bounds");
+  }
+
+  char* c = malloc(2 * sizeof(char));
+  c[0] = str[index];
+  c[1] = '\0';
+
+  return MAKE_STRING(mod, c);
+}
+
+Value getIndexChar(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "getIndex", argc, 2);
+  ASSERT_TYPE(mod, "getIndex", args[0], TYPE_STRING);
+  ASSERT_TYPE(mod, "getIndex", args[1], TYPE_INTEGER);
+
+  char* str = GET_STRING(args[0]);
+  uint32_t index = GET_INT(args[1]);
+
+  if (index < 0 || index >= strlen(str)) {
+    THROW_FMT(mod, "Index out of bounds, received %d", index);
+  }
+
+  char* c = malloc(2 * sizeof(char));
+  c[0] = str[index];
+  c[1] = '\0';
+
+  return MAKE_STRING(mod, c);
 }
 
 void print_with_level(Value value, int level) {
@@ -375,8 +441,6 @@ Value implode(Module* mod, Value* args, int argc) {
   }
 
   HeapValue* list = GET_PTR(args[0]);
-
-  debug_value(args[0]); printf("\n");
   
   char* str = malloc(list->length + 1);
 
@@ -430,12 +494,16 @@ Value toString(Module* mod, Value* args, int argc) {
       return args[0];
     }
     case TYPE_LIST: {
+      if (IS_EMPTY_LIST(args[0])) {
+        return MAKE_STRING_NON_GC(mod, "[]");
+      }
+
       HeapValue* list = GET_PTR(args[0]);
       char* str = malloc(1);
       str[0] = '[';
 
       for (uint32_t i = 0; i < list->length; i++) {
-        char* item = GET_STRING(toString(mod, (Value[]){list->as_ptr[i]}, 1));
+        char* item = GET_STRING(toString(mod, (Value[]){list->as_ptr[i], EMPTY_RECORD}, 2));
 
         str = realloc(str, strlen(str) + strlen(item) + 3);
 
@@ -450,6 +518,38 @@ Value toString(Module* mod, Value* args, int argc) {
       strcat(str, "]");
       return MAKE_STRING(mod, str);
     }
+
+    case TYPE_RECORD: {
+      if (IS_EMPTY_RECORD(args[0])) {
+        return MAKE_STRING_NON_GC(mod, "{}");
+      }
+
+      HeapValue* record = GET_PTR(args[0]);
+      char* str = malloc(1);
+      str[0] = '{';
+
+      for (uint32_t i = 0; i < record->length; i++) {
+        char* key_name = record->as_record.keys[i];
+        Value key_value = record->as_record.values[i];
+
+        char* item = GET_STRING(toString(mod, (Value[]){key_value, EMPTY_RECORD}, 2));
+
+        str = realloc(str, strlen(str) + strlen(key_name) + strlen(item) + 5);
+
+        strcat(str, key_name);
+        strcat(str, ": ");
+        strcat(str, item);
+        if (i < record->length - 1) {
+          strcat(str, ", ");
+        }
+      }
+
+      str = realloc(str, strlen(str) + 2);
+
+      strcat(str, "}");
+      return MAKE_STRING(mod, str);
+    }
+
     case TYPE_SPECIAL: {
       char* str = malloc(10);
       sprintf(str, "<special>");
@@ -458,7 +558,7 @@ Value toString(Module* mod, Value* args, int argc) {
     }
     case TYPE_MUTABLE: {
       HeapValue* mut = GET_PTR(args[0]);
-      return toString(mod, mut->as_ptr, 1);
+      return toString(mod, (Value[2]){*(mut->as_ptr), EMPTY_RECORD}, 2);
     }
     case TYPE_UNKNOWN:
     default: {
