@@ -1643,16 +1643,37 @@
       "members": [
         {
           "type": "SYMBOL",
-          "name": "_string"
+          "name": "literal_string"
         },
         {
-          "type": "PATTERN",
-          "value": "\\d+"
+          "type": "SYMBOL",
+          "name": "literal_integer"
         },
         {
-          "type": "PATTERN",
-          "value": "\\d+\\.\\d+"
+          "type": "SYMBOL",
+          "name": "literal_float"
         },
+        {
+          "type": "SYMBOL",
+          "name": "literal_boolean"
+        }
+      ]
+    },
+    "literal_string": {
+      "type": "PATTERN",
+      "value": "\\\"([^\"\\\\]|\\\\.)*\\\""
+    },
+    "literal_integer": {
+      "type": "PATTERN",
+      "value": "\\d+"
+    },
+    "literal_float": {
+      "type": "PATTERN",
+      "value": "\\d+\\.\\d+"
+    },
+    "literal_boolean": {
+      "type": "CHOICE",
+      "members": [
         {
           "type": "STRING",
           "value": "true"

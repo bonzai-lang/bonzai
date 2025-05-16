@@ -262,7 +262,29 @@
   {
     "type": "expr_literal",
     "named": true,
-    "fields": {}
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "literal_boolean",
+          "named": true
+        },
+        {
+          "type": "literal_float",
+          "named": true
+        },
+        {
+          "type": "literal_integer",
+          "named": true
+        },
+        {
+          "type": "literal_string",
+          "named": true
+        }
+      ]
+    }
   },
   {
     "type": "expr_match",
@@ -577,6 +599,16 @@
         ]
       }
     }
+  },
+  {
+    "type": "literal_boolean",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "literal_string",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "source_file",
@@ -1160,6 +1192,14 @@
   {
     "type": "let",
     "named": false
+  },
+  {
+    "type": "literal_float",
+    "named": true
+  },
+  {
+    "type": "literal_integer",
+    "named": true
   },
   {
     "type": "match",

@@ -334,7 +334,18 @@ module.exports = grammar({
         field("else", $.expression),
       ),
 
-    expr_literal: ($) => choice($._string, /\d+/, /\d+\.\d+/, "true", "false"),
+    expr_literal: ($) =>
+      choice(
+        $.literal_string,
+        $.literal_integer,
+        $.literal_float,
+        $.literal_boolean,
+      ),
+
+    literal_string: ($) => /\"([^"\\]|\\.)*\"/,
+    literal_integer: ($) => /\d+/,
+    literal_float: ($) => /\d+\.\d+/,
+    literal_boolean: ($) => choice("true", "false"),
 
     expr_record: ($) =>
       seq(
