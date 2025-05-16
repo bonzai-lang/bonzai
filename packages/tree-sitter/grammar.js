@@ -120,7 +120,7 @@ module.exports = grammar({
     type: ($) => $._identifier,
 
     _statements: ($) =>
-      seq($.statement, optional(seq(optional(";"), repeat($.statement)))),
+      seq($.statement, optional(seq(optional(";"), $._statements))),
 
     expression: ($) =>
       choice(
@@ -321,7 +321,8 @@ module.exports = grammar({
         "{",
         repeat(
           seq(
-            field("pattern", $._identifier),
+            "case",
+            field("pattern", $.pattern),
             "=>",
             field("body", $.expression),
           ),
@@ -390,8 +391,18 @@ module.exports = grammar({
       ),
 
     _string: ($) => /\"([^"\\]|\\.)*\"/,
-    _identifier: ($) => /[a-zA-Z\$_][a-zA-Z0-9\$_]*/,
+    _identifier: ($) => /[a-zA-Z\$_][a-zA-Z0-9\:\$_]*/,
     _generics: ($) => seq("<", commaSep1($._identifier), ">"),
+
+    pattern: ($) => choice($.pat_wildcard, $.pat_literal, $.pat_constructor),
+
+    pat_wildcard: ($) => "_",
+    pat_literal: ($) => $.expr_literal,
+    pat_constructor: ($) =>
+      seq(
+        field("name", $._identifier),
+        optional(seq("(", commaSep1($.pattern), ")")),
+      ),
 
     _operator: ($) => {
       const validOperators = [

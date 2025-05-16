@@ -305,6 +305,16 @@
           }
         ]
       },
+      "pattern": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "pattern",
+            "named": true
+          }
+        ]
+      },
       "value": {
         "multiple": false,
         "required": true,
@@ -614,6 +624,59 @@
     "type": "literal_string",
     "named": true,
     "fields": {}
+  },
+  {
+    "type": "pat_constructor",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "pattern",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pat_literal",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "expr_literal",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pattern",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "pat_constructor",
+          "named": true
+        },
+        {
+          "type": "pat_literal",
+          "named": true
+        },
+        {
+          "type": "pat_wildcard",
+          "named": true
+        }
+      ]
+    }
   },
   {
     "type": "source_file",
@@ -1175,6 +1238,10 @@
     "named": false
   },
   {
+    "type": "case",
+    "named": false
+  },
+  {
     "type": "else",
     "named": false
   },
@@ -1221,6 +1288,10 @@
   {
     "type": "mut",
     "named": false
+  },
+  {
+    "type": "pat_wildcard",
+    "named": true
   },
   {
     "type": "pub",
