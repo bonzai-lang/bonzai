@@ -1,6 +1,5 @@
 module Language.Bonzai.Frontend.Module.Conversion where
 
-import Control.Color
 import Control.Monad.Except
 import Control.Monad.Result
 import Data.Map qualified as Map
@@ -163,9 +162,6 @@ resolve path isPublic = do
         Left err -> throw (ParseError err)
         Right cst' -> do
           ast <- solveModule cst'
-          if newModuleName == "/Volumes/Programmation/Langages/Bonzai.hs/example/basics/fibonacci.bzi"
-            then mapM_ printText ast
-            else pure ()
 
           -- Get the public variables, types, and classes
           let imports = mempty
