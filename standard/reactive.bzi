@@ -1,17 +1,16 @@
-interface Reactive<A> {
-  fn set(value: A)
-}
+require "datatypes/unit"
+require "datatypes/mutable"
 
-pub fn Reactive<A>(value: A, onChange: fn(mutable<A>): unit) => {
-  mut subject = value
+pub fn Reactive<A>(val: A, onChange: fn(mutable<A>): unit) => {
+    mut subject = val
 
-  actor < Reactive<A> {
-    on set(value) => {
-      subject = value
-
-      onChange(subject)
+    {
+        set: fn(newValue: A): unit => {
+            subject = newValue
+            onChange(subject)
+        },
+        get: fn(): A => subject.value
     }
-  }
 }
 
-pub fn ($=)<A>(r: actor Reactive<A>, value: A) => r->set(value)
+pub fn ($=)<A>(r, val: A) => r->set(val)
