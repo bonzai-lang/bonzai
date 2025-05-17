@@ -23,7 +23,7 @@ let res = fetch(
 )
 
 match res {
-  case Ok((body, headers)) => {
+  case Ok(Tuple(body, headers)) => {
     let json = JSON::parse(body)
     print(JSON::prettify(json))
   }
