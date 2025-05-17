@@ -1,7 +1,8 @@
 require "std:datatypes/error"
+require "std:datatypes/unit"
 
 extern fn psql_connect(info: string): Throwable<SQL>
-extern fn psql_close_connection(conn: SQL)
+extern fn psql_close_connection(conn: SQL): unit
 extern fn psql_query(conn: SQL, query: string): list<list<string>>
 
 pub let PGSQL::connect = psql_connect

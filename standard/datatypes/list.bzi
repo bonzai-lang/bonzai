@@ -97,7 +97,7 @@ pub fn List::pop<A>(xs: list<A>): Optional<A> =>
     case [y .. ys] => List::pop(ys)
     case [] => None
   }
-  
+
 pub fn List::push<A>(xs: list<A>, x: A): list<A> =>
   xs + [x]
 
@@ -116,7 +116,7 @@ pub fn List::tail<A>(xs: list<A>): list<A> =>
     case [] => []
   }
 
-pub fn range(start: int, end: int): list<int> => 
+pub fn range(start: int, end: int): list<int> =>
   if start > end then [] else [start] + range(start + 1, end)
 
 pub fn List::reverse<A>(xs: list<A>): list<A> =>
@@ -127,15 +127,15 @@ pub fn List::splitAt<A>(xs: list<A>, n: int): (list<A>, list<A>) =>
   else match xs {
     case [] => ([], [])
     case [x .. xs] => {
-      let (ys, zs) = List::splitAt(xs, n - 1);
-      ([x] + ys, zs)
+      let Tuple(ys, zs) = List::splitAt(xs, n - 1)
+      Tuple([x] + ys, zs)
     }
   }
-  
+
 pub fn List::lookup<A, B>(key: A, xs: list<(A, B)>): Optional<B> =>
   match xs {
     case [] => None
-    case [(k, v) .. xs] => if key == k then Some(v) else List::lookup(key, xs)
+    case [Tuple(k, v) .. xs] => if key == k then Some(v) else List::lookup(key, xs)
   }
 
 pub type State<A> {
@@ -153,6 +153,6 @@ pub fn List::while<A>(cond: fn(): bool, f: fn(): State<A>): State<A> => {
       case Return(x) => Return(x)
     }
   }
-  
+
   Break
 }

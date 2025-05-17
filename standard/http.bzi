@@ -12,20 +12,20 @@ require "std:datatypes/threads"
 
 extern fn start_http_server(port: int): HTTP
 extern fn accept_request(server: HTTP): Request
-extern fn close_client(req: Request)
+extern fn close_client(req: Request): unit
 extern fn get_buffer(req: Request): string
-pub extern fn send_buffer(req: Request, buffer: string)
-pub extern fn send_buffer_with(req: Request, buffer: string)
-extern fn close_server(server: HTTP)
+pub extern fn send_buffer(req: Request, buffer: string): unit
+pub extern fn send_buffer_with(req: Request, buffer: string): unit
+extern fn close_server(server: HTTP): unit
 extern fn redirect_to(req: Request, url: string): unit
 extern fn get_path(req: Request): string
 pub extern fn make_unit(): unit
 
 fn containsContentLength(headers: list<string>): bool => {
   let contentLengthHeader = "Content-Length: "
-  
+
   List::any(
-    headers, 
+    headers,
     fn(header) => String::startsWith(header, contentLengthHeader)
   )
 }
@@ -38,7 +38,7 @@ pub fn HTTP::create(callback: fn({
   redirect: fn(string): unit
 }): bool, port: int) => {
   let server = start_http_server(port)
-  
+
   mut running = true
 
   fn generateRequest(req: Request) => {
@@ -56,7 +56,7 @@ pub fn HTTP::create(callback: fn({
   }
 
   close_server(server)
-} 
+}
 
 pub fn Request::getPath(req: Request): string => get_path(req)
 pub fn Request::getBuffer(req: Request): string => get_buffer(req)
@@ -66,7 +66,7 @@ pub fn Request::redirect(req: Request, url: string): unit => redirect_to(req, ur
 extern fn fetch_helper(url: string, method: string, headers: string): Throwable<(string, string)>
 
 pub fn fetch(
-  url: string, 
+  url: string,
   method _?: string,
   body _?: string,
   headers _?: list<string>
@@ -127,10 +127,11 @@ pub fn Header::from(headers: string): Optional<Header> => {
 }
 
 pub fn Header::show(Header(toplevel, rules, content)): string => {
-  let rulesString = List::map(rules, fn(rule) => {
-    let (key, value) = rule
-    "$key: $value"
-  })
+  let rulesString = List::map(rules, fn(Tuple(key, value)) => "$key: $value")
 
-  toplevel + "\n" + String::join(rulesString, "\n") + "\n\n" + content
+  let rulesJoined = String::join(rulesString, "\r\n")
+
+  let headerString = "$toplevel\r\n$rulesJoined\r\n\r\n$content"
+
+  headerString
 }
