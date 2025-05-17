@@ -297,7 +297,7 @@ inline static ValueType get_type(Value value) {
       return TYPE_FUNCTION;
     case SIGNATURE_FUNCENV:
       return TYPE_FUNCENV;
-    case SIGNATURE_EMPTY_LIST: 
+    case SIGNATURE_EMPTY_LIST:
       return TYPE_LIST;
     case SIGNATURE_EMPTY_RECORD:
       return TYPE_RECORD;
@@ -341,7 +341,17 @@ inline static char* type_to_str(ValueType t) {
   }
 }
 
+#define safe_point(mod) \
+    if (atomic_load(&gc_is_requested)) { \
+        atomic_store(&mod->stack->is_stopped, true); \
+    } \
+    while (atomic_load(&gc_is_requested)) { \
+        if (atomic_load(&mod->stack->is_halted)) { \
+            atomic_store(&mod->stack->is_stopped, false); \
+            break; \
+        } \
+    } \
+
 void stop_the_world(struct Module* mod, bool stop);
-void safe_point(struct Module* mod);
 
 #endif  // VALUE_H

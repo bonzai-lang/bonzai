@@ -187,8 +187,8 @@ void request_gc(struct Module* vm) {
 void* gc_thread(void* data) {
   struct Module* vm = (struct Module*)data;
   while (is_at_least_one_programs_running(vm)) {
-    if (atomic_load(&gc_is_requested) 
-        && are_all_threads_stopped(vm) 
+    if (atomic_load(&gc_is_requested)
+        && are_all_threads_stopped(vm)
         && vm->gc->gc_enabled
       ) {
       gc(vm);
@@ -203,7 +203,7 @@ void* gc_thread(void* data) {
 pthread_t start_gc(struct Module* vm) {
   pthread_t gc_thread_id;
   pthread_create(&gc_thread_id, NULL, gc_thread, vm);
-  
+
   return gc_thread_id;
 }
 
@@ -401,7 +401,7 @@ char* type_of(Value value) {
       return "frame";
     case TYPE_EVENT_ON:
       return "event_on";
-    case TYPE_RECORD: 
+    case TYPE_RECORD:
       return "record";
     case TYPE_NATIVE:
       return "native";
@@ -547,22 +547,6 @@ void debug_value(Value v) {
       printf("Unknown");
       break;
   }
-}
-
-void safe_point(Module* mod) {
-  // if (atomic_load(&gc_is_requested)) {
-  //   printf("Safe point requested from %p\n", mod->stack->values);
-  // }
-
-  atomic_store(&mod->stack->is_stopped, true);
-
-  while (atomic_load(&gc_is_requested)) {
-    if (atomic_load(&mod->stack->is_halted)) {
-      break;
-    }
-  }
-
-  atomic_store(&mod->stack->is_stopped, false);
 }
 
 Value clone_value(Module* mod, Value value) {
