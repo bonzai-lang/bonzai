@@ -1,21 +1,21 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
+
 module Control.Monad.Result where
 
-import Language.Bonzai.Frontend.Parser qualified as P
-import qualified Data.Text as Text
-import qualified GHC.IO as IO
-import qualified Language.Bonzai.Syntax.HLIR as HLIR
+import Control.Color
 import Control.Monad.Except
-import qualified Error.Diagnose as D
-import qualified Error.Diagnose.Compat.Megaparsec as D
-import qualified Data.Maybe as Mb
+import Data.Aeson
+import Data.Maybe qualified as Mb
+import Data.Text qualified as Text
+import Error.Diagnose qualified as D
+import Error.Diagnose.Compat.Megaparsec qualified as D
+import GHC.IO qualified as IO
+import GHC.Show qualified as Show
+import Language.Bonzai.Frontend.Parser qualified as P
+import Language.Bonzai.Syntax.HLIR qualified as HLIR
 import System.Directory (doesFileExist)
 import System.FilePath (normalise)
-import Control.Color
-import Text.Megaparsec.Error
-import Data.Aeson
 import Text.Megaparsec hiding (parseError)
-import GHC.Show qualified as Show
 
 instance (D.HasHints Void String) where
   hints _ = mempty
@@ -35,7 +35,7 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
         ("Cyclic module dependency detected with " <> show (normalise path), Nothing, pos)
         stackMsg
       where
-        stackMsg = "Import stack:\n - "<> intercalate "\n - " (map normalise stack)
+        stackMsg = "Import stack:\n - " <> intercalate "\n - " (map normalise stack)
     ModuleNotFound path _ ->
       printErrorFromString
         Nothing
@@ -49,86 +49,73 @@ handle (Left (err, pos@(p1, _))) _ = liftIO $ do
     CompilerError msg ->
       printErrorFromString
         Nothing
-          ("BONZAI INTERNAL ERROR: " <> show msg, Just "report the issue to Bonzai developers", pos)
-          "Resolution"
+        ("BONZAI INTERNAL ERROR: " <> show msg, Just "report the issue to Bonzai developers", pos)
+        "Resolution"
     UnificationFail got expected ->
       printErrorFromString
         Nothing
         ("Expected " <> toString (toText expected) <> ", but got " <> toString (toText got), Nothing, pos)
         ("Expected type " <> toString (toText expected))
-
     ActorNotFound name ->
       printErrorFromString
         Nothing
         ("Actor " <> show name <> " not found", Just "check for typo issue with the event name, or missing types in actor header", pos)
         "Resolution"
-
     NotAnActor ty ->
       printErrorFromString
         Nothing
         ("Expected an actor, but received a " <> show (toText ty), Nothing, pos)
         "Typechecking"
-
     EventNotFound name ->
       printErrorFromString
         Nothing
         ("Event " <> show name <> " not found", Just "check for typo issue with the event name", pos)
         "Resolution"
-
     ExpectedAnActor ty ->
       printErrorFromString
         (Just "May you have forgotten to define an interface for your actor?")
         ("Expected an actor, but got " <> show (toText ty), Nothing, pos)
         "Typechecking"
-
     InvalidArgumentQuantity n k ->
       printErrorFromString
         Nothing
         ("Invalid number of arguments, expected " <> show n <> ", received " <> show k, Nothing, pos)
         "Resolution"
-
     EnvironmentVariableNotFound name ->
       printErrorFromString
         Nothing
         ("Environment variable " <> show name <> " not found", Just "check for typo issue with the variable name", pos)
         "Resolution"
-
     InvalidConstructor name ->
       printErrorFromString
         Nothing
         ("Invalid constructor " <> show name, Just "check for typo issue with the constructor name", pos)
         "Resolution"
-
     EmptyMatch ->
       printErrorFromString
         Nothing
         ("Empty match statement", Just "check for missing cases in the match statement", pos)
         "Resolution"
-
     InvalidPatternUnion env1 env2 ->
       printErrorFromString
         Nothing
         ("Invalid pattern union between " <> show env1 <> " and " <> show env2, Nothing, pos)
         "Resolution"
-    
     InvalidHeader ty ->
       printErrorFromString
         Nothing
         ("Invalid header " <> show (toText ty), Just "try adding explicit annotations", pos)
         "Resolution"
-
     InvalidUpdate ->
       printErrorFromString
         Nothing
         ("Expected mutable type", Nothing, pos)
         "Resolution"
-
     UnexpectedRowType ty ->
       printErrorFromString
         Nothing
         ("Unexpected row type " <> show (toText ty), Nothing, pos)
         "Resolution"
-    
     CannotInsertLabel label' ->
       printErrorFromString
         Nothing
@@ -140,11 +127,12 @@ type ImportStack = [FilePath]
 type Error = (BonzaiError, HLIR.Position)
 
 annotateErrorBundle :: ParseErrorBundle Text Void -> NonEmpty (SourcePos, Text)
-annotateErrorBundle bundle
-  = fmap (\(err, pos) -> (pos, Text.pack . parseErrorTextPretty $ err)) . fst $
-    attachSourcePos errorOffset
-                       (bundleErrors bundle)
-                       (bundlePosState bundle)
+annotateErrorBundle bundle =
+  fmap (\(err, pos) -> (pos, Text.pack . parseErrorTextPretty $ err)) . fst $
+    attachSourcePos
+      errorOffset
+      (bundleErrors bundle)
+      (bundlePosState bundle)
 
 data BonzaiError
   = ParseError P.ParseError
@@ -171,11 +159,11 @@ data BonzaiError
 instance Show BonzaiError where
   show (ParseError e) = showError e
   show (CyclicModuleDependency path []) = "Cyclic module dependency detected with " <> show (normalise path)
-  show (CyclicModuleDependency path stack) = "Cyclic module dependency detected with " <> show (normalise path) <> "\nImport stack:\n - "<> intercalate "\n - " (map normalise stack)
-  show (ModuleNotFound path stack) = "Module " <> show (normalise path) <> " not found\nImport stack:\n - "<> intercalate "\n - " (map normalise stack)
+  show (CyclicModuleDependency path stack) = "Cyclic module dependency detected with " <> show (normalise path) <> "\nImport stack:\n - " <> intercalate "\n - " (map normalise stack)
+  show (ModuleNotFound path stack) = "Module " <> show (normalise path) <> " not found\nImport stack:\n - " <> intercalate "\n - " (map normalise stack)
   show (VariableNotFound name) = "Variable " <> show name <> " not found"
   show (CompilerError msg) = "BONZAI INTERNAL ERROR: " <> show msg
-  show (UnificationFail t1 t2) = "Unification failed between " <> toString (toText t1) <> " and " <> toString (toText t2)
+  show (UnificationFail t1 t2) = "Expected " <> show (toText t1) <> ", but got " <> show (toText t2)
   show (ActorNotFound name) = "Actor " <> show name <> " not found"
   show (NotAnActor ty) = "Expected an actor, but received a " <> show (toText ty)
   show (EventNotFound name) = "Event " <> show name <> " not found"
@@ -200,11 +188,10 @@ instance ToJSON P.ParseError where
 
     toJSON res'
 
- 
 showError :: P.ParseError -> String
 showError = P.errorBundlePretty
 
-compilerError :: HasCallStack => Text -> a
+compilerError :: (HasCallStack) => Text -> a
 compilerError msg = do
   let err = "BONZAI INTERNAL ERROR: " <> msg
 
@@ -237,9 +224,9 @@ parseError err' _ fc = do
 
   let x' = toString $ if b then contentAsText else Mb.fromJust fc
       diag' = D.addFile diag fp' x'
-    in do
-      D.printDiagnostic stdout True True 4 D.defaultStyle diag'
-      exitFailure
+   in do
+        D.printDiagnostic stdout True True 4 D.defaultStyle diag'
+        exitFailure
 
 printErrorFromString :: Maybe Text -> (String, Maybe String, HLIR.Position) -> String -> IO a
 printErrorFromString content (error', msg, (p1, p2)) step = do
@@ -253,31 +240,32 @@ printErrorFromString content (error', msg, (p1, p2)) step = do
 
   let x' = toString $ if b then contentAsText else Mb.fromJust content
   let pos' = D.Position p1' p2' p1.sourceName
-  let beautifulExample = D.err
-        Nothing
-        error'
-        [ (pos', D.This step) ]
-        (maybeToList msg)
+  let beautifulExample =
+        D.err
+          Nothing
+          error'
+          [(pos', D.This step)]
+          (maybeToList msg)
 
   -- Create the diagnostic
-  let diagnostic  = D.addFile D.def file' x'
+  let diagnostic = D.addFile D.def file' x'
   let diagnostic' = D.addReport diagnostic beautifulExample
 
   -- Print with unicode characters, colors and the default style
   D.printDiagnostic stdout True True 4 D.defaultStyle diagnostic'
   exitFailure
 
-ppError :: ToString a => a -> IO b
+ppError :: (ToString a) => a -> IO b
 ppError t = IO.unsafePerformIO $ do
   putStrLn $ colorBold Red "[error]: " <> toString t
 
   exitFailure
 
-ppSuccess :: ToString a => a -> IO ()
+ppSuccess :: (ToString a) => a -> IO ()
 ppSuccess t = putStrLn $ colorBold Green "[success]: " <> toString t
 
-ppWarning :: ToString a => a -> IO ()
+ppWarning :: (ToString a) => a -> IO ()
 ppWarning t = putStrLn $ colorBold Yellow "[warning]: " <> toString t
 
-ppBuild :: ToString a => a -> IO ()
+ppBuild :: (ToString a) => a -> IO ()
 ppBuild t = putStrLn $ colorBold Cyan "[build]: " <> toString t
