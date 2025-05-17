@@ -1,20 +1,21 @@
 module Main where
-import Control.Monad.Result
-import System.FilePath
-import System.Directory
-import Options.Applicative
 
-import Language.Bonzai.Frontend.Module.Conversion
-import Language.Bonzai.Frontend.Typechecking.Checker (runTypechecking)
-import Language.Bonzai.Backend.Closure.Conversion (runClosureConversion)
-import Language.Bonzai.Backend.Closure.Hoisting (runClosureHoisting)
-import Language.Bonzai.Backend.LLIR.Conversion (runLLIRConversion, includeLocations)
+import Control.Monad.Result
+import Language.Bonzai.Backend.ANF.Conversion (runANFConversion)
 import Language.Bonzai.Backend.Bytecode.Conversion (runBytecodeConversion)
 import Language.Bonzai.Backend.Bytecode.Serialize (runSerializer)
+import Language.Bonzai.Backend.Closure.Conversion (runClosureConversion)
+import Language.Bonzai.Backend.Closure.Hoisting (runClosureHoisting)
+import Language.Bonzai.Backend.LLIR.Conversion (includeLocations, runLLIRConversion)
 import Language.Bonzai.Backend.TypeErasure.Conversion (eraseTypes)
-import Language.Bonzai.Backend.ANF.Conversion (runANFConversion)
+import Language.Bonzai.Frontend.Module.Conversion
+import Language.Bonzai.Frontend.Typechecking.Checker (runTypechecking)
+import Options.Applicative
+import System.Directory
+import System.FilePath
 
 type Typecheck = Bool
+
 type IncludeLocations = Bool
 
 data CLI
@@ -30,16 +31,17 @@ parseBuild :: Parser CLI
 parseBuild =
   Build
     <$> argument str (metavar "FILE" <> help "The file to compile")
-    <*> switch ( long "include-locations" <> short 'i' <> help "Include locations in the output")
+    <*> switch (long "include-locations" <> short 'i' <> help "Include locations in the output")
 
 -- | CLI PARSING
--- | The following function defines the top-level command line interface for 
--- | the compiler. The CLI consists of a single subparser, build, which is 
+-- | The following function defines the top-level command line interface for
+-- | the compiler. The CLI consists of a single subparser, build, which is
 -- | defined by the parseBuild function.
 parseCLI :: Parser CLI
-parseCLI = subparser
-  ( command "build" (info parseBuild (progDesc "Compile a Bonzai program"))
-  )
+parseCLI =
+  subparser
+    ( command "build" (info parseBuild (progDesc "Compile a Bonzai program"))
+    )
 
 -- | PROGRAM STACK
 -- | This function is the entry point for the compiler. It runs the entire
@@ -56,7 +58,7 @@ parseCLI = subparser
 -- | 8. Convert the ANF to LLIR (Low-Level Intermediate Representation)
 -- | 9. Convert the LLIR to bytecode
 -- | 10. Serialize the bytecode
--- | 
+-- |
 -- | The serialized bytecode is then written to a file with the same name as the
 -- | input file, but with a .bin extension.
 buildProgram :: FilePath -> IO ()
@@ -78,7 +80,7 @@ buildProgram fp = do
       mempty
       mempty
       mempty
-  
+
   moduleResult <- runExceptT $ resolve fileNameWithoutDir True
 
   handle moduleResult . const $ do
@@ -92,7 +94,7 @@ buildProgram fp = do
 
       closureConverted <- runClosureConversion mlir
       hoistedAST <- runClosureHoisting closureConverted
-    
+
       anfAST <- runANFConversion hoistedAST
 
       (llir, cs, gs) <- runLLIRConversion anfAST
