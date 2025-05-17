@@ -1,35 +1,35 @@
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DerivingVia #-}
-module Language.Bonzai.Syntax.HLIR (
-  Update(..),
-  Expression(..),
-  DataConstructor(..),
-  Pattern(..),
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TypeFamilies #-}
 
-  pattern MkExprBinary,
-  pattern MkExprString,
-  pattern MkExprTuple,
-  pattern MkExprMutableOperation,
+module Language.Bonzai.Syntax.HLIR
+  ( Update (..),
+    Expression (..),
+    DataConstructor (..),
+    Pattern (..),
+    pattern MkExprBinary,
+    pattern MkExprString,
+    pattern MkExprTuple,
+    pattern MkExprMutableOperation,
+    -- Re-exports
+    module Lit,
+    module Ann,
+    module Pos,
+    module Ty,
+    -- Type families
+    HLIR,
+    TLIR,
+  )
+where
 
-  -- Re-exports
-  module Lit,
-  module Ann,
-  module Pos,
-  module Ty,
-
-  -- Type families
-  HLIR,
-  TLIR,
-) where
-import Language.Bonzai.Syntax.Internal.Literal as Lit
+import Data.Text qualified as T
+import GHC.Show qualified as S
+import GHC.TypeLits (Symbol)
 import Language.Bonzai.Syntax.Internal.Annotation as Ann
+import Language.Bonzai.Syntax.Internal.Literal as Lit
 import Language.Bonzai.Syntax.Internal.Position as Pos
 import Language.Bonzai.Syntax.Internal.Type as Ty
-import qualified Data.Text as T
-import GHC.TypeLits (Symbol)
 import Prelude hiding (Type)
-import GHC.Show qualified as S
 
 -- | UPDATE TYPE
 -- | Update type is used to represent updates to variables, fields, and indices.
@@ -72,7 +72,7 @@ data Expression f t
   | MkExprRecordEmpty
   | MkExprRecordAccess (Expression f t) Text
   | MkExprSingleIf (Expression f t) (Expression f t)
-  deriving Generic
+  deriving (Generic)
 
 -- | DATA CONSTRUCTOR TYPE
 -- | Data constructor type is used to represent data constructors in Bonzai. It is
@@ -80,23 +80,22 @@ data Expression f t
 data DataConstructor t
   = MkDataVariable Text
   | MkDataConstructor Text [t]
-  deriving Generic
+  deriving (Generic)
 
 -- | PATTERN TYPE
 -- | Pattern type is used to represent patterns in Bonzai. It is used to represent
 -- | patterns in match expressions.
-data Pattern f t 
+data Pattern f t
   = MkPatVariable Text (f t)
   | MkPatConstructor Text [Pattern f t]
   | MkPatLiteral Literal
-  | MkPatWildcard 
+  | MkPatWildcard
   | MkPatSpecial Text
   | MkPatLocated (Pattern f t) Position
   | MkPatOr (Pattern f t) (Pattern f t)
   | MkPatCondition (Expression f t) (Pattern f t)
   | MkPatList [Pattern f t] (Maybe (Pattern f t)) (f t)
   deriving (Show, Generic)
-
 
 instance (ToText t, ToText (f t)) => Show (Expression f t) where
   show = T.unpack . toText
@@ -106,8 +105,8 @@ instance (ToText t, ToText (f t)) => Show (Expression f t) where
 pattern MkExprBinary :: Text -> Expression Maybe t -> Expression Maybe t -> Expression Maybe t
 pattern MkExprBinary op a b = MkExprApplication (MkExprVariable (MkAnnotation op Nothing)) [a, b, MkExprRecordEmpty]
 
--- | STRING EXPRESSION PATTERN
--- | A pattern synonym to represent string expressions in Bonzai.
+-- |  STRING EXPRESSION PATTERN
+--  | A pattern synonym to represent string expressions in Bonzai.
 pattern MkExprString :: Text -> Expression f t
 pattern MkExprString s = MkExprLiteral (MkLitString s)
 
@@ -117,7 +116,7 @@ pattern MkExprTuple :: Expression Maybe t -> Expression Maybe t -> Expression Ma
 pattern MkExprTuple a b = MkExprApplication (MkExprVariable (MkAnnotation "Tuple" Nothing)) [a, b, MkExprRecordEmpty]
 
 pattern MkExprMutableOperation :: Text -> Expression Maybe t -> Expression Maybe t -> Expression Maybe t
-pattern MkExprMutableOperation op a b = MkExprApplication (MkExprVariable (MkAnnotation op Nothing)) [a, b, MkExprRecordEmpty] 
+pattern MkExprMutableOperation op a b = MkExprApplication (MkExprVariable (MkAnnotation op Nothing)) [a, b, MkExprRecordEmpty]
 
 type family HLIR (s :: Symbol) where
   HLIR "update" = Update Maybe Type
@@ -147,7 +146,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprLet _ (Right p) e b) = T.concat ["let ", toText p, " = ", toText e, " in ", toText b]
   toText (MkExprBlock es) = "{" <> T.concat [T.intercalate "; " (map toText es)] <> "}"
   toText (MkExprRequire n vars) = T.concat ["require ", n, ": ", T.intercalate ", " (toList vars)]
-  toText (MkExprLoc e _) = toText e
+  toText (MkExprLoc e (start, end)) = "((" <> toText start <> "-" <> toText end <> ") " <> toText e <> ")"
   toText (MkExprList es) = T.concat ["[", T.intercalate ", " (map toText es), "]"]
   toText (MkExprNative ann ty) = T.concat ["native ", toText ann.name, "<", T.intercalate ", " ann.value, "> ", toText ty]
   toText (MkExprMut e) = T.concat ["mut ", toText e]
@@ -162,8 +161,8 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText MkExprRecordEmpty = "{}"
   toText (MkExprRecordAccess e f) = T.concat [toText e, ".", f]
   toText (MkExprSingleIf c t) = T.concat ["if ", toText c, " then { ", toText t, " }"]
-  
-instance ToText t => ToText (DataConstructor t) where
+
+instance (ToText t) => ToText (DataConstructor t) where
   toText (MkDataVariable v) = v
   toText (MkDataConstructor c ts) = T.concat [c, "<", T.intercalate ", " (map toText ts), ">"]
 
@@ -202,7 +201,7 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprTernary c t e == MkExprTernary c' t' e' = c == c' && t == t' && e == e'
   MkExprUpdate u e == MkExprUpdate u' e' = u == u' && e == e'
   MkExprLet g a e b == MkExprLet g' a' e' b' = a == a' && e == e' && g == g' && b == b'
-  MkExprMut e == MkExprMut e'= e == e'
+  MkExprMut e == MkExprMut e' = e == e'
   MkExprBlock es == MkExprBlock es' = es == es'
   MkExprRequire n v == MkExprRequire n' v' = n == n' && v == v'
   MkExprLoc e _ == MkExprLoc e' _ = e == e'

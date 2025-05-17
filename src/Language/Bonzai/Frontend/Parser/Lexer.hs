@@ -1,21 +1,22 @@
 module Language.Bonzai.Frontend.Parser.Lexer where
 
 import Data.Char
+import Data.List qualified as List
 import Data.Set qualified as Set
+import Data.Text qualified as Text
 import GHC.IO qualified as IO
 import Language.Bonzai.Frontend.Parser qualified as P
-import Language.Bonzai.Syntax.HLIR (Position)
+import Language.Bonzai.Syntax.HLIR (Locate (..), Position)
 import Text.Megaparsec.Char
 import Text.Megaparsec.Char.Lexer qualified as L
 import Prelude hiding (modify)
-import qualified Data.Text as Text
-import qualified Data.List as List
 
 {-# NOINLINE defaultPosition #-}
 defaultPosition :: IORef (Maybe Position)
 defaultPosition = IO.unsafePerformIO $ newIORef Nothing
 
 -- LEXING FUNCTIONS
+
 -- | Make a unary operator sequence
 -- | A unary operator sequence is a sequence of unary operators
 -- | that are applied to an expression.
@@ -53,9 +54,7 @@ reservedWords =
   Set.fromList
     [ "module",
       "let",
-      "actor",
-      "interface",
-      "on",
+      "mut",
       "require",
       "extern",
       "pub",
@@ -67,19 +66,22 @@ reservedWords =
       "case",
       "type",
       "true",
-      "false",
-      "return"
+      "false"
     ]
 
 -- | Lexeme parser that consumes whitespace after the lexeme
 -- | This is an utility function that converts a non-lexeme parser
 -- | into a lexeme parser
-lexeme :: (MonadIO m) => P.Parser m a -> P.Parser m a
-lexeme = L.lexeme scn
+lexeme :: (MonadIO m) => P.Parser m a -> P.Parser m (Position, a)
+lexeme p = L.lexeme scn $ do
+  start <- P.getSourcePos
+  r <- p
+  end <- P.getSourcePos
+  return ((start, end), r)
 
 -- | Parse a symbol and consume whitespace after the symbol
-symbol :: (MonadIO m) => Text -> P.Parser m Text
-symbol = lexeme . L.symbol scn
+symbol :: (MonadIO m) => Text -> P.Parser m (Position, Text)
+symbol = lexeme . L.symbol mempty
 
 -- | Describe the valid operators in the language
 -- | Any other operator is ovbiously invalid
@@ -116,14 +118,14 @@ validOperators =
 reservedOperators :: Set Text
 reservedOperators =
   Set.fromList
-    [ ".", "..", "=>", "," ]
+    [".", "..", "=>", ","]
 
 -- | Parse a sequence of valid operators, checking if they are valid
 -- | and not reserved, and then return the concatenated operator
-operator :: (MonadIO m) => P.Parser m Text
+operator :: (MonadIO m) => P.Parser m (Position, Text)
 operator = P.try $ do
-  op <- lexeme $ P.takeWhile1P Nothing (`Set.member` validOperators)
-  guard (op `Set.notMember` reservedOperators)
+  op <- lexeme (P.takeWhile1P Nothing (`Set.member` validOperators))
+  guard (snd op `Set.notMember` reservedOperators)
   return op
 
 -- | Parse a reserved keyword
@@ -131,35 +133,51 @@ operator = P.try $ do
 -- | and cannot be used as an identifier. For instance `if`, `else`, `return`
 -- | are reserved keywords. It should not be followed by an alphanumeric
 -- | character: `if` is a reserved keyword, but `iff` is not.
-reserved :: (MonadIO m) => Text -> P.Parser m Text
+reserved :: (MonadIO m) => Text -> P.Parser m (Position, Text)
 reserved keyword = P.try $ lexeme (string keyword <* P.notFollowedBy alphaNumChar)
 
 -- BASIC LEXEME PARSERS
 
-parens :: (MonadIO m) => P.Parser m a -> P.Parser m a
-parens = P.between (symbol "(") (symbol ")")
+parens :: (MonadIO m) => P.Parser m a -> P.Parser m (Position, a)
+parens p = do
+  ((start, _), _) <- symbol "("
+  r <- p
+  ((_, end), _) <- symbol ")"
+  return ((start, end), r)
 
-brackets :: (MonadIO m) => P.Parser m a -> P.Parser m a
-brackets = P.between (symbol "[") (symbol "]")
+brackets :: (MonadIO m) => P.Parser m a -> P.Parser m (Position, a)
+brackets p = do
+  ((start, _), _) <- symbol "["
+  r <- p
+  ((_, end), _) <- symbol "]"
+  return ((start, end), r)
 
-angles :: (MonadIO m) => P.Parser m a -> P.Parser m a
-angles = P.between (symbol "<") (symbol ">")
+angles :: (MonadIO m) => P.Parser m a -> P.Parser m (Position, a)
+angles p = do
+  ((start, _), _) <- symbol "<"
+  r <- p
+  ((_, end), _) <- symbol ">"
+  return ((start, end), r)
 
-braces :: (MonadIO m) => P.Parser m a -> P.Parser m a
-braces = P.between (symbol "{") (symbol "}")
+braces :: (MonadIO m) => P.Parser m a -> P.Parser m (Position, a)
+braces p = do
+  ((start, _), _) <- symbol "{"
+  r <- p
+  ((_, end), _) <- symbol "}"
+  return ((start, end), r)
 
 comma :: (MonadIO m) => P.Parser m Text
-comma = symbol ","
+comma = snd <$> symbol ","
 
 colon :: (MonadIO m) => P.Parser m Text
-colon = symbol ":"
+colon = snd <$> symbol ":"
 
 semi :: (MonadIO m) => P.Parser m Text
-semi = symbol ";"
+semi = snd <$> symbol ";"
 
 -- | Check if the character is a valid identifier character
 -- | An identifier character is an alphanumeric character or an underscore
--- | For instance, `'test` is not a valid identifier, but `test` is. 
+-- | For instance, `'test` is not a valid identifier, but `test` is.
 isIdentChar :: Char -> Bool
 isIdentChar c = isAlphaNum c || c == '_'
 
@@ -172,25 +190,27 @@ isIdentCharStart cs = isAlpha (Text.head cs) || Text.head cs == '_'
 
 -- | Parse a non-lexed identifier
 -- | A non-lexed identifier is an identifier that is not lexed, meaning that
--- | it does not consume whitespace after and before the identifier. This 
+-- | it does not consume whitespace after and before the identifier. This
 -- | is useful for parsing record selections.
-nonLexedID :: MonadIO m => P.Parser m Text
+nonLexedID :: (MonadIO m) => P.Parser m (Position, Text)
 nonLexedID = do
+  start <- P.getSourcePos
   r <- Text.intercalate "::" <$> (P.takeWhile1P Nothing isIdentChar `P.sepBy1` string "::")
+  end <- P.getSourcePos
   -- Guarding parsed result and failing when reserved word is parsed
   -- (such as reserved keyword)
   if r `Set.member` reservedWords
     then fail $ "The identifier " ++ show r ++ " is a reserved word"
     else
       if isIdentCharStart r
-        then return r
+        then return ((start, end), r)
         else fail $ "The identifier " ++ show r ++ " is not valid"
 
 -- | Parse an identifier
 -- | An identifier is a sequence of valid identifier characters
 -- | that starts with an identifier start character
 -- | An identifier cannot be a reserved keyword
-identifier :: MonadIO m => P.Parser m Text
+identifier :: (MonadIO m) => P.Parser m (Position, Text)
 identifier = lexeme $ do
   cs <- Text.intercalate "::" <$> (P.takeWhile1P Nothing isIdentChar `P.sepBy1` string "::")
   if cs `Set.member` reservedWords
@@ -201,7 +221,7 @@ identifier = lexeme $ do
         else fail $ "The identifier " ++ show cs ++ " is not valid"
 
 -- | A field may be either a non-lexed identifier or an operator
-field :: (MonadIO m) => P.Parser m Text
+field :: (MonadIO m) => P.Parser m (Position, Text)
 field = nonLexedID <|> operator
 
 -- | Check if the given number is an integer, meaning that
@@ -210,3 +230,6 @@ field = nonLexedID <|> operator
 -- | But 1.6 is not an integer because floor(1.6) = 1 != ceiling(1.6)
 isInteger :: (Num a, RealFrac a) => a -> Bool
 isInteger x = (ceiling x :: Integer) == floor x
+
+locateWith :: (Locate a) => (Position, a) -> (Position, a)
+locateWith (p, x) = (p, locate x p)

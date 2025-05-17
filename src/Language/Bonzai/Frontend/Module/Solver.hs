@@ -1,9 +1,9 @@
 module Language.Bonzai.Frontend.Module.Solver where
 
+import Data.Set qualified as Set
+import Data.Text qualified as Text
+import GHC.IO qualified as IO
 import Language.Bonzai.Syntax.HLIR qualified as HLIR
-import qualified GHC.IO as IO
-import qualified Data.Set as Set
-import qualified Data.Text as Text
 
 {-# NOINLINE moduleStack #-}
 moduleStack :: IORef (Set Text)
@@ -15,17 +15,20 @@ renamedVariables = IO.unsafePerformIO $ newIORef Set.empty
 
 -- | SOLVE MODULE
 -- | Solve a module by renaming all the variables in the module with unique names.
-solveModule :: MonadIO m => [HLIR.HLIR "expression"] -> m [HLIR.HLIR "expression"]
+solveModule :: (MonadIO m) => [HLIR.HLIR "expression"] -> m [HLIR.HLIR "expression"]
 solveModule (HLIR.MkExprLoc e p : xs) = do
   es' <- solveModule (e : xs)
 
-  pure (HLIR.MkExprLoc <$> es' <*> pure p)
+  case es' of
+    [HLIR.MkExprMatch e'' cs] -> pure [HLIR.MkExprMatch (HLIR.MkExprLoc e'' p) cs]
+    (x : xs'') -> pure (HLIR.MkExprLoc x p : xs'')
+    _ -> pure (HLIR.MkExprLoc <$> es' <*> pure p)
 solveModule (HLIR.MkExprPublic e : xs) = do
   e' <- solveModule (e : xs)
-  
+
   pure $ case e' of
     [HLIR.MkExprMatch e'' cs] -> [HLIR.MkExprMatch e'' cs]
-    (x:xs') -> [HLIR.MkExprPublic x] <> xs'
+    (x : xs') -> [HLIR.MkExprPublic x] <> xs'
     [] -> []
 solveModule (HLIR.MkExprLet g a e b : xs) = do
   a' <- case a of
@@ -46,19 +49,19 @@ solveModule (x : xs) = do
   pure (x' : xs')
 solveModule [] = pure []
 
-freshSymbol :: MonadIO m => HLIR.Annotation a -> m (HLIR.Annotation a)
+freshSymbol :: (MonadIO m) => HLIR.Annotation a -> m (HLIR.Annotation a)
 freshSymbol ann = do
   stack <- readIORef moduleStack
 
-  pure $ ann { HLIR.name = Text.intercalate "::" (Set.toList stack <> [ann.name]) }
+  pure $ ann {HLIR.name = Text.intercalate "::" (Set.toList stack <> [ann.name])}
 
-fetchVar :: MonadIO m => HLIR.Annotation a -> m (HLIR.Annotation a)
+fetchVar :: (MonadIO m) => HLIR.Annotation a -> m (HLIR.Annotation a)
 fetchVar a = do
   vars <- readIORef renamedVariables
 
   if Set.member a.name vars then freshSymbol a else pure a
 
-solveBlock :: MonadIO m => [HLIR.HLIR "expression"] -> m [HLIR.HLIR "expression"]
+solveBlock :: (MonadIO m) => [HLIR.HLIR "expression"] -> m [HLIR.HLIR "expression"]
 solveBlock (HLIR.MkExprLet g a e b : xs) = do
   a' <- case a of
     Left ann -> Left <$> freshSymbol ann
@@ -92,7 +95,7 @@ getBlock _ = Nothing
 
 -- | SOLVE EXPRESSION
 -- | Solve an expression by renaming all the variables in the expression with unique names.
-solveExpression :: MonadIO m => HLIR.HLIR "expression" -> m (HLIR.HLIR "expression")
+solveExpression :: (MonadIO m) => HLIR.HLIR "expression" -> m (HLIR.HLIR "expression")
 solveExpression (HLIR.MkExprVariable a) = do
   a' <- fetchVar a
   pure $ HLIR.MkExprVariable a'
@@ -114,7 +117,7 @@ solveExpression (HLIR.MkExprTernary c t e) = do
   t' <- solveExpression t
   e' <- solveExpression e
 
-  pure $ HLIR.MkExprTernary c' t' e' 
+  pure $ HLIR.MkExprTernary c' t' e'
 solveExpression (HLIR.MkExprUpdate u e) = do
   u' <- solveUpdate u
   e' <- solveExpression e
@@ -131,10 +134,10 @@ solveExpression (HLIR.MkExprLet g a e b) = do
 solveExpression (HLIR.MkExprMut e) = do
   e' <- solveExpression e
 
-  pure $ HLIR.MkExprMut e' 
+  pure $ HLIR.MkExprMut e'
 solveExpression (HLIR.MkExprBlock es) = do
   es' <- solveBlock es
-  pure $ HLIR.MkExprBlock es' 
+  pure $ HLIR.MkExprBlock es'
 solveExpression (HLIR.MkExprLiteral l) = pure $ HLIR.MkExprLiteral l
 solveExpression (HLIR.MkExprRequire a t) = pure $ HLIR.MkExprRequire a t
 solveExpression (HLIR.MkExprLoc e p) = do
@@ -176,7 +179,7 @@ solveExpression e = pure e
 
 -- | SOLVE UPDATE
 -- | Solve an update by renaming all the variables in the update with unique names.
-solveUpdate :: MonadIO m => HLIR.HLIR "update" -> m (HLIR.HLIR "update")
+solveUpdate :: (MonadIO m) => HLIR.HLIR "update" -> m (HLIR.HLIR "update")
 solveUpdate (HLIR.MkUpdtVariable a) = do
   a' <- freshSymbol a
   pure $ HLIR.MkUpdtVariable a'
@@ -191,10 +194,8 @@ solveUpdate (HLIR.MkUpdtIndex u e) = do
 
 -- | SOLVE CASE
 -- | Solve a case by renaming all the variables in the case with unique names.
-solveCase :: MonadIO m => (HLIR.HLIR "pattern", HLIR.HLIR "expression", Maybe HLIR.Position) -> m (HLIR.HLIR "pattern", HLIR.HLIR "expression", Maybe HLIR.Position)
+solveCase :: (MonadIO m) => (HLIR.HLIR "pattern", HLIR.HLIR "expression", Maybe HLIR.Position) -> m (HLIR.HLIR "pattern", HLIR.HLIR "expression", Maybe HLIR.Position)
 solveCase (p, b, ps) = do
   b' <- solveExpression b
 
   pure (p, b', ps)
-
-

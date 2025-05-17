@@ -1,16 +1,17 @@
 module Language.Bonzai.Backend.TypeErasure.Conversion where
 
-import qualified Language.Bonzai.Syntax.HLIR as HLIR
-import qualified Language.Bonzai.Syntax.MLIR as MLIR
 import Control.Monad.Result (compilerError)
-import qualified Data.Map as Map
-import Language.Bonzai.Backend.Closure.Free (Substitutable(substitute))
-import qualified Data.List as List
+import Data.List qualified as List
+import Data.Map qualified as Map
+import Language.Bonzai.Backend.Closure.Free (Substitutable (substitute))
+import Language.Bonzai.Syntax.HLIR qualified as HLIR
+import Language.Bonzai.Syntax.MLIR qualified as MLIR
 
--- | MLIR CONVERSION
+--  | MLIR CONVERSION
+
 -- |
 -- | This pass converts the HLIR to MLIR by erasing all type information.
--- | It also converts datatypes and their constructors to functions that 
+-- | It also converts datatypes and their constructors to functions that
 -- | return a list of strings representing the type and constructor name.
 -- |
 -- | For example, the following datatype:
@@ -43,7 +44,9 @@ import qualified Data.List as List
 convert :: HLIR.TLIR "expression" -> MLIR.MLIR "expression"
 convert (HLIR.MkExprLiteral l) = MLIR.MkExprLiteral l
 convert (HLIR.MkExprApplication var [x, y, _])
-  | isVariable var, name <- getVariable var, name `elem` operators =
+  | isVariable var,
+    name <- getVariable var,
+    name `elem` operators =
       MLIR.MkExprBinary name (convert x) (convert y)
 convert (HLIR.MkExprVariable a) = MLIR.MkExprVariable a.name
 convert (HLIR.MkExprApplication f args) = MLIR.MkExprApplication (convert f) (map convert args)
@@ -83,6 +86,7 @@ convert (HLIR.MkExprRecordAccess e k) = do
   MLIR.MkExprRecordAccess e' k
 convert HLIR.MkExprRecordEmpty = MLIR.MkExprRecord mempty
 convert (HLIR.MkExprSingleIf c t) = MLIR.MkExprSingleIf (convert c) (convert t)
+convert (HLIR.MkExprPublic e) = convert e
 convert e = compilerError $ "impossible, received: " <> show e
 
 toList' :: [(Text, MLIR.MLIR "expression")] -> [MLIR.MLIR "expression"]
@@ -100,17 +104,17 @@ reduceObj x = ([], Just $ convert x)
 
 operators :: [Text]
 operators =
-  [ "=="
-  , "!="
-  , "<"
-  , "<="
-  , ">"
-  , ">="
-  , "+"
-  , "-"
-  , "*"
-  , "/"
-  , "%"
+  [ "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "+",
+    "-",
+    "*",
+    "/",
+    "%"
   ]
 
 -- | Create a function bsaed on a datatype constructor, the function will return a
@@ -119,7 +123,7 @@ operators =
 createFunction :: Text -> HLIR.TLIR "data" -> MLIR.MLIR "expression"
 createFunction typeName (HLIR.MkDataConstructor name args) = do
   let args' = ["x" <> show i | i <- [(0 :: Int) .. length args - 1]]
-  let body = MLIR.MkExprList $ [ MLIR.MkExprSpecial, MLIR.MkExprLiteral (MLIR.MkLitString typeName), MLIR.MkExprLiteral (MLIR.MkLitString name)] <> map MLIR.MkExprVariable args'
+  let body = MLIR.MkExprList $ [MLIR.MkExprSpecial, MLIR.MkExprLiteral (MLIR.MkLitString typeName), MLIR.MkExprLiteral (MLIR.MkLitString name)] <> map MLIR.MkExprVariable args'
 
   MLIR.MkExprFunction name args' body
 createFunction typeName (HLIR.MkDataVariable name) = do
@@ -131,10 +135,10 @@ createFunction typeName (HLIR.MkDataVariable name) = do
 -- | - A list of conditions
 -- | - A map of variables that need to be substituted
 -- | - The expression that needs to be evaluated
-createIfs
-  :: [(([MLIR.MLIR "expression"], Map Text (MLIR.MLIR "expression")), MLIR.MLIR "expression")]
-  -> MLIR.MLIR "expression"
-createIfs (((conds, maps), e ): xs) = do
+createIfs ::
+  [(([MLIR.MLIR "expression"], Map Text (MLIR.MLIR "expression")), MLIR.MLIR "expression")] ->
+  MLIR.MLIR "expression"
+createIfs (((conds, maps), e) : xs) = do
   let cond = createFinalCondition conds
       lets = createLets (Map.toList maps) e
 
@@ -148,17 +152,16 @@ createFinalCondition [x] = x
 createFinalCondition (x : xs) = MLIR.MkExprTernary x (createFinalCondition xs) (MLIR.MkExprLiteral (HLIR.MkLitInt 0))
 
 -- | Create a sequence of let expressions based on a list of variables and expressions
-createLets
-  :: [(Text, MLIR.MLIR "expression")]
-  -> MLIR.MLIR "expression"
-  -> MLIR.MLIR "expression"
+createLets ::
+  [(Text, MLIR.MLIR "expression")] ->
+  MLIR.MLIR "expression" ->
+  MLIR.MLIR "expression"
 createLets xs e = do
   let lets = map (uncurry MLIR.MkExprLet) xs
 
   case e of
     MLIR.MkExprBlock es ->
       MLIR.MkExprBlock (lets <> es)
-
     _ ->
       MLIR.MkExprBlock (lets <> [e])
 
@@ -169,6 +172,7 @@ convertUpdate (HLIR.MkUpdtIndex u e) = MLIR.MkUpdtIndex (convertUpdate u) (conve
 
 eraseTypes :: [HLIR.TLIR "expression"] -> [MLIR.MLIR "expression"]
 eraseTypes (HLIR.MkExprData ann cs : xs) = map (createFunction ann.name) cs <> eraseTypes xs
+eraseTypes (HLIR.MkExprPublic e : xs) = eraseTypes (e : xs)
 eraseTypes (HLIR.MkExprLoc e p : xs) = (MLIR.MkExprLoc p <$> eraseTypes [e]) <> eraseTypes xs
 eraseTypes (x : xs) = convert x : eraseTypes xs
 eraseTypes [] = []
@@ -195,10 +199,10 @@ getVariable _ = compilerError "expected variable"
 -- | Create a sequence of conditions based on a pattern match
 -- | The function returns a list of conditions and a map of variables that need
 -- | to be substituted.
-createCondition
-  :: MLIR.MLIR "expression"
-  -> HLIR.TLIR "pattern"
-  -> ([MLIR.MLIR "expression"], Map Text (MLIR.MLIR "expression"))
+createCondition ::
+  MLIR.MLIR "expression" ->
+  HLIR.TLIR "pattern" ->
+  ([MLIR.MLIR "expression"], Map Text (MLIR.MLIR "expression"))
 createCondition _ HLIR.MkPatWildcard = ([], mempty)
 createCondition x (HLIR.MkPatVariable y _) = ([], Map.singleton y x)
 createCondition x (HLIR.MkPatConstructor y xs) =
@@ -234,11 +238,12 @@ createCondition x (HLIR.MkPatList pats slice _) =
       patLen = fromIntegral $ length pats
       lenCond = case slice of
         Just _ ->
-          MLIR.MkExprApplication (MLIR.MkExprVariable ">") [
-              MLIR.MkExprApplication (MLIR.MkExprVariable "length") [x, MLIR.MkExprRecord mempty]
-            , MLIR.MkExprLiteral (HLIR.MkLitInt $ patLen - 1)
-            , MLIR.MkExprRecord mempty
-          ]
+          MLIR.MkExprApplication
+            (MLIR.MkExprVariable ">")
+            [ MLIR.MkExprApplication (MLIR.MkExprVariable "length") [x, MLIR.MkExprRecord mempty],
+              MLIR.MkExprLiteral (HLIR.MkLitInt $ patLen - 1),
+              MLIR.MkExprRecord mempty
+            ]
         Nothing ->
           equalsTo
             (MLIR.MkExprApplication (MLIR.MkExprVariable "length") [x, MLIR.MkExprRecord mempty])

@@ -1,16 +1,17 @@
 module Language.Bonzai.Frontend.Module.Conversion where
 
-import qualified Language.Bonzai.Syntax.HLIR as HLIR
-import qualified GHC.IO as IO
-import Control.Monad.Result
-import qualified Data.Map as Map
-import qualified Data.Set as Set
+import Control.Color
 import Control.Monad.Except
-import System.FilePath
-import System.Directory (makeAbsolute, doesFileExist)
-import qualified Language.Bonzai.Frontend.Parser as P
-import qualified Language.Bonzai.Frontend.Parser.Expression as P
+import Control.Monad.Result
+import Data.Map qualified as Map
+import Data.Set qualified as Set
+import GHC.IO qualified as IO
 import Language.Bonzai.Frontend.Module.Solver (solveModule)
+import Language.Bonzai.Frontend.Parser qualified as P
+import Language.Bonzai.Frontend.Parser.Expression qualified as P
+import Language.Bonzai.Syntax.HLIR qualified as HLIR
+import System.Directory (doesFileExist, makeAbsolute)
+import System.FilePath
 
 type MonadConversion m = (MonadIO m, MonadError Error m)
 
@@ -24,24 +25,24 @@ data VisitState
 -- | A module unit is a file (resp. module) that contains a list of imports,
 -- | a list of variables, a list of types, and a list of classes.
 data ModuleUnit = MkModuleUnit
-  { name :: FilePath
-  , path :: FilePath
-  , public :: Bool
-  , imports :: Set ModuleUnit
-  , -- Imported data
-    variables :: Set Text
-  , types :: Set Text
-  , classes :: Set Text
+  { name :: FilePath,
+    path :: FilePath,
+    public :: Bool,
+    imports :: Set ModuleUnit,
+    -- Imported data
+    variables :: Set Text,
+    types :: Set Text,
+    classes :: Set Text
   }
   deriving (Show, Eq, Ord)
 
 -- | Module state
 data ModuleState = MkModuleState
-  { initialPath :: FilePath
-  , currentDirectory :: FilePath
-  , resolved :: Map FilePath ModuleUnit
-  , boundArgs :: [Text]
-  , visitStateModules :: Map Text VisitState
+  { initialPath :: FilePath,
+    currentDirectory :: FilePath,
+    resolved :: Map FilePath ModuleUnit,
+    boundArgs :: [Text],
+    visitStateModules :: Map Text VisitState
   }
   deriving (Show, Eq)
 
@@ -50,8 +51,9 @@ data ModuleState = MkModuleState
 -- | the modules.
 {-# NOINLINE moduleState #-}
 moduleState :: IORef ModuleState
-moduleState = IO.unsafePerformIO . newIORef $
-  MkModuleState "" "" Map.empty [] Map.empty
+moduleState =
+  IO.unsafePerformIO . newIORef $
+    MkModuleState "" "" Map.empty [] Map.empty
 
 -- | Result state
 -- | Used to store result of the resolution, i.e. flattened resolved modules AST.
@@ -63,8 +65,8 @@ type MonadResolution m = (MonadIO m, MonadError Error m)
 
 -- | Get the correct path for a given path, resolving it
 -- | to the standard library if needed.
-getCorrectPath :: MonadResolution m => FilePath -> m FilePath
-getCorrectPath ('s':'t':'d':':':path) = do
+getCorrectPath :: (MonadResolution m) => FilePath -> m FilePath
+getCorrectPath ('s' : 't' : 'd' : ':' : path) = do
   standardPath <- lookupEnv "BONZAI_PATH"
 
   case standardPath of
@@ -77,7 +79,7 @@ getCorrectPath path = do
   liftIO $ makeAbsolute path'
 
 -- | Resolve a module from its content, used especially for the LSP server
-resolveContent :: MonadResolution m => Text -> m ModuleUnit
+resolveContent :: (MonadResolution m) => Text -> m ModuleUnit
 resolveContent content = do
   let imports = mempty
       variables = mempty
@@ -108,8 +110,8 @@ resolve path isPublic = do
   -- Update the module state
   modifyIORef moduleState $ \st' ->
     st'
-      { initialPath = newPath
-      , currentDirectory = takeDirectory newPath
+      { initialPath = newPath,
+        currentDirectory = takeDirectory newPath
       }
 
   -- Get the new module name by making the path relative to the
@@ -124,32 +126,31 @@ resolve path isPublic = do
     -- If the module is already being visited then we have a cyclic
     -- dependency, because we are trying to visit it again.
     Just Visiting -> throw (CyclicModuleDependency newPath [])
-
     -- If the module has already been visited, then we can just return
     -- the module unit from the resolved map.
     Just Visited -> do
       case Map.lookup newModuleName st.resolved of
         Just m -> do
           modifyIORef moduleState $ \st' ->
-            st' {
-                initialPath= st.initialPath
-              , currentDirectory = st.currentDirectory
+            st'
+              { initialPath = st.initialPath,
+                currentDirectory = st.currentDirectory
               }
 
-          pure m { public = isPublic }
+          pure m {public = isPublic}
         Nothing -> throw (ModuleNotFound newPath [])
 
     -- If the module has not been visited yet, then we need to visit it.
     _ -> do
       -- Mark the module as being visited
       modifyIORef moduleState $ \st' ->
-        st' {
-          visitStateModules =
-            Map.insert
-              (fromString newModuleName)
-              Visiting
-              st'.visitStateModules
-        }
+        st'
+          { visitStateModules =
+              Map.insert
+                (fromString newModuleName)
+                Visiting
+                st'.visitStateModules
+          }
 
       -- Read the content of the file
       content <- liftIO $ readFileBS newPath
@@ -162,6 +163,9 @@ resolve path isPublic = do
         Left err -> throw (ParseError err)
         Right cst' -> do
           ast <- solveModule cst'
+          if newModuleName == "/Volumes/Programmation/Langages/Bonzai.hs/example/basics/fibonacci.bzi"
+            then mapM_ printText ast
+            else pure ()
 
           -- Get the public variables, types, and classes
           let imports = mempty
@@ -175,60 +179,59 @@ resolve path isPublic = do
           -- Resolve common errors and resolve imports withing the parsed module
           m' <- foldlM resolveImports moduleUnit ast
 
-          -- Update the module state with the new module unit and with the new 
+          -- Update the module state with the new module unit and with the new
           -- visit state
           modifyIORef moduleState $ \st' ->
             st
-              { resolved = Map.insert newModuleName moduleUnit st'.resolved
-              , visitStateModules =
+              { resolved = Map.insert newModuleName moduleUnit st'.resolved,
+                visitStateModules =
                   Map.insert
                     (fromString newModuleName)
                     Visited
-                    st'.visitStateModules
-              , initialPath = st.initialPath
-              , currentDirectory = st.currentDirectory
+                    st'.visitStateModules,
+                initialPath = st.initialPath,
+                currentDirectory = st.currentDirectory
               }
-
 
           -- Update the result state with the new AST
           modifyIORef' resultState (<> ast)
 
           -- Return the new module unit, combined with new resolved imports
-          pure moduleUnit { imports = m'.imports }
+          pure moduleUnit {imports = m'.imports}
 
 -- | Get the public variables from a list of expressions
 -- | This function is used to get the public variables from a list of expressions
 -- | in order to store them in the module unit.
 getPublicVariables :: [HLIR.HLIR "expression"] -> Set Text
 getPublicVariables = foldl' getPublicVariables' mempty
- where
-  getPublicVariables' :: Set Text -> HLIR.HLIR "expression" -> Set Text
-  getPublicVariables' s (HLIR.MkExprLoc e _) = getPublicVariables' s e
-  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLoc e _)) = getPublicVariables' s (HLIR.MkExprPublic e)
-  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLet _ (Left name) _ _)) = Set.insert name.name s
-  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprNative ann _)) = Set.insert ann.name s
-  getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprData _ cs)) = foldl' getPublicVariablesDataConstr s cs
-  getPublicVariables' s _ = s
+  where
+    getPublicVariables' :: Set Text -> HLIR.HLIR "expression" -> Set Text
+    getPublicVariables' s (HLIR.MkExprLoc e _) = getPublicVariables' s e
+    getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLoc e _)) = getPublicVariables' s (HLIR.MkExprPublic e)
+    getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLet _ (Left name) _ _)) = Set.insert name.name s
+    getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprNative ann _)) = Set.insert ann.name s
+    getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprData _ cs)) = foldl' getPublicVariablesDataConstr s cs
+    getPublicVariables' s _ = s
 
-  getPublicVariablesDataConstr :: Set Text -> HLIR.DataConstructor HLIR.Type -> Set Text
-  getPublicVariablesDataConstr s (HLIR.MkDataVariable n) = Set.insert n s
-  getPublicVariablesDataConstr s (HLIR.MkDataConstructor n _) = Set.insert n s
+    getPublicVariablesDataConstr :: Set Text -> HLIR.DataConstructor HLIR.Type -> Set Text
+    getPublicVariablesDataConstr s (HLIR.MkDataVariable n) = Set.insert n s
+    getPublicVariablesDataConstr s (HLIR.MkDataConstructor n _) = Set.insert n s
 
 -- | Get the public types from a list of expressions
 -- | This function is used to get the public types from a list of expressions
 -- | in order to store them in the module unit.
 getPublicTypes :: [HLIR.HLIR "expression"] -> Set Text
 getPublicTypes = foldl' getPublicTypes' mempty
- where
-  getPublicTypes' :: Set Text -> HLIR.HLIR "expression" -> Set Text
-  getPublicTypes' s (HLIR.MkExprLoc e _) = getPublicTypes' s e
-  getPublicTypes' s (HLIR.MkExprPublic (HLIR.MkExprLoc e _)) = getPublicTypes' s (HLIR.MkExprPublic e)
-  getPublicTypes' s (HLIR.MkExprPublic (HLIR.MkExprData ann _)) = Set.insert ann.name s
-  getPublicTypes' s _ = s
+  where
+    getPublicTypes' :: Set Text -> HLIR.HLIR "expression" -> Set Text
+    getPublicTypes' s (HLIR.MkExprLoc e _) = getPublicTypes' s e
+    getPublicTypes' s (HLIR.MkExprPublic (HLIR.MkExprLoc e _)) = getPublicTypes' s (HLIR.MkExprPublic e)
+    getPublicTypes' s (HLIR.MkExprPublic (HLIR.MkExprData ann _)) = Set.insert ann.name s
+    getPublicTypes' s _ = s
 
 foldM' :: (Monad m) => (a -> b -> m a) -> a -> [b] -> m a
 foldM' _ z [] = return z
-foldM' f z (x:xs) = do
+foldM' f z (x : xs) = do
   z' <- f z x
   z' `seq` foldM' f z' xs
 
@@ -246,7 +249,7 @@ resolveImports m (HLIR.MkExprApplication f args) = do
 resolveImports m (HLIR.MkExprLambda args _ body) = do
   old <- readIORef moduleState
   modifyIORef' moduleState $ \st ->
-    st { boundArgs = boundArgs st <> map (.name) args }
+    st {boundArgs = boundArgs st <> map (.name) args}
   m' <- resolveImports m body
   writeIORef moduleState old
 
@@ -279,19 +282,19 @@ resolveImports m (HLIR.MkExprInterface name _) = do
 resolveImports m (HLIR.MkExprPublic (HLIR.MkExprLoc e _)) = resolveImports m (HLIR.MkExprPublic e)
 resolveImports m (HLIR.MkExprPublic (HLIR.MkExprRequire path vars)) = do
   m' <- resolve (toString path) True
-  let m'' = if null vars then m' else m' { variables = vars }
+  let m'' = if null vars then m' else m' {variables = vars}
   pure $ m {imports = Set.insert m'' m.imports}
 resolveImports m (HLIR.MkExprRequire path vars) = do
   m' <- resolve (toString path) False
 
-  let m'' = if null vars then m' else m' { variables = vars }
+  let m'' = if null vars then m' else m' {variables = vars}
 
   pure $ m {imports = Set.insert m'' m.imports}
 resolveImports m (HLIR.MkExprUpdate u e) = do
   m1 <- resolveUpdate m u
   resolveImports m1 e
   where
-    resolveUpdate :: MonadConversion m => ModuleUnit -> HLIR.Update Maybe HLIR.Type -> m ModuleUnit
+    resolveUpdate :: (MonadConversion m) => ModuleUnit -> HLIR.Update Maybe HLIR.Type -> m ModuleUnit
     resolveUpdate m' (HLIR.MkUpdtVariable _) = pure m'
     resolveUpdate m' (HLIR.MkUpdtField u' _) = resolveUpdate m' u'
     resolveUpdate m' (HLIR.MkUpdtIndex u' e') = do
@@ -312,10 +315,12 @@ resolveImports m (HLIR.MkExprData ann cs) = do
   foldM' resolveImportsDataConstr m' cs
 resolveImports m (HLIR.MkExprMatch e cs) = do
   void $ resolveImports m e
-  mapM_ (\(p, b, _) -> do
-      m' <- resolveImportsPattern m p
-      resolveImports m' b
-    ) cs
+  mapM_
+    ( \(p, b, _) -> do
+        m' <- resolveImportsPattern m p
+        resolveImports m' b
+    )
+    cs
 
   pure m
 resolveImports m (HLIR.MkExprPublic e) = resolveImports m e
@@ -323,8 +328,8 @@ resolveImports m (HLIR.MkExprSingleIf c t) = do
   m1 <- resolveImports m c
   resolveImports m1 t
 
-resolveImportsPattern :: MonadConversion m => ModuleUnit -> HLIR.HLIR "pattern" -> m ModuleUnit
-resolveImportsPattern m (HLIR.MkPatVariable n _) = pure m { variables = Set.insert n m.variables }
+resolveImportsPattern :: (MonadConversion m) => ModuleUnit -> HLIR.HLIR "pattern" -> m ModuleUnit
+resolveImportsPattern m (HLIR.MkPatVariable n _) = pure m {variables = Set.insert n m.variables}
 resolveImportsPattern m (HLIR.MkPatConstructor _ ps) = foldM' resolveImportsPattern m ps
 resolveImportsPattern m (HLIR.MkPatLiteral _) = pure m
 resolveImportsPattern m HLIR.MkPatWildcard = pure m
@@ -342,9 +347,9 @@ resolveImportsPattern m (HLIR.MkPatList ps slice _) = do
     Just p -> resolveImportsPattern m1 p
     Nothing -> pure m1
 
-resolveImportsDataConstr :: MonadConversion m => ModuleUnit -> HLIR.DataConstructor HLIR.Type -> m ModuleUnit
-resolveImportsDataConstr m (HLIR.MkDataVariable n) = pure m { variables = Set.insert n m.variables }
-resolveImportsDataConstr m (HLIR.MkDataConstructor n _) = pure m { variables = Set.insert n m.variables }
+resolveImportsDataConstr :: (MonadConversion m) => ModuleUnit -> HLIR.DataConstructor HLIR.Type -> m ModuleUnit
+resolveImportsDataConstr m (HLIR.MkDataVariable n) = pure m {variables = Set.insert n m.variables}
+resolveImportsDataConstr m (HLIR.MkDataConstructor n _) = pure m {variables = Set.insert n m.variables}
 
 type Depth = Int
 
@@ -358,18 +363,18 @@ isVariableDefined :: Depth -> Text -> ModuleUnit -> Bool
 isVariableDefined depth v m =
   Set.member v m.variables
     || any (isVariableDefined (depth + 1) v) getPublicImports'
- where
-  getPublicImports' :: Set ModuleUnit
-  getPublicImports' = Set.filter (\m' -> public m' || depth == 0) m.imports
+  where
+    getPublicImports' :: Set ModuleUnit
+    getPublicImports' = Set.filter (\m' -> public m' || depth == 0) m.imports
 
 -- | Remove requires from a list of expressions
 -- | This function is used to remove requires from a list of expressions
 -- | in order to flatten the AST.
 removeRequires :: [HLIR.HLIR "expression"] -> [HLIR.HLIR "expression"]
 removeRequires = filter (not . isRequire)
- where
-  isRequire :: HLIR.HLIR "expression" -> Bool
-  isRequire (HLIR.MkExprRequire _ _) = True
-  isRequire (HLIR.MkExprPublic e) = isRequire e
-  isRequire (HLIR.MkExprLoc e _) = isRequire e
-  isRequire _ = False
+  where
+    isRequire :: HLIR.HLIR "expression" -> Bool
+    isRequire (HLIR.MkExprRequire _ _) = True
+    isRequire (HLIR.MkExprPublic e) = isRequire e
+    isRequire (HLIR.MkExprLoc e _) = isRequire e
+    isRequire _ = False
