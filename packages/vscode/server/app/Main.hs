@@ -22,7 +22,7 @@ import Language.LSP.Server
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.Directory.Internal.Prelude (getEnv)
 import System.Exit (ExitCode (ExitFailure))
-import System.FilePath (dropExtension, isExtensionOf, makeRelative, normalise, takeDirectory, takeFileName, (</>))
+import System.FilePath (dropExtension, isExtensionOf, makeRelative, takeDirectory, takeFileName, (</>))
 
 {-# NOINLINE lastContent #-}
 lastContent :: IORef (Map Text Text)
@@ -366,7 +366,7 @@ getFiles path = do
             filterM
               (\p -> liftIO $ doesDirectoryExist (path </> p))
               contents
-          files <- mapM getFiles (map (path </>) folders)
+          files <- mapM (getFiles . (path </>)) folders
           pure $ concat files <> paths
         else pure []
 
@@ -455,8 +455,7 @@ handlers =
 
         -- check if path ends with .bzi
 
-        if isExtensionOf ".bzi" path
-          then do
+        when (isExtensionOf ".bzi" path) $ do
             content <- decodeUtf8 <$> readFileLBS path
 
             modifyIORef lastContent (Map.insert (toText path) content)
@@ -485,8 +484,7 @@ handlers =
                         }
                     ]
               Right _ -> do
-                sendNotification SMethod_TextDocumentPublishDiagnostics $ PublishDiagnosticsParams uri Nothing []
-          else pure (),
+                sendNotification SMethod_TextDocumentPublishDiagnostics $ PublishDiagnosticsParams uri Nothing [],
       notificationHandler
         SMethod_TextDocumentDidChange
         $ \req -> do
@@ -508,8 +506,7 @@ handlers =
                   updates
           let path = fromJust $ uriToFilePath uri
 
-          if isExtensionOf "bzi" path
-            then do
+          when (isExtensionOf "bzi" path) $ do
               modifyIORef lastContent (Map.insert (toText path) content)
 
               ast <- parseContentAndTypecheck path content
@@ -536,8 +533,7 @@ handlers =
                           }
                       ]
                 Right _ -> do
-                  sendNotification SMethod_TextDocumentPublishDiagnostics $ PublishDiagnosticsParams uri Nothing []
-            else pure (),
+                  sendNotification SMethod_TextDocumentPublishDiagnostics $ PublishDiagnosticsParams uri Nothing [],
       requestHandler SMethod_TextDocumentHover $ \req responder -> do
         let TRequestMessage
               _
@@ -554,20 +550,9 @@ handlers =
           Just tlir' -> do
             let vars =
                   mapMaybe
-                    (\e -> getVar e ((Position (line + 1) (col + 1)), uri))
+                    (\e -> getVar e (Position (line + 1) (col + 1), uri))
                     tlir'
-            sendNotification SMethod_WindowLogMessage $
-              LogMessageParams
-                MessageType_Log
-                ( "Hovering at "
-                    <> show (fromIntegral line + 1)
-                    <> ":"
-                    <> show (fromIntegral col + 1)
-                    <> " "
-                    <> show (normalise . fromJust $ uriToFilePath uri)
-                    <> " "
-                    <> show tlir'
-                )
+
             case vars of
               [] -> responder (Right $ InR Null)
               (x : _) -> case x of
@@ -584,8 +569,8 @@ handlers =
 
                   let range =
                         Range
-                          (Position (line) $ fromIntegral col)
-                          (Position (line) $ fromIntegral col)
+                          (Position line $ fromIntegral col)
+                          (Position line $ fromIntegral col)
                   let rsp = Hover (InL md) (Just range)
                   responder (Right $ InL rsp),
       requestHandler SMethod_TextDocumentCompletion $ \req responder -> do
@@ -727,8 +712,7 @@ handlers =
 
         let path = fromJust $ uriToFilePath uri
 
-        if isExtensionOf "bzi" path
-          then do
+        when (isExtensionOf "bzi" path) $ do
             ast <- parseAndTypecheck path
 
             case ast of
@@ -754,7 +738,6 @@ handlers =
                     ]
               Right _ -> do
                 sendNotification SMethod_TextDocumentPublishDiagnostics $ PublishDiagnosticsParams uri Nothing []
-          else pure ()
     ]
 
 syncOptions :: TextDocumentSyncOptions
