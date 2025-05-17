@@ -1,0 +1,16 @@
+id = "bonzai"
+name = "Bonzai Language Support"
+version = "0.0.1"
+schema_version = 1
+authors = ["Thomas Vergne <contact@thomas-vergne.fr>"]
+description = "Syntax highlighting and LSP support for Bonzai language"
+repository = "https://github.com/bonzai-lang/bonzai"
+
+[grammars.bonzai]
+repository = "https://github.com/bonzai-lang/bonzai"
+rev = "87999ccb5d2fa4cfb094ce946ffd933078ccb589"
+path = "packages/tree-sitter"
+
+[language_servers.bonzai]
+name = "Bonzai Language Server"
+languages = ["Bonzai"]
