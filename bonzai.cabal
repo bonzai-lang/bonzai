@@ -91,7 +91,6 @@ library
     Language.Bonzai.Syntax.Internal.Type
     Language.Bonzai.Syntax.LLIR
     Language.Bonzai.Syntax.MLIR
-    MyLib
 
   -- Untyped conversion
   -- Modules included in this library but not exported.
