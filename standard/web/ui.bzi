@@ -1,15 +1,11 @@
-require "std:language/parser": 
-  choice, right, char, Parser::bind, 
-  Parser::pure, many, satisfy, is_whitespace, 
-  left, Parser::map, or, implode, many1, 
-  is_digit, toInt, Parser::andThen, toFloat, 
-  string, sepBy, lazy, runParser, is_alphanumeric, try_,
-  explode
+require "std:language/parser"
 require "std:datatypes/tuple"
 require "std:datatypes/error"
 require "std:datatypes/list"
 require "std:math"
 require "std:datatypes/map"
+require "std:datatypes/unit"
+require "std:datatypes/string"
 
 type HTML {
   Tag(tag: string, attributes: Map<string>, children: list<HTML>),
@@ -17,60 +13,65 @@ type HTML {
   Text(text: string)
 }
 
-let charLiteral = choice([
-    char('\\') :right: char('\\'),
-    char('\\') :right: char('"'),
-    char('\\') :right: char('/'),
-    char('\\') :right: char('b')  :Parser::bind: fn(_) => Parser::pure('\b'),
-    char('\\') :right: char('f')  :Parser::bind: fn(_) => Parser::pure('\f'),
-    char('\\') :right: char('n')  :Parser::bind: fn(_) => Parser::pure('\n'),
-    char('\\') :right: char('r')  :Parser::bind: fn(_) => Parser::pure('\r'),
-    char('\\') :right: char('t')  :Parser::bind: fn(_) => Parser::pure('\t')
+let charLiteral = Parser::choice([
+    Parser::char('\\') :Parser::right: Parser::char('\\'),
+    Parser::char('\\') :Parser::right: Parser::char('"'),
+    Parser::char('\\') :Parser::right: Parser::char('/'),
+    Parser::char('\\') :Parser::right: Parser::char('b')
+      :Parser::bind: fn(_) => fn(input) => ParseResult('\b', input),
+    Parser::char('\\') :Parser::right: Parser::char('f')  
+      :Parser::bind: fn(_) => fn(input) => ParseResult('\f', input),
+    Parser::char('\\') :Parser::right: Parser::char('n')  
+      :Parser::bind: fn(_) => fn(input) => ParseResult('\n', input),
+    Parser::char('\\') :Parser::right: Parser::char('r')  
+      :Parser::bind: fn(_) => fn(input) => ParseResult('\r', input),
+    Parser::char('\\') :Parser::right: Parser::char('t')  
+      :Parser::bind: fn(_) => fn(input) => ParseResult('\t', input)
   ])
 
-let stringLiteral = char('"') 
-            :right: (many(or(charLiteral, satisfy(fn (x) => x != '"')))
+let stringLiteral = Parser::char('"') 
+            :Parser::right: (Parser::many(Parser::or(charLiteral, Parser::satisfy(fn (x) => x != '"')))
               :Parser::map: fn(xs) => xs.implode())
-            :left: char('"')
+            :Parser::left: Parser::char('"')
 
-let ws = satisfy(is_whitespace).many()
+let ws = Parser::satisfy(is_whitespace).Parser::many()
 
-let attribute = (satisfy(fn (c) => is_alphanumeric(c) || c == '-').many1() :Parser::map: fn(xs) => xs.implode())
+let attribute = (Parser::satisfy(fn (c) => is_alphanumeric(c) || c == '-').Parser::many1() :Parser::map: fn(xs) => xs.implode())
             :Parser::bind: fn(name) => 
               ws 
-                :right: char('=') 
-                :right: ws 
-                :right: stringLiteral
+                :Parser::right: Parser::char('=') 
+                :Parser::right: ws 
+                :Parser::right: stringLiteral
                 :Parser::map: fn(value) => (name, value)
 
-fn HTMLParser(): Parser<HTML> => {
-  let tag = satisfy(is_alphanumeric).many1() :Parser::map: fn(xs) => xs.implode()
+fn HTMLParser(): fn(list<char>): Result<HTML> => {
+  let tag = Parser::satisfy(is_alphanumeric).Parser::many1() :Parser::map: fn(xs) => xs.implode()
 
-  let block = char('<') 
-              :right: tag 
+  let block = Parser::char('<') 
+              :Parser::right: tag 
               :Parser::bind: fn(tagName) => 
                 ws 
-                  :right: (attribute.many() :Parser::map: fn(xs) => Map::fromList(xs))
+                  :Parser::right: (attribute.Parser::many() :Parser::map: fn(xs) => Map::fromList(xs))
                   :Parser::bind: fn(attrs) => 
                     ws 
-                      :right: char('>')
-                      :right: ws
-                      :right: many(ws :right: HTMLParser.lazy() :left: ws)
+                      :Parser::right: Parser::char('>')
+                      :Parser::right: ws
+                      :Parser::right: Parser::many(ws :Parser::right: Parser::lazy(HTMLParser) :Parser::left: ws)
                       :Parser::map: (fn(children) => Tag(tagName, attrs, children))
-                      :left: ws
-                      :left: string("</" + tagName + ">")
-  
-  let selfClosingTag = char('<') 
-                      :right: tag 
+                      :Parser::left: ws
+                      :Parser::left: Parser::string("</" + tagName + ">")
+
+  let selfClosingTag = Parser::char('<') 
+                      :Parser::right: tag 
                       :Parser::bind: fn(tagName) => 
                         ws 
-                          :right: (attribute.many() :Parser::map: fn(xs) => Map::fromList(xs))
+                          :Parser::right: (attribute.Parser::many() :Parser::map: fn(xs) => Map::fromList(xs))
                           :Parser::map: (fn(attrs) => SelfClosingTag(tagName, attrs))
-                          :left: string("/>")
+                          :Parser::left: Parser::string("/>")
 
-  let text = many1(satisfy(fn (c) => c != '<')) :Parser::map: fn(xs) => Text(xs.implode())
+  let text = Parser::many1(Parser::satisfy(fn (c) => c != '<')) :Parser::map: fn(xs) => Text(xs.implode())
 
-  choice([selfClosingTag.try_(), block, text])
+  Parser::choice([selfClosingTag.Parser::try(), block, text])
 }
 
 fn renderHTML(html: HTML): string => 
@@ -93,7 +94,7 @@ fn renderHTML(html: HTML): string =>
   }
 
 fn parseHTML(input: string): Throwable<HTML> =>
-  match runParser(HTMLParser(), input.explode) {
+  match HTMLParser()(input.explode()) {
     case ParseResult(html, _) => Ok(html)
     case ParseError(err, _) => Error("Parse error: " + err)
   }

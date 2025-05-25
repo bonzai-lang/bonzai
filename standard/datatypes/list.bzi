@@ -2,15 +2,13 @@ require "std:math"
 require "std:datatypes/optional"
 require "std:datatypes/unit"
 require "std:datatypes/tuple"
+require "std:io"
 
 pub extern fn sliceFrom<A>(xs: list<A>, start: int): list<A>
-pub extern fn length<A>(xs: list<A>): int
+pub extern fn length<A>(xs: A): int
+pub extern fn slice<A>(xs: list<A>, start: int, end: int): list<A>
 
-pub fn List::length<A>(xs: list<A>): int =>
-  match xs {
-    case [] => 0
-    case [x .. xs] => 1 + List::length(xs)
-  }
+pub let List::length = length
 
 pub fn List::any<A>(xs: list<A>, f: fn(A): bool): bool =>
   match xs {
@@ -22,12 +20,7 @@ pub fn List::slice<A>(xs: list<A>, start _?: int, end _?: int): list<A> => {
   let start = Optional::unwrap_or(kwargs->start, 0)
   let end = Optional::unwrap_or(kwargs->end, List::length(xs))
 
-  match xs {
-    case [] => []
-    case [x .. xs] => if start == 0 then
-      if end == 0 then [] else [x] + List::slice(xs, end: end - 1)
-    else List::slice(xs, start: start - 1, end: end - 1)
-  }
+  slice(xs, start, end)
 }
 
 pub fn foreach<A>(xs: list<A>, f: fn(A): unit): unit =>

@@ -7,11 +7,12 @@ require "std:io"
 
 pub extern fn toString<A>(x: A): string
 
-extern fn explode(s: string): list<char>
-extern fn implode(xs: list<char>): string
+pub extern fn explode(s: string): list<char>
+pub extern fn implode(xs: list<char>): string
+extern fn slice_string(s: string, start: int, end: int): string
 extern fn split(str: string, sep: string): list<string>
-extern fn getIndex(s: string, i: int): string
-extern fn getIndexChar(s: string, i: int): char
+pub extern fn getIndex(s: string, i: int): string
+pub extern fn getIndexChar(s: string, i: int): char
 
 pub fn String::explode(s: string): list<char> => explode(s)
 
@@ -20,17 +21,7 @@ pub fn String::implode(xs: list<char>): string => implode(xs)
 pub fn String::join(xs: list<string>, sep: string): string =>
   List::foldl(fn(x, acc) => if acc == "" then x else acc + sep + x, "", xs)
 
-pub fn String::length(s: string): int => {
-  mut i = 0
-  mut str = ""
-
-  while str.value != s {
-    str += (getIndex(s, i.value))
-    i += 1
-  }
-
-  i.value
-}
+pub let String::length = length
 
 pub fn String::map(s: string, f: fn(char): char): string => {
   let sLength = String::length(s)
@@ -50,23 +41,7 @@ pub fn String::slice(s: string, start _?: int, end _?: int): string => {
   let start = Optional::unwrap_or(kwargs->start, 0)
   let end = Optional::unwrap_or(kwargs->end, String::length(s))
 
-  let sLength = String::length(s)
-  if start < 0 || end < 0 || start > sLength || end > sLength then {
-    ""
-  } else {
-    mut i = 0
-    mut str = ""
-
-    while i.value < sLength {
-      let c = getIndex(s, i.value)
-      if i.value >= start && i.value < end then {
-        str += c
-      }
-      i += 1
-    }
-
-    str.value
-  }
+  slice_string(s, start, end)
 }
 
 

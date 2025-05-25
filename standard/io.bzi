@@ -6,8 +6,6 @@ pub extern fn print<A>(x: A): unit
 extern fn panic_<A>(msg: string): A
 pub extern fn wait_time(time: int): unit
 
-pub extern fn make_unit(): unit
-
 pub fn exit<A>(): A => exit_with(0)
 pub fn panic<A>(msg: string): A => panic_(msg)
 
@@ -20,5 +18,5 @@ pub fn every<A>(time: int, f: fn(): A): unit => {
     wait_time(time)
   }
 
-  make_unit()
+  unit
 }

@@ -1,5 +1,7 @@
 require "std:datatypes/unit"
 require "std:datatypes/optional"
+require "std:io"
+require "std:math"
 
 pub type Throwable<A> {
   Ok(x: A),
@@ -37,4 +39,24 @@ pub fn Throwable::catchError<A>(self: Throwable<A>, f: fn(string): A): A =>
   match self {
     case Ok(x) => x
     case Error(err) => f(err)
+  }
+
+pub fn isError<A>(self: Throwable<A>): bool =>
+  match self {
+    case Ok(_) => false
+    case Error(_) => true
+  }
+
+pub fn isOk<A>(self: Throwable<A>): bool =>
+  match self {
+    case Ok(_) => true
+    case Error(_) => false
+  }
+
+extern fn toString<A>(x: A): string
+
+pub fn Throwable::unwrap<A>(self: Throwable<A>): A =>
+  match self {
+    case Ok(x) => x
+    case Error(err) => panic("Error: $err")
   }

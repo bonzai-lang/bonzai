@@ -1,10 +1,5 @@
-require "std:language/parser": 
-  choice, right, char, Parser::bind, 
-  Parser::pure, many, satisfy, is_whitespace, 
-  left, Parser::map, or, implode, many1, 
-  is_digit, toInt, Parser::andThen, toFloat, 
-  string, sepBy, lazy, runParser, explode
 require "std:datatypes/optional"
+require "std:language/parser"
 require "std:datatypes/tuple": Tuple::first, Tuple, Tuple::second, Map::toList
 require "std:datatypes/list"
 require "std:datatypes/map"
@@ -13,6 +8,7 @@ require "std:math"
 require "std:datatypes/error"
 require "std:datatypes/unit"
 require "std:io"
+require "std:datatypes/mutable"
 
 pub type JSON {
   Object(fields: list<(string, JSON)>),
@@ -34,80 +30,85 @@ pub let json = {
   null: Null
 }
 
-fn jsonParser(): Parser<JSON> => {
-  let charLiteral = choice([
-    char('\\') :right: char('\\'),
-    char('\\') :right: char('"'),
-    char('\\') :right: char('/'),
-    char('\\') :right: char('b')  :Parser::bind: fn(_) => Parser::pure('\b'),
-    char('\\') :right: char('f')  :Parser::bind: fn(_) => Parser::pure('\f'),
-    char('\\') :right: char('n')  :Parser::bind: fn(_) => Parser::pure('\n'),
-    char('\\') :right: char('r')  :Parser::bind: fn(_) => Parser::pure('\r'),
-    char('\\') :right: char('t')  :Parser::bind: fn(_) => Parser::pure('\t')
+fn jsonParser(): fn(list<char>): Result<JSON> => {
+  let charLiteral = Parser::choice([
+    Parser::char('\\') :Parser::right: Parser::char('\\'),
+    Parser::char('\\') :Parser::right: Parser::char('"'),
+    Parser::char('\\') :Parser::right: Parser::char('/'),
+    Parser::char('\\') :Parser::right: Parser::char('b')  
+      :Parser::bind: fn(_) => fn(input) => ParseResult('\b', input),
+    Parser::char('\\') :Parser::right: Parser::char('f')  
+      :Parser::bind: fn(_) => fn(input) => ParseResult('\f', input),
+    Parser::char('\\') :Parser::right: Parser::char('n')  
+      :Parser::bind: fn(_) => fn(input) => ParseResult('\n', input),
+    Parser::char('\\') :Parser::right: Parser::char('r')
+      :Parser::bind: fn(_) => fn(input) => ParseResult('\r', input),
+    Parser::char('\\') :Parser::right: Parser::char('t')
+      :Parser::bind: fn(_) => fn(input) => ParseResult('\t', input)
   ])
 
-  let ws = satisfy(is_whitespace).many()
+  let ws = Parser::many(Parser::satisfy(is_whitespace))
 
-  let str = char('"') 
-            :right: (many(or(charLiteral, satisfy(fn (x) => x != '"')))
+  let str = Parser::char('"') 
+            :Parser::right: (Parser::many(Parser::or(charLiteral, Parser::satisfy(fn (x) => x != '"')))
               :Parser::map: fn(xs) => String(xs.implode()))
-            :left: char('"')
+            :Parser::left: Parser::char('"')
 
-  let integer = satisfy(is_digit).many1() :Parser::map: fn(xs) => Integer(xs.implode().toInt())
+  let integer = Parser::satisfy(is_digit).Parser::many1() :Parser::map: fn(xs) => Integer(xs.implode().toInt())
 
   let float = integer 
-            :Parser::bind: fn(intPart) => char('.')
+            :Parser::bind: fn(intPart) => Parser::char('.')
             :Parser::andThen: integer
             :Parser::map: fn(fracPart) => 
               Float((intPart.toString() + "." + fracPart.toString()).toFloat())
 
-  let boolean = choice([
-    string("true") :Parser::map: fn(_) => Boolean(true),
-    string("false") :Parser::map: fn(_) => Boolean(false)
+  let boolean = Parser::choice([
+    Parser::string("true") :Parser::map: fn(_) => Boolean(true),
+    Parser::string("false") :Parser::map: fn(_) => Boolean(false)
   ])
 
-  let null = string("null") :Parser::map: fn(_) => Null
+  let null = Parser::string("null") :Parser::map: fn(_) => Null
 
-  let value = ws :right: choice([
+  let value = ws :Parser::right: Parser::choice([
     str,
     integer,
     float,
     boolean,
     null
-  ]) :left: ws
+  ]) :Parser::left: ws
 
-  let array = char('[') 
-              :right: jsonParser.lazy().sepBy(char(','))
-              :left: char(']')
+  let array = Parser::char('[') 
+              :Parser::right: Parser::lazy(jsonParser).Parser::sepBy(Parser::char(','))
+              :Parser::left: Parser::char(']')
               :Parser::map: fn(xs) => Array(xs)
 
-  let field = char('"') 
-              :right: (satisfy(fn (x) => x != '"').many()
+  let field = Parser::char('"') 
+              :Parser::right: (Parser::satisfy(fn (x) => x != '"').Parser::many()
                 :Parser::map: fn(xs) => xs.implode())
-              :left: char('"')
+              :Parser::left: Parser::char('"')
               :Parser::bind: fn (key) =>
-              ws :right: char(':') :left: ws
-              :Parser::andThen: jsonParser.lazy()
+              ws :Parser::right: Parser::char(':') :Parser::left: ws
+              :Parser::andThen: Parser::lazy(jsonParser)
               :Parser::map: fn(value) => (key, value)
 
-  let object = char('{') 
-              :right: ws
-              :right: field.sepBy(ws :left: char(',') :right: ws)
-              :left: ws
-              :left: char('}')
+  let object = Parser::char('{') 
+              :Parser::right: ws
+              :Parser::right: field.Parser::sepBy(ws :Parser::left: Parser::char(',') :Parser::right: ws)
+              :Parser::left: ws
+              :Parser::left: Parser::char('}')
               :Parser::map: fn(xs) => Object(xs)
 
-  choice([object, array, value])
+  Parser::choice([object, array, value])
 }
 
 fn parseJsonWithError(input: string): Throwable<JSON> => 
-  match jsonParser().runParser(input.explode()) {
+  match jsonParser()(input.explode()) {
     case ParseResult(x, _) => Ok(x)
     case ParseError(msg, _) => Error(msg)
   }
 
 fn parseJSON(input: string): Optional<JSON> => 
-  match jsonParser().runParser(input.explode()) {
+  match jsonParser()(input.explode()) {
     case ParseResult(x, _) => Some(x)
     case ParseError(_, _) => None
   }
