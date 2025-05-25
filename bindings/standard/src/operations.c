@@ -23,7 +23,7 @@ void print_map_values(Value map) {
   for (uint32_t i = 0; i < map_ptr->length; i += 2) {
     Value key = map_ptr->as_ptr[i];
     Value value = map_ptr->as_ptr[i + 1];
-    
+
     char* key_name = GET_STRING(key);
 
     printf("%s: ", key_name);
@@ -73,7 +73,7 @@ Value split(Module* mod, Value* args, int argc) {
   for (uint32_t i = 0; i < count; i++) {
     parts[i] = kNull;
   }
-  
+
   int i = 0, token_start = 0, j = 0;
 
   while (i <= len) {
@@ -128,11 +128,7 @@ Value getIndexChar(Module* mod, Value* args, int argc) {
     THROW_FMT(mod, "Index out of bounds, received %d", index);
   }
 
-  char* c = malloc(2 * sizeof(char));
-  c[0] = str[index];
-  c[1] = '\0';
-
-  return MAKE_STRING(mod, c);
+  return MAKE_CHAR(str[index]);
 }
 
 void print_with_level(Value value, int level) {
@@ -158,7 +154,7 @@ void print_with_level(Value value, int level) {
         printf("\"%s\"", GET_STRING(value));
       }
       break;
-    
+
     case TYPE_RECORD: {
       HeapValue* record = GET_PTR(value);
       if (IS_EMPTY_RECORD(value) || record->length == 0) {
@@ -327,6 +323,27 @@ Value slice(Module* mod, Value* args, int argc) {
   return MAKE_LIST(mod, new_list, end - start);
 }
 
+Value list_equals_string(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "list_equals_string", argc, 2);
+  ASSERT_TYPE(mod, "list_equals_string", args[0], TYPE_LIST);
+  ASSERT_TYPE(mod, "list_equals_string", args[1], TYPE_STRING);
+
+  HeapValue* list = GET_PTR(args[0]);
+  char* str = GET_STRING(args[1]);
+
+  if (list->length != strlen(str)) {
+    return MAKE_INTEGER(0);
+  }
+
+  for (uint32_t i = 0; i < list->length; i++) {
+    if (GET_STRING(list->as_ptr[i])[0] != str[i]) {
+      return MAKE_INTEGER(0);
+    }
+  }
+
+  return MAKE_INTEGER(1);
+}
+
 Value get_cwd(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "get_cwd", argc, 0);
 
@@ -378,8 +395,11 @@ Value length(Module* mod, Value* args, int argc) {
   switch (get_type(args[0])) {
     case TYPE_STRING:
       return MAKE_INTEGER(strlen(GET_STRING(args[0])));
-    case TYPE_LIST:
-      return MAKE_INTEGER(GET_PTR(args[0])->length);
+    case TYPE_LIST: {
+        if (IS_EMPTY_LIST(args[0])) return MAKE_INTEGER(0);
+
+        return MAKE_INTEGER(GET_PTR(args[0])->length);
+    }
     default:
       THROW_FMT(mod, "Unsupported type for length, received %s",
                 type_of(args[0]));
@@ -422,11 +442,7 @@ Value explode(Module* mod, Value* args, int argc) {
 
   Value* list = malloc(len * sizeof(Value));
   for (uint32_t i = 0; i < len; i++) {
-    char* c = malloc(2 * sizeof(char));
-    c[0] = str[i];
-    c[1] = '\0';
-
-    list[i] = MAKE_STRING(mod, c);
+    list[i] = MAKE_CHAR(str[i]);
   }
 
   return MAKE_LIST(mod, list, len);
@@ -441,11 +457,11 @@ Value implode(Module* mod, Value* args, int argc) {
   }
 
   HeapValue* list = GET_PTR(args[0]);
-  
+
   char* str = malloc(list->length + 1);
 
   for (uint32_t i = 0; i < list->length; i++) {
-    char c = GET_STRING(list->as_ptr[i])[0]; 
+    char c = GET_CHAR(list->as_ptr[i]);
     str[i] = c;
   }
 
@@ -483,6 +499,12 @@ Value toString(Module* mod, Value* args, int argc) {
     case TYPE_INTEGER: {
       char* str = malloc(12);
       sprintf(str, "%d", (int)GET_INT(args[0]));
+      return MAKE_STRING(mod, str);
+    }
+    case TYPE_CHAR: {
+      char* str = malloc(2);
+      str[0] = GET_CHAR(args[0]);
+      str[1] = '\0';
       return MAKE_STRING(mod, str);
     }
     case TYPE_FLOAT: {
@@ -572,36 +594,36 @@ Value toString(Module* mod, Value* args, int argc) {
 
 Value is_whitespace(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "is_whitespace", argc, 1);
-  ASSERT_TYPE(mod, "is_whitespace", args[0], TYPE_STRING);
+  ASSERT_TYPE(mod, "is_whitespace", args[0], TYPE_CHAR);
 
-  char chr = GET_STRING(args[0])[0];
+  char chr = GET_CHAR(args[0]);
 
   return MAKE_INTEGER(chr == ' ' || chr == '\t' || chr == '\n' || chr == '\r');
 }
 
 Value is_digit(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "is_digit", argc, 1);
-  ASSERT_TYPE(mod, "is_digit", args[0], TYPE_STRING);
+  ASSERT_TYPE(mod, "is_digit", args[0], TYPE_CHAR);
 
-  char chr = GET_STRING(args[0])[0];
+  char chr = GET_CHAR(args[0]);
 
   return MAKE_INTEGER(chr >= '0' && chr <= '9');
 }
 
 Value is_alpha(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "is_alpha", argc, 1);
-  ASSERT_TYPE(mod, "is_alpha", args[0], TYPE_STRING);
+  ASSERT_TYPE(mod, "is_alpha", args[0], TYPE_CHAR);
 
-  char chr = GET_STRING(args[0])[0];
+  char chr = GET_CHAR(args[0]);
 
   return MAKE_INTEGER((chr >= 'a' && chr <= 'z') || (chr >= 'A' && chr <= 'Z'));
 }
 
 Value is_alphanumeric(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "is_alphanumeric", argc, 1);
-  ASSERT_TYPE(mod, "is_alphanumeric", args[0], TYPE_STRING);
+  ASSERT_TYPE(mod, "is_alphanumeric", args[0], TYPE_CHAR);
 
-  char chr = GET_STRING(args[0])[0];
+  char chr = GET_CHAR(args[0]);
 
   return MAKE_INTEGER((chr >= '0' && chr <= '9') ||
                       (chr >= 'a' && chr <= 'z') || (chr >= 'A' && chr <= 'Z'));
@@ -790,7 +812,7 @@ Value wait_mutex(Module* mod, Value* args, int argc) {
   ASSERT_TYPE(mod, "wait_mutex", args[0], TYPE_API);
 
   HeapValue* mutex_v = GET_PTR(args[0]);
-  
+
   while (*((Value*) mutex_v->as_any) == kNull) {
     pthread_cond_wait(&mutex_v->cond, &mutex_v->mutex);
   }
@@ -825,7 +847,7 @@ Value show_mutex(Module* mod, Value* args, int argc) {
   ASSERT_TYPE(mod, "show_mutex", args[0], TYPE_API);
 
   HeapValue* mutex_v = GET_PTR(args[0]);
-  printf("<mutex "); 
+  printf("<mutex ");
   debug_value(*((Value*) mutex_v->as_any));
   printf(">\n");
 
@@ -840,4 +862,25 @@ Value write_mutex(Module* mod, Value* args, int argc) {
   *((Value*) mutex_v->as_any) = args[1];
 
   return kNull;
+}
+
+Value slice_string(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "slice_string", argc, 3);
+  ASSERT_TYPE(mod, "slice_string", args[0], TYPE_STRING);
+  ASSERT_TYPE(mod, "slice_string", args[1], TYPE_INTEGER);
+  ASSERT_TYPE(mod, "slice_string", args[2], TYPE_INTEGER);
+
+  char* str = GET_STRING(args[0]);
+  int start = GET_INT(args[1]);
+  int end = GET_INT(args[2]);
+
+  if (start < 0 || end < 0 || end > strlen(str)) {
+    THROW_FMT(mod, "Invalid string slice, start: %d, end: %d, length: %zu",
+              start, end, strlen(str));
+  }
+
+  char* sliced = strndup(str + start, end - start);
+  Value result = MAKE_STRING(mod, sliced);
+
+  return result;
 }
