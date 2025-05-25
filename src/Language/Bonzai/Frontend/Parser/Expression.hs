@@ -336,7 +336,7 @@ parseExprRecord = do
     snd <$> parseExpression
   ((_, end), _) <- Lex.symbol "}"
 
-  pure $
+  pure
     ( (start, end),
       List.foldl
         (\acc (idt, ty) -> HLIR.MkExprRecordExtension acc idt False ty)
@@ -424,7 +424,7 @@ parsePatternTerm =
         pure $ HLIR.MkPatLocated (HLIR.MkPatLiteral lit) pos,
       do
         (pos, _) <- Lex.symbol "_"
-        pure $ HLIR.MkPatLocated (HLIR.MkPatWildcard) pos,
+        pure $ HLIR.MkPatLocated HLIR.MkPatWildcard pos,
       do
         (pos, n) <- Lex.identifier
         pure $ HLIR.MkPatLocated (HLIR.MkPatVariable n Nothing) pos
@@ -557,7 +557,7 @@ parseBlock = do
   exprs <- map snd <$> P.sepEndBy parseStatement (P.optional (Lex.symbol ";"))
   ((_, end), _) <- Lex.symbol "}"
 
-  pure $ ((start, end), HLIR.MkExprBlock exprs)
+  pure ((start, end), HLIR.MkExprBlock exprs)
 
 argument ::
   (MonadIO m) =>

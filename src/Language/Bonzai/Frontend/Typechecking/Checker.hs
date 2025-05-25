@@ -307,14 +307,6 @@ synthesize (HLIR.MkExprSingleIf c t) = do
   pure (HLIR.MkExprSingleIf c' t', ty)
 
 check :: (M.MonadChecker m) => HLIR.HLIR "expression" -> HLIR.Type -> m (HLIR.TLIR "expression")
-check (HLIR.MkExprApplication f args) fTy@(argsTys HLIR.:->: _) = do
-  when (length argsTys /= length args) $
-    throw (M.InvalidArgumentQuantity (length argsTys) (length args))
-
-  f' <- check f fTy
-  args' <- zipWithM check args argsTys
-
-  pure (HLIR.MkExprApplication f' args')
 check (HLIR.MkExprLambda args ret body) (argsTys HLIR.:->: retTy) = do
   args' <-
     zipWithM
