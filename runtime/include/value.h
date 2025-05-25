@@ -13,8 +13,7 @@
 typedef uint64_t Value;
 
 #define INIT_POS 512
-#define INIT_OBJECTS 32
-#define MAX_OBJECTS 4096
+#define INIT_OBJECTS 2048
 #define GLOBALS_SIZE 1024
 #define MAX_STACK_SIZE GLOBALS_SIZE * 32
 #define VALUE_STACK_SIZE MAX_STACK_SIZE - GLOBALS_SIZE
@@ -33,11 +32,10 @@ typedef uint64_t Value;
 #define MASK_TYPE_NAN 0x0000000000000000
 #define MASK_TYPE_SPECIAL 0x0001000000000000
 #define MASK_TYPE_INTEGER 0x0002000000000000
-#define MASK_TYPE_STRING 0x0003000000000000
-#define MASK_TYPE_FUNCTION 0x0004000000000000
-#define MASK_TYPE_FUNCENV 0x0005000000000000
-#define MASK_TYPE_EMPTY_LIST 0x0006000000000000
-#define MASK_TYPE_EMPTY_RECORD 0x0007000000000000
+#define MASK_TYPE_FUNCTION 0x0003000000000000
+#define MASK_TYPE_EMPTY_LIST 0x0004000000000000
+#define MASK_TYPE_EMPTY_RECORD 0x0005000000000000
+#define MASK_TYPE_CHAR 0x0006000000000000
 
 // Constant short encoded values
 #define kNaN (MASK_EXPONENT | MASK_QUIET)
@@ -53,6 +51,7 @@ typedef uint64_t Value;
 #define SIGNATURE_POINTER (kNaN | MASK_SIGN)
 #define SIGNATURE_EMPTY_LIST (kNaN | MASK_TYPE_EMPTY_LIST)
 #define SIGNATURE_EMPTY_RECORD (kNaN | MASK_TYPE_EMPTY_RECORD)
+#define SIGNATURE_CHAR (kNaN | MASK_TYPE_CHAR)
 
 typedef int32_t reg;
 
@@ -76,6 +75,7 @@ typedef enum {
   TYPE_EVENT_ON,
   TYPE_NATIVE,
   TYPE_RECORD,
+  TYPE_CHAR
 } ValueType;
 
 #define GET_PTR(x) ((HeapValue*)((x) & MASK_PAYLOAD_PTR))
@@ -84,6 +84,7 @@ typedef enum {
 #define GET_MUTABLE(x) *(GET_PTR(x)->as_ptr)
 
 #define GET_INT(x) ((x) & MASK_PAYLOAD_INT)
+#define GET_CHAR(x) ((char)((x) & MASK_PAYLOAD_INT))
 #define GET_FLOAT(x) (*(double*)(&(x)))
 #define GET_ADDRESS(x) GET_INT(x)
 #define GET_NATIVE(x) GET_PTR(x)->as_native
@@ -98,26 +99,6 @@ struct Event {
   struct Module* mod;
   struct Actor* actor;
 };
-
-typedef struct Message {
-  int name;
-  Value* args;
-  int argc;
-  struct Event event;
-  struct Message* next;  // Pointer to the next message in the queue
-} Message;
-
-typedef struct MessageQueue {
-  Message* head;          // Head of the message queue
-  Message* tail;          // Tail of the message queue
-  pthread_mutex_t mutex;  // Mutex to protect access to the queue
-  pthread_cond_t cond;    // Condition variable to notify waiting threads
-} MessageQueue;
-
-void enqueue(MessageQueue* queue, Message* msg);
-Message* dequeue(MessageQueue* queue);
-MessageQueue* create_message_queue();
-void print_message_queue(MessageQueue* queue);
 
 typedef struct Stack {
   Value* values;
@@ -162,11 +143,19 @@ struct Record {
   Value* values;
 };
 
+enum GenerationTag {
+  GEN_YOUNG,
+  GEN_OLD
+};
+
 // Container type for values
 typedef struct HeapValue {
   ValueType type;
   uint32_t length;
-  bool is_marked, is_constant;
+  bool is_marked, is_constant, in_remembered_set;
+  int survival_count;
+  enum GenerationTag generation;
+  struct HeapValue* next_remembered;
   struct HeapValue* next;
   void (*destructor)(struct Module*, struct HeapValue*);
   void (*mark)(struct Module*, struct HeapValue*);
@@ -190,28 +179,37 @@ typedef struct {
   Stack** stacks;
   int stack_count;
   int stack_capacity;
-} stacks_t;
+} stacks_t;;
 
 typedef struct {
   HeapValue* first_object;
-  int num_objects, max_objects;
-  bool gc_enabled;
+  int num_objects;
+  int max_objects;
+} Generation;
 
+typedef struct {
+  Generation young;
+  Generation old;
+
+  bool gc_enabled;
   stacks_t stacks;
   pthread_t gc_thread;
-
   pthread_cond_t gc_cond;
   pthread_mutex_t gc_mutex;
+
+  HeapValue* remembered_set;
 } gc_t;
 
 #define IS_PTR(x) (((x) & MASK_SIGNATURE) == SIGNATURE_POINTER)
 #define IS_FUN(x) (((x) & MASK_SIGNATURE) == SIGNATURE_FUNCTION)
 #define IS_EMPTY_LIST(x) (((x) & MASK_SIGNATURE) == SIGNATURE_EMPTY_LIST)
 #define IS_EMPTY_RECORD(x) (((x) & MASK_SIGNATURE) == SIGNATURE_EMPTY_RECORD)
+#define IS_CHAR(x) (((x) & MASK_SIGNATURE) == SIGNATURE_CHAR)
 
 #define MAKE_INTEGER(x) (SIGNATURE_INTEGER | (uint32_t)(x))
 #define MAKE_FLOAT(x) (*(Value*)(&(x)))
 #define MAKE_PTR(x) (SIGNATURE_POINTER | (uint64_t)(x))
+#define MAKE_CHAR(x) (SIGNATURE_CHAR | (uint32_t)(x))
 #define EMPTY_LIST (SIGNATURE_EMPTY_LIST | 0)
 #define EMPTY_RECORD (SIGNATURE_EMPTY_RECORD | 0)
 
@@ -244,7 +242,9 @@ pthread_t start_gc(struct Module* vm);
 void rearrange_stacks(struct Module* mod);
 bool is_at_least_one_programs_running(struct Module* vm);
 
-static atomic_int gc_is_requested;
+static atomic_bool gc_is_requested;
+static atomic_int gc_type;
+static atomic_bool gc_is_running;
 
 #define MAKE_SPECIAL() kNull
 #define MAKE_ADDRESS(x) MAKE_INTEGER(x)
@@ -272,8 +272,7 @@ void debug_value(Value v);
     module->stack->values[module->stack->stack_pointer++] = value;       \
   } while (0)
 
-#define stack_pop(module) \
-  (module->stack->values[--module->stack->stack_pointer])
+Value stack_pop(struct Module* module);
 
 inline static ValueType get_type(Value value) {
   uint64_t signature = value & MASK_SIGNATURE;
@@ -295,12 +294,12 @@ inline static ValueType get_type(Value value) {
       return TYPE_INTEGER;
     case SIGNATURE_FUNCTION:
       return TYPE_FUNCTION;
-    case SIGNATURE_FUNCENV:
-      return TYPE_FUNCENV;
     case SIGNATURE_EMPTY_LIST:
       return TYPE_LIST;
     case SIGNATURE_EMPTY_RECORD:
       return TYPE_RECORD;
+    case SIGNATURE_CHAR: 
+      return TYPE_CHAR;
   }
 
   return TYPE_UNKNOWN;
@@ -338,20 +337,13 @@ inline static char* type_to_str(ValueType t) {
       return "native";
     case TYPE_RECORD:
       return "record";
+    case TYPE_CHAR: 
+      return "char";
   }
 }
 
-#define safe_point(mod) \
-    if (atomic_load(&gc_is_requested)) { \
-        atomic_store(&mod->stack->is_stopped, true); \
-    } \
-    while (atomic_load(&gc_is_requested)) { \
-        if (atomic_load(&mod->stack->is_halted)) { \
-            atomic_store(&mod->stack->is_stopped, false); \
-            break; \
-        } \
-    } \
-
+void safe_point(struct Module* mod);
 void stop_the_world(struct Module* mod, bool stop);
+void writeBarrier(struct Module* mod, HeapValue* parent, Value child);
 
 #endif  // VALUE_H

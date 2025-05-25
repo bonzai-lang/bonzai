@@ -40,9 +40,15 @@ Value deserialize_value(Module* mod, FILE* file) {
       hp->as_string = string_value;
       hp->length = length;
       hp->is_constant = true;
-      hp->is_marked = true;
 
       value = MAKE_PTR(hp);
+      break;
+    }
+
+    case 3: /* Type Char */ {
+      int32_t int_value;
+      fread(&int_value, sizeof(int32_t), 1, file);
+      value = MAKE_CHAR(int_value);
       break;
     }
 

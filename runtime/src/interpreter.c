@@ -105,6 +105,8 @@ case_store_global: {
   Value value = module->stack->values[module->stack->stack_pointer - 1];
   module->stack->values[i1] = value;
 
+  module->stack->values[module->stack->stack_pointer - 1] = kNull;
+
   module->stack->stack_pointer--;
 
   INCREASE_IP(module);
@@ -115,6 +117,12 @@ case_return: {
   safe_point(module);
   struct Frame fr = pop_frame(module);
   Value ret = module->stack->values[module->stack->stack_pointer - 1];
+
+  module->stack->values[module->stack->stack_pointer - 1] = kNull;
+
+  for (int i = module->stack->stack_pointer; i > fr.stack_pointer; i--) {
+    module->stack->values[i - 1] = kNull;
+  }
 
   module->stack->stack_pointer = fr.stack_pointer;
   module->base_pointer = fr.base_ptr;
@@ -133,6 +141,8 @@ case_compare: {
   Value a = module->stack->values[module->stack->stack_pointer - 2];
   Value b = module->stack->values[module->stack->stack_pointer - 1];
 
+  module->stack->values[module->stack->stack_pointer - 1] = kNull;
+
   Value result = comparison_table[i1](module, a, b);
   module->stack->values[module->stack->stack_pointer - 2] = result;
   module->stack->stack_pointer--;
@@ -145,10 +155,14 @@ case_update: {
   Value variable = module->stack->values[module->stack->stack_pointer - 1];
   Value value = module->stack->values[module->stack->stack_pointer - 2];
 
+  module->stack->values[module->stack->stack_pointer - 1] = kNull;
+  module->stack->values[module->stack->stack_pointer - 2] = kNull;
+
   ASSERT_TYPE(module, "update", variable, TYPE_MUTABLE);
 
   // pthread_mutex_lock(&ptr->mutex);
 
+  writeBarrier(module, GET_PTR(variable), value);
   GET_MUTABLE(variable) = value;
 
   // pthread_mutex_unlock(&ptr->mutex);
@@ -171,12 +185,13 @@ case_make_list: {
   // Loop in reverse order to pop values in the correct order
   for (int i = i1 - 1; i >= 0; i--) {
     list[i] = module->stack->values[module->stack->stack_pointer - i1 + i];
+    module->stack->values[module->stack->stack_pointer - i1 + i] = kNull;
   }
 
   int sp = module->stack->stack_pointer - i1;
 
   Value value = MAKE_LIST(module, list, i1);
-
+ 
   module->stack->values[sp] = value;
   module->stack->stack_pointer = sp + 1;
 
@@ -252,6 +267,9 @@ case_jump_if_false: {
     INCREASE_IP(module);
   }
 
+  // Clear the value from the stack
+  module->stack->values[module->stack->stack_pointer - 1] = kNull;
+
   module->stack->stack_pointer--;
 
   goto *jmp_table[op];
@@ -276,6 +294,10 @@ case_get_index: {
 
   ASSERT_FMT(module, idx >= 0 && idx < GET_PTR(list)->length,
              "Index out of bounds, received %d", idx);
+
+  // Clear the values from the stack
+  module->stack->values[module->stack->stack_pointer - 1] = kNull;
+  module->stack->values[module->stack->stack_pointer - 2] = kNull;
 
   module->stack->values[module->stack->stack_pointer - 2] = list_ptr[idx];
   module->stack->stack_pointer--;
@@ -347,6 +369,9 @@ case_add: {
   Value b = module->stack->values[module->stack->stack_pointer - 1];
   Value a = module->stack->values[module->stack->stack_pointer - 2];
 
+  module->stack->values[module->stack->stack_pointer - 1] = kNull;
+  module->stack->values[module->stack->stack_pointer - 2] = kNull;
+
   ValueType ty = get_type(a);
 
   ASSERT_TYPE(module, "add", b, ty);
@@ -407,6 +432,7 @@ case_add: {
 
       module->stack->values[module->stack->stack_pointer - 2] =
           MAKE_RECORD(module, keys, values, r1->length + r2->length);
+
       module->stack->stack_pointer--;
       break;
     }
@@ -427,11 +453,11 @@ case_add: {
 
       Value *list = malloc((l1->length + l2->length) * sizeof(Value));
       for (uint32_t i = 0; i < l1->length; i++) list[i] = l1->as_ptr[i];
-      for (uint32_t i = 0; i < l2->length; i++)
-        list[l1->length + i] = l2->as_ptr[i];
+      for (uint32_t i = 0; i < l2->length; i++) list[l1->length + i] = l2->as_ptr[i];
 
       module->stack->values[module->stack->stack_pointer - 2] =
           MAKE_LIST(module, list, l1->length + l2->length);
+
       module->stack->stack_pointer--;
       break;
     }
@@ -649,6 +675,9 @@ case_make_record: {
         module->stack->values[module->stack->stack_pointer - i1 * 2 + i];
     keys[idx] = GET_STRING(
         module->stack->values[module->stack->stack_pointer - i1 * 2 + i - 1]);
+    
+    module->stack->values[module->stack->stack_pointer - i1 * 2 + i] = kNull;
+    module->stack->values[module->stack->stack_pointer - i1 * 2 + i - 1] = kNull;
   }
 
   int sp = module->stack->stack_pointer - (i1 * 2);

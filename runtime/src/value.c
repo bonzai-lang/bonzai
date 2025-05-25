@@ -5,40 +5,49 @@
 #include <stdio.h>
 #include <string.h>
 #include <threading.h>
-#include <value.h>
 #include <unistd.h>
+#include <value.h>
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+
+static int young_gc_count = 0;
 
 void mark_value(Module* mod, Value value) {
   if (!IS_PTR(value)) return;
 
   HeapValue* ptr = GET_PTR(value);
 
-  if (ptr->is_marked) return;
-
-  // printf("Marking object (%p): ", ptr);
-  // debug_value(value);
-  // printf("\n");
+  if (!ptr || ptr->is_marked) return;
 
   ptr->is_marked = true;
-  if (ptr->type == TYPE_LIST) {
-    for (uint32_t i = 0; i < ptr->length; i++) {
-      mark_value(mod, ptr->as_ptr[i]);
-    }
-  } else if (ptr->type == TYPE_MUTABLE) {
-    mark_value(mod, *(ptr->as_ptr));
-  } else if (ptr->type == TYPE_RECORD) {
-    for (uint32_t i = 0; i < ptr->length; i++) {
-      mark_value(mod, ptr->as_record.values[i]);
-    }
-  } else if (ptr->type == TYPE_API && ptr->mark) {
-    ptr->mark(mod, ptr);
+
+  switch (ptr->type) {
+    case TYPE_LIST:
+      for (uint32_t i = 0; i < ptr->length; i++) {
+        mark_value(mod, ptr->as_ptr[i]);
+      }
+      break;
+    case TYPE_MUTABLE:
+      mark_value(mod, *(ptr->as_ptr));
+      break;
+    case TYPE_RECORD:
+      for (uint32_t i = 0; i < ptr->length; i++) {
+        mark_value(mod, ptr->as_record.values[i]);
+      }
+      break;
+    case TYPE_API:
+      if (ptr->mark) {
+        ptr->mark(mod, ptr);
+      }
+      break;
+    default:
+      break;
   }
 }
 
 void free_value(struct Module* mod, HeapValue* unreached) {
+  // printf("Freed %p: ", unreached); debug_value(MAKE_PTR(unreached)); printf("\n");
   if (unreached->type == TYPE_LIST || unreached->type == TYPE_MUTABLE) {
     free(unreached->as_ptr);
   } else if (unreached->type == TYPE_STRING) {
@@ -47,6 +56,9 @@ void free_value(struct Module* mod, HeapValue* unreached) {
     }
   } else if (unreached->type == TYPE_API && unreached->destructor) {
     unreached->destructor(mod, unreached);
+  } else if (unreached->type == TYPE_RECORD) {
+    free(unreached->as_record.keys);
+    free(unreached->as_record.values);
   }
   free(unreached);
 }
@@ -103,79 +115,107 @@ void mark_all(struct Module* vm) {
     // DEBUG_STACK_FROM(stack, 0);
     if (!stack || !stack->values) continue;
     pthread_mutex_lock(&stack->mutex);
-
-    for (int j = 0; j <= stack->stack_capacity; j++) {
-      if (j <= stack->stack_pointer) {
-        Value value = stack->values[j];
-        if (value == kNull) continue;
-        mark_value(vm, value);
-
-        continue;
-      }
-
-      stack->values[j] = kNull;
-    }
-
+    Value* values = stack->values;
     pthread_mutex_unlock(&stack->mutex);
-  }
-}
 
-static void sweep(struct Module* vm) {
-  HeapValue* previous = NULL;
-  HeapValue* object = vm->gc->first_object;
-  while (object != NULL) {
-    if (object->is_marked == true) {
-      object->is_marked = false;
-      previous = object;
-      object = object->next;
-    } else {
-      HeapValue* unreached = object;
-      object = object->next;
-      if (previous != NULL) {
-        previous->next = object;
-      } else {
-        vm->gc->first_object = object;
-      }
+    for (int j = 0; j < stack->stack_pointer; j++) {
+      Value value = values[j];
+      if (value == kNull) continue;
+      // printf("%p: ", GET_PTR(value)); debug_value(value); printf("\n");
+      mark_value(vm, value);
 
-      // printf("Unreachable object (%p): ", unreached);
-      // debug_value(MAKE_PTR(unreached));
-      // printf("\n");
-
-      free_value(vm, unreached);
-      vm->gc->num_objects--;
+      // stack->values[j] = kNull;
     }
   }
+
+  // Also mark any young objects reachable from the remembered set
+  for (HeapValue* obj = vm->gc->remembered_set; obj != NULL;
+       obj = obj->next_remembered) {
+    mark_value(vm, MAKE_PTR(obj));
+  }
 }
 
-void gc(struct Module* vm) {
-  // printf("Requested from %p\n", vm->stack->values);
-  gc_t* gc_ = vm->gc;
-  // int numObjects = gc_->num_objects;
+// Removed sweep. See gc_young below.
 
-  mark_all(vm);
-  sweep(vm);
+// Forward declaration for new gc_young
+void gc_young(struct Module* mod);
+void gc_old(struct Module* mod);
+
+void gc(struct Module* mod) {
+  // printf("Running GC\n");
+  // printf("  => SP: %d\n", mod->stack->stack_pointer);
+  gc_t* gc_ = mod->gc;
+
+  int youngNumObjects = gc_->young.num_objects;
+
+  mark_all(mod);
+  gc_young(mod);
+
+  // int oldNumObjects = gc_->old.num_objects;
+  young_gc_count++;
+
+  if (gc_->old.num_objects >= gc_->old.max_objects || young_gc_count >= 3) {
+    gc_old(mod);
+    young_gc_count = 0;
+  }
+
+  HeapValue* obj = gc_->old.first_object;
+  while (obj != NULL) {
+    if (obj->is_marked) {
+      obj->is_marked = false;
+    }
+    obj = obj->next;
+  }
+
+  obj = gc_->young.first_object;
+  while (obj != NULL) {
+    if (obj->is_marked) {
+      obj->is_marked = false;
+    }
+    obj = obj->next;
+  }
 
   pthread_mutex_lock(&gc_->gc_mutex);
-  gc_->max_objects =
-      gc_->num_objects < INIT_OBJECTS ? INIT_OBJECTS : gc_->num_objects * 2;
+  gc_->young.max_objects = gc_->young.num_objects < INIT_OBJECTS
+                               ? INIT_OBJECTS
+                               : gc_->young.num_objects * 2;
+  gc_->old.max_objects = gc_->old.num_objects < INIT_OBJECTS
+                              ? INIT_OBJECTS
+                              : gc_->old.num_objects * 2;
   pthread_mutex_unlock(&gc_->gc_mutex);
+  // printf("Collected %d young objects, %d remaining.\n", youngNumObjects -
+  // gc_->young.num_objects,
+  //        gc_->young.num_objects);
 
-  // printf("Collected %d objects, %d max objects (sp: %d)\n",
-  //        numObjects - gc_->num_objects, gc_->max_objects,
-  //        vm->stack->stack_pointer);
+  // printf("Collected %d old objects, %d remaining.\n", oldNumObjects -
+  // gc_->old.num_objects,
+  //        gc_->old.num_objects);
+  
+  // printf("  => SP: %d\n", mod->stack->stack_pointer);
+  // printf("  => YGCC: %d\n", young_gc_count);
+
   atomic_store(&gc_is_requested, false);
 }
 
-void force_sweep(struct Module* vm) {
-  gc_t* gc = vm->gc;
-  HeapValue* object = gc->first_object;
+void force_sweep(struct Module* mod) {
+  gc_t* gc = mod->gc;
+  HeapValue* object = gc->young.first_object;
   while (object) {
     HeapValue* next = object->next;
-    free_value(vm, object);
+    free_value(mod, object);
     object = next;
   }
-  gc->first_object = NULL;
-  gc->num_objects = 0;
+  gc->young.first_object = NULL;
+  gc->young.num_objects = 0;
+
+  object = gc->old.first_object;
+  while (object) {
+    HeapValue* next = object->next;
+    free_value(mod, object);
+    object = next;
+  }
+  gc->old.first_object = NULL;
+  gc->old.num_objects = 0;
 }
 
 void request_gc(struct Module* vm) {
@@ -187,10 +227,8 @@ void request_gc(struct Module* vm) {
 void* gc_thread(void* data) {
   struct Module* vm = (struct Module*)data;
   while (is_at_least_one_programs_running(vm)) {
-    if (atomic_load(&gc_is_requested)
-        && are_all_threads_stopped(vm)
-        && vm->gc->gc_enabled
-      ) {
+    if (atomic_load(&gc_is_requested) && are_all_threads_stopped(vm) &&
+        vm->gc->gc_enabled) {
       gc(vm);
     }
   }
@@ -209,14 +247,20 @@ pthread_t start_gc(struct Module* vm) {
 
 HeapValue* allocate(struct Module* mod, ValueType type) {
   gc_t* gc_ = mod->gc;
-  int numObjects = gc_->num_objects;
-  int maxObjects = gc_->max_objects;
 
-  if (numObjects > maxObjects) {
-    if (gc_->gc_enabled) {
+  if (gc_->young.num_objects >= gc_->young.max_objects) {
+    if (gc_->gc_enabled && !atomic_load(&gc_is_requested)) {
       atomic_store(&gc_is_requested, true);
     } else {
-      gc_->max_objects += 2;
+      gc_->young.max_objects += 2;
+    }
+  }
+  
+  if (gc_->old.num_objects >= gc_->old.max_objects) {
+    if (gc_->gc_enabled && !atomic_load(&gc_is_requested)) {
+      atomic_store(&gc_is_requested, true);
+    } else {
+      gc_->old.max_objects += 2;
     }
   }
 
@@ -224,14 +268,18 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
 
   v->type = type;
   v->is_marked = false;
-  v->next = gc_->first_object;
   v->is_constant = false;
-  pthread_mutex_init(&v->mutex, NULL);
-  pthread_cond_init(&v->cond, NULL);
+  v->survival_count = 0;
+  v->generation = GEN_YOUNG;
+  v->next_remembered = NULL;
+  v->next = gc_->young.first_object;
+  // pthread_mutex_init(&v->mutex, NULL);
+  // pthread_cond_init(&v->cond, NULL);
 
-  pthread_mutex_lock(&gc_->gc_mutex);
-  gc_->first_object = v;
-  gc_->num_objects++;
+  // Insert in young generation
+
+  gc_->young.first_object = v;
+  gc_->young.num_objects++;
   pthread_mutex_unlock(&gc_->gc_mutex);
 
   return v;
@@ -277,8 +325,7 @@ Value MAKE_STRING(struct Module* mod, char* x) {
   return MAKE_PTR(v);
 }
 
-Value MAKE_RECORD(struct Module* mod, char** keys, Value* values,
-                  int size) {
+Value MAKE_RECORD(struct Module* mod, char** keys, Value* values, int size) {
   HeapValue* v = allocate(mod, TYPE_RECORD);
   v->as_record.keys = keys;
   v->as_record.values = values;
@@ -405,6 +452,8 @@ char* type_of(Value value) {
       return "record";
     case TYPE_NATIVE:
       return "native";
+    case TYPE_CHAR:
+      return "char";
   }
 }
 
@@ -413,7 +462,7 @@ Stack* stack_new() {
 
   stack->stack_pointer = GLOBALS_SIZE;
   stack->stack_capacity = MAX_STACK_SIZE;
-  stack->values = calloc(stack->stack_capacity, sizeof(Value));
+  stack->values = calloc(stack->stack_capacity + 1, sizeof(Value));
 
   atomic_store(&stack->is_stopped, false);
   atomic_store(&stack->is_halted, false);
@@ -432,6 +481,8 @@ int value_eq(Module* mod, Value a, Value b) {
   switch (ty) {
     case TYPE_INTEGER:
       return GET_INT(a) == GET_INT(b);
+    case TYPE_CHAR: 
+      return GET_CHAR(a) == GET_CHAR(b);
     case TYPE_FLOAT:
       return GET_FLOAT(a) == GET_FLOAT(b);
     case TYPE_STRING:
@@ -515,6 +566,11 @@ void debug_value(Value v) {
 
     case TYPE_NATIVE: {
       printf("Native(%s)", GET_NATIVE(v).name);
+      break;
+    }
+
+    case TYPE_CHAR: {
+      printf("'%c'", GET_CHAR(v));
       break;
     }
 
@@ -605,7 +661,7 @@ Value clone_value(Module* mod, Value value) {
 }
 
 void rearrange_stacks(Module* mod) {
-  #define st mod->gc->stacks
+#define st mod->gc->stacks
   int new_size = 0;
 
   for (int i = 0; i < st.stack_count; i++) {
@@ -629,4 +685,113 @@ void rearrange_stacks(Module* mod) {
   free(st.stacks);
   st.stacks = new_stacks;
   st.stack_count = new_size;
+}
+
+// Young generation collection and promotion
+void gc_young(Module* mod) {
+  HeapValue* prev = NULL;
+  HeapValue* obj = mod->gc->young.first_object;
+
+  while (obj != NULL) {
+    if (obj->is_marked) {
+      obj->is_marked = false;
+      if (obj->generation == GEN_YOUNG) {
+        obj->survival_count++;
+      }
+      if (obj->survival_count >= 5) {
+        HeapValue* promoted = obj;
+        if (prev)
+          prev->next = obj->next;
+        else
+          mod->gc->young.first_object = obj->next;
+        obj = obj->next;
+
+        promoted->next = mod->gc->old.first_object;
+        promoted->generation = GEN_OLD;
+        promoted->survival_count = 0;
+        promoted->is_marked = true;
+        mod->gc->old.first_object = promoted;
+        mod->gc->young.num_objects--;
+        mod->gc->old.num_objects++;
+        continue;
+      }
+      prev = obj;
+      obj = obj->next;
+    } else {
+      HeapValue* unreached = obj;
+      obj = obj->next;
+      if (prev)
+        prev->next = obj;
+      else
+        mod->gc->young.first_object = obj;
+      free_value(mod, unreached);
+      mod->gc->young.num_objects--;
+    }
+  }
+}
+
+void gc_old(Module* mod) {
+  HeapValue* prev = NULL;
+  HeapValue* obj = mod->gc->old.first_object;
+  while (obj != NULL) {
+    if (obj->is_marked) {
+      obj->is_marked = false;
+      prev = obj;
+      obj = obj->next;
+    } else {
+      HeapValue* unreached = obj;
+      obj = obj->next;
+      if (prev)
+        prev->next = obj;
+      else
+        mod->gc->old.first_object = obj;
+      free_value(mod, unreached);
+      mod->gc->old.num_objects--;
+    }
+  }
+}
+
+__attribute__((__always_inline__)) inline void safe_point(Module* mod) {
+  if (atomic_load(&gc_is_requested)) {
+    atomic_store(&mod->stack->is_stopped, true);
+  }
+
+  while (atomic_load(&gc_is_requested)) {
+    if (atomic_load(&mod->stack->is_halted)) {
+      atomic_store(&mod->stack->is_stopped, false);
+      break;
+    }
+  }
+
+  atomic_store(&mod->stack->is_stopped, false);
+}
+
+void writeBarrier(Module* mod, HeapValue* parent, Value child) {
+  if (!parent || !IS_PTR(child)) return;
+
+  HeapValue* child_ptr = GET_PTR(child);
+
+  // Old generation writes to young generation
+  if (parent->generation == GEN_OLD && child_ptr->generation == GEN_YOUNG && !child_ptr->is_constant && !parent->is_constant) {
+    // child_ptr->is_marked = true;
+
+    // If not already in remembered set, add it
+    if (!parent->in_remembered_set) {
+      parent->in_remembered_set = true;
+      parent->next_remembered = mod->gc->remembered_set;
+      mod->gc->remembered_set = parent;
+    }
+  }
+}
+
+__attribute__((__always_inline__)) inline Value stack_pop(Module* mod) {
+  Stack* stack = mod->stack;
+  Value* values = stack->values;
+
+  Value value = values[--stack->stack_pointer];
+  values[stack->stack_pointer] = kNull; // Clear the popped value
+
+  // pthread_mutex_unlock(&stack->mutex);
+
+  return value;
 }

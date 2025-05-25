@@ -74,8 +74,6 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  atomic_store(&gc_is_requested, false);
-
   // Loading libraries
   LibraryOption* libraries = get_libraries(argc, argv);
   int num_libs = count_libraries(libraries);
@@ -121,8 +119,6 @@ int main(int argc, char* argv[]) {
   for (int i = 0; i < module.constants->size; i++) {
     free_constant(module.constants->values[i]);
   }
-
-  force_sweep(&module);
   free(module.stack->values);
   free(module.stack);
   free(module.instrs);

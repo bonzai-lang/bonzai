@@ -52,9 +52,14 @@ __attribute__((always_inline)) inline struct Frame pop_event_frame(
 // Initialize the GC system and its worker thread
 void init_gc(gc_t* gc, Module* mod) {
   // Initialize GC state
-  gc->first_object = NULL;
-  gc->max_objects = INIT_OBJECTS;  // Example default size
-  gc->num_objects = 0;
+  gc->old.first_object = NULL;
+  gc->old.max_objects = INIT_OBJECTS;  // Example default size
+  gc->old.num_objects = 0;
+
+  gc->young.first_object = NULL;
+  gc->young.max_objects = INIT_OBJECTS;  // Example default size
+  gc->young.num_objects = 0;
+
   gc->gc_enabled = true;
 
   pthread_cond_init(&gc->gc_cond, NULL);
@@ -63,6 +68,10 @@ void init_gc(gc_t* gc, Module* mod) {
   gc->stacks.stack_count = 0;
   gc->stacks.stack_capacity = STACKS_SIZE;
   gc->stacks.stacks = calloc(STACKS_SIZE, sizeof(Stack*));
+
+  gc->remembered_set = NULL;
+
+  atomic_store(&gc_is_requested, false);
 
   mod->gc = gc;
 }

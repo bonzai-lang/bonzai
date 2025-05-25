@@ -59,6 +59,9 @@ Value compare_eq(Module *mod, Value a, Value b) {
 
       return MAKE_INTEGER(1);
     }
+    case TYPE_CHAR:
+      return MAKE_INTEGER(GET_CHAR(a) == GET_CHAR(b));
+
     case TYPE_SPECIAL: return MAKE_INTEGER(1);
     default:
       THROW_FMT(mod, "Cannot compare values of type %s", type_of(a));
