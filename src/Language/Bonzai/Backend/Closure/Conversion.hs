@@ -177,6 +177,8 @@ convert (MLIR.MkExprRecord m) = do
   m' <- mapM convert m
 
   pure $ MLIR.MkExprRecord m'
+convert MLIR.MkExprBreak = pure MLIR.MkExprBreak
+convert MLIR.MkExprContinue = pure MLIR.MkExprContinue
 
 convertLambda :: MonadIO m => Set Text -> MLIR.Expression -> m MLIR.Expression
 convertLambda reserved (MLIR.MkExprLambda args body) = do

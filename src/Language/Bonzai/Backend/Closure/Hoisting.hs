@@ -125,6 +125,8 @@ hoist (MLIR.MkExprRecord m) = do
   (hoisted, m') <- mapM swap <$> mapM hoist m
 
   pure (MLIR.MkExprRecord m', hoisted)
+hoist MLIR.MkExprBreak = pure (MLIR.MkExprBreak, [])
+hoist MLIR.MkExprContinue = pure (MLIR.MkExprContinue, [])
 
 hoistToplevel :: MonadIO m => MLIR.MLIR "expression" -> m [MLIR.MLIR "expression"]
 hoistToplevel (MLIR.MkExprLoc p e) = do
