@@ -305,6 +305,23 @@ synthesize (HLIR.MkExprSingleIf c t) = do
   (t', ty) <- synthesize t
 
   pure (HLIR.MkExprSingleIf c' t', ty)
+synthesize HLIR.MkExprBreak = do
+  pure (HLIR.MkExprBreak, HLIR.MkTyUnit)
+synthesize HLIR.MkExprContinue = do
+  pure (HLIR.MkExprContinue, HLIR.MkTyUnit)
+synthesize (HLIR.MkExprReturn e) = do
+  (e', ty) <- synthesize e
+
+  returnType <- readIORef M.checkerState <&> M.returnType
+  case returnType of
+    Just retTy -> do
+      retTy `U.unifiesWith` ty
+    Nothing -> do
+      modifyIORef' M.checkerState $ \st -> st {M.returnType = Just ty}
+
+  retTy <- M.fresh
+
+  pure (HLIR.MkExprReturn e', retTy)
 
 check :: (M.MonadChecker m) => HLIR.HLIR "expression" -> HLIR.Type -> m (HLIR.TLIR "expression")
 check (HLIR.MkExprLambda args ret body) (argsTys HLIR.:->: retTy) = do
@@ -602,7 +619,7 @@ runTypechecking es = do
   writeIORef M.typeCounter 0
   writeIORef M.currentLevel 0
 
-  res <- M.with M.checkerState (const st) $ runExceptT $ traverse synthesize es
+  res <- runExceptT $ traverse synthesize es
 
   pure $ case res of
     Left err -> Left err

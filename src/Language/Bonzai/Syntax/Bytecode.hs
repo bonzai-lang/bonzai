@@ -35,6 +35,7 @@ data Instruction
   | GetValue
   | GetRecordAccess Int
   | MakeRecord Int
+  | Jump Int
   deriving (Eq)
 
 instance ToText Int where
@@ -78,6 +79,7 @@ instance ToText Instruction where
   toText GetValue = "GetValue"
   toText (GetRecordAccess a) = "GetRecordAccess " <> toText a
   toText (MakeRecord a) = "MakeRecord " <> toText a
+  toText (Jump a) = "Jump " <> toText a
 
 instance ToText [Instruction] where
   toText xs = T.intercalate "\n" . map format $ couple

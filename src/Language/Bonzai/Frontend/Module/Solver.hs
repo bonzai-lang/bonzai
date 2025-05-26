@@ -175,7 +175,22 @@ solveExpression (HLIR.MkExprRecordExtension t l opt r) = do
   r' <- solveExpression r
 
   pure $ HLIR.MkExprRecordExtension t' l opt r'
-solveExpression e = pure e
+solveExpression HLIR.MkExprBreak = pure HLIR.MkExprBreak
+solveExpression HLIR.MkExprContinue = pure HLIR.MkExprContinue
+solveExpression (HLIR.MkExprSingleIf c e) = do
+  c' <- solveExpression c
+  e' <- solveExpression e
+
+  pure $ HLIR.MkExprSingleIf c' e'
+solveExpression (HLIR.MkExprPublic e) = do
+  e' <- solveExpression e
+
+  pure $ HLIR.MkExprPublic e'
+solveExpression (HLIR.MkExprData ann cs) = pure $ HLIR.MkExprData ann cs
+solveExpression (HLIR.MkExprReturn e) = do
+  e' <- solveExpression e
+
+  pure $ HLIR.MkExprReturn e'
 
 -- | SOLVE UPDATE
 -- | Solve an update by renaming all the variables in the update with unique names.

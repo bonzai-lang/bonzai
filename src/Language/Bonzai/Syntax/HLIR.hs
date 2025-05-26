@@ -72,6 +72,9 @@ data Expression f t
   | MkExprRecordEmpty
   | MkExprRecordAccess (Expression f t) Text
   | MkExprSingleIf (Expression f t) (Expression f t)
+  | MkExprBreak
+  | MkExprContinue
+  | MkExprReturn (Expression f t)
   deriving (Generic)
 
 -- | DATA CONSTRUCTOR TYPE
@@ -161,6 +164,9 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText MkExprRecordEmpty = "{}"
   toText (MkExprRecordAccess e f) = T.concat [toText e, ".", f]
   toText (MkExprSingleIf c t) = T.concat ["if ", toText c, " then { ", toText t, " }"]
+  toText MkExprBreak = "break"
+  toText MkExprContinue = "continue"
+  toText (MkExprReturn e) = T.concat ["return ", toText e]
 
 instance (ToText t) => ToText (DataConstructor t) where
   toText (MkDataVariable v) = v

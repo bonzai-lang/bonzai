@@ -608,6 +608,25 @@ middles' (Left' _ : xs) = middles' xs
 middles' (Right' _ : xs) = middles' xs
 middles' (Middle' x : xs) = x : middles' xs
 
+-- | PARSE CONTINUE STATEMENT
+-- | Parse a continue statement. A continue statement is used to skip the current
+-- | iteration of a loop and continue to the next iteration. It is used to skip
+-- | the current iteration of a loop in Bonzai.
+parseContinue :: (MonadIO m) => P.Parser m (HLIR.Position, HLIR.HLIR "expression")
+parseContinue = do
+  (pos, _) <- Lex.reserved "continue"
+
+  pure (pos, HLIR.MkExprContinue)
+
+-- | PARSE BREAK STATEMENT
+-- | Parse a break statement. A break statement is used to exit a loop. It is used
+-- | to exit a loop in Bonzai.
+parseBreak :: (MonadIO m) => P.Parser m (HLIR.Position, HLIR.HLIR "expression")
+parseBreak = do
+  (pos, _) <- Lex.reserved "break"
+
+  pure (pos, HLIR.MkExprBreak)
+
 -- | PARSE FUNCTION EXPRESSION
 -- | Parse a function expression. A function expression is an expression that consists
 -- | of a function definition. It is used to define a function in Bonzai.
@@ -799,12 +818,23 @@ parseTerm =
         snd <$> Lex.parens parseExpression
       ]
 
+-- | PARSE RETURN STATEMENT
+parseReturn :: (MonadIO m) => P.Parser m (HLIR.Position, HLIR.HLIR "expression")
+parseReturn = do
+  ((start, _), _) <- Lex.reserved "return"
+  ((_, end), expr) <- parseExpression
+
+  pure ((start, end), HLIR.MkExprReturn expr)
+
 parseStatement :: (MonadIO m) => P.Parser m (HLIR.Position, HLIR.HLIR "expression")
 parseStatement =
   Lex.locateWith
     <$> P.choice
       [ parseWhile,
         parseForIn,
+        parseBreak,
+        parseContinue,
+        parseReturn,
         parseFunction,
         P.try parseUpdate,
         parseExpression
