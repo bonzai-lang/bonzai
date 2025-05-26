@@ -236,8 +236,6 @@ fromMap = Set.fromList . Map.keys
 runBytecodeConversion :: MonadIO m => Set Text -> [LLIR.Segment] -> m [BC.Instruction]
 runBytecodeConversion globals xs = do
   let globals' = Map.fromList . (`zip` [0..]) $ Set.toList globals
-  
-  mapM_ print (Map.toList globals')
 
   writeIORef currentIPC 0
   writeIORef globalPool globals'

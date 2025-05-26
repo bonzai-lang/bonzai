@@ -156,8 +156,6 @@ instance Assemble MLIR.Expression where
     let locals' = List.nub $ args <> Set.toList freed
         localSpace = zip locals' [0..]
 
-    print (name, localSpace)
-
     writeIORef isFunctionCurrently False
 
     pure [LLIR.Function name args localSpaceSize localSpace finalBody]
