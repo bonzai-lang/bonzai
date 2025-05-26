@@ -122,17 +122,16 @@ pub fn Parser::many<A>(
   fn(input) => {
     // Iterative approach
     mut acc = []
-    mut running = true
     mut newInput = input
 
-    while running.value {
+    while true {
       match parser(newInput.value) {
         case ParseResult(x, rest) => {
           acc += [x]
           newInput = rest
         }
         case ParseError(_, _) => {
-          running = false
+          break
         }
       }
     }
@@ -163,10 +162,9 @@ pub fn Parser::sepBy<A, B>(
   fn(input) => {
     // Iterative approach
     mut acc = []
-    mut running = true
     mut newInput = input
 
-    while running.value {
+    while true {
       match parser(newInput.value) {
         case ParseResult(x, rest) => {
           acc += [x]
@@ -176,12 +174,12 @@ pub fn Parser::sepBy<A, B>(
               newInput = rest
             }
             case ParseError(_, _) => {
-              running = false
+              break
             }
           }
         }
         case ParseError(_, _) => {
-          running = false
+          break
         }
       }
     }

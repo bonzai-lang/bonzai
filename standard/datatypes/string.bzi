@@ -44,6 +44,20 @@ pub fn String::slice(s: string, start _?: int, end _?: int): string => {
   slice_string(s, start, end)
 }
 
+pub fn String::includes(c: char, s: string): bool => {
+  let sLength = String::length(s)
+  mut i = 0
+
+  while i.value < sLength {
+    let currentChar = getIndexChar(s, i.value)
+    if currentChar == c then {
+      return true
+    }
+    i += 1
+  }
+
+  false
+}
 
 pub fn String::repeat(s: string, n: int): string =>
   if n == 0 then "" else s + String::repeat(s, n - 1)
@@ -54,15 +68,14 @@ pub fn String::concat(xs: list<string>): string =>
 pub fn String::trimStart(s: string): string => {
   let sLength = String::length(s)
   mut i = 0
-  mut break = false
 
   // Trouver le premier caractère non-blanc
-  while i.value < sLength && (!break.value) {
+  while i.value < sLength {
     let c = getIndexChar(s, i.value)
     if c == ' ' && c == '\n' && c == '\t' then {
       i += 1
     } else {
-      break = true
+      break
     }
   }
 
@@ -77,15 +90,14 @@ pub fn String::trimEnd(s: string): string => {
     ""
   } else {
     mut i = sLength - 1
-    mut break = false
 
     // Trouver le dernier caractère non-blanc
-    while i.value >= 0 && (!break.value) {
+    while i.value >= 0 {
       let c = getIndexChar(s, i.value)
       if c == ' ' && c == '\n' && c == '\t' then {
         i -= 1
       } else {
-        break = true
+        break
       }
     }
 
