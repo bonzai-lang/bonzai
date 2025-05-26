@@ -1,10 +1,8 @@
 require "std:foundation"
 require "std:datatypes/json"
-require "std:language/parser": runParser, explode
  
 let json = read_file("example/data/large-file.json")
 
 range(0, 35).foreach(fn(i) => {
-  let json = read_file("example/data/large-file.json")
-  print(getJSON(json))
+  print(JSON::parse(json))
 })
