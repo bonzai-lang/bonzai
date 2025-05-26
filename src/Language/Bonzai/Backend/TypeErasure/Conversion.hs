@@ -87,6 +87,9 @@ convert (HLIR.MkExprRecordAccess e k) = do
 convert HLIR.MkExprRecordEmpty = MLIR.MkExprRecord mempty
 convert (HLIR.MkExprSingleIf c t) = MLIR.MkExprSingleIf (convert c) (convert t)
 convert (HLIR.MkExprPublic e) = convert e
+convert HLIR.MkExprBreak = MLIR.MkExprBreak
+convert HLIR.MkExprContinue = MLIR.MkExprContinue
+convert (HLIR.MkExprReturn e) = MLIR.MkExprReturn (convert e)
 convert e = compilerError $ "impossible, received: " <> show e
 
 toList' :: [(Text, MLIR.MLIR "expression")] -> [MLIR.MLIR "expression"]
@@ -138,12 +141,7 @@ createFunction typeName (HLIR.MkDataVariable name) = do
 createIfs ::
   [(([MLIR.MLIR "expression"], Map Text (MLIR.MLIR "expression")), MLIR.MLIR "expression")] ->
   MLIR.MLIR "expression"
-createIfs (((conds, maps), e) : xs) = do
-  let cond = createFinalCondition conds
-      lets = createLets (Map.toList maps) e
-
-  MLIR.MkExprTernary cond lets (createIfs xs)
-createIfs [] = MLIR.MkExprApplication (MLIR.MkExprVariable "panic") [MLIR.MkExprLiteral (HLIR.MkLitString "non-exhaustive pattern")]
+createIfs = buildDecisionTree 
 
 -- | Create a sequence of conditions based on a list of patterns
 createFinalCondition :: [MLIR.MLIR "expression"] -> MLIR.MLIR "expression"
@@ -196,6 +194,93 @@ getVariable (HLIR.MkExprVariable x) = x.name
 getVariable (HLIR.MkExprLoc e _) = getVariable e
 getVariable _ = compilerError "expected variable"
 
+-- | Build a decision tree from multiple condition lists with associated expressions
+buildDecisionTree :: 
+  [(([MLIR.MLIR "expression"], Map Text (MLIR.MLIR "expression")), MLIR.MLIR "expression")] -> 
+  MLIR.MLIR "expression"
+buildDecisionTree [] = MLIR.MkExprApplication (MLIR.MkExprVariable "panic") [MLIR.MkExprLiteral (HLIR.MkLitString "non-exhaustive pattern")]
+buildDecisionTree [((conds, maps), expr)] = 
+  let condition = createFinalCondition conds
+      lets = createLets (Map.toList maps) expr
+  in MLIR.MkExprTernary condition lets (MLIR.MkExprApplication (MLIR.MkExprVariable "panic") [MLIR.MkExprLiteral (HLIR.MkLitString "non-exhaustive pattern")])
+buildDecisionTree cases = 
+  case findCommonConditionPrefix cases of
+    ([], _) -> 
+      -- No common prefix, create sequence of if-else
+      createSequentialIfs cases
+    (commonPrefix, remainingCases) ->
+      -- Common prefix found, create optimized decision tree
+      let prefixCondition = createFinalCondition commonPrefix
+          suffixTree = buildDecisionTree (filter (not . null . fst . fst) remainingCases)
+      in MLIR.MkExprTernary prefixCondition suffixTree (MLIR.MkExprApplication (MLIR.MkExprVariable "panic") [MLIR.MkExprLiteral (HLIR.MkLitString "non-exhaustive pattern")])
+
+-- | Create a sequential if-else chain
+createSequentialIfs :: 
+  [(([MLIR.MLIR "expression"], Map Text (MLIR.MLIR "expression")), MLIR.MLIR "expression")] -> 
+  MLIR.MLIR "expression"
+createSequentialIfs [] = MLIR.MkExprApplication (MLIR.MkExprVariable "panic") [MLIR.MkExprLiteral (HLIR.MkLitString "non-exhaustive pattern")]
+createSequentialIfs [((conds, maps), expr)] = 
+  let condition = createFinalCondition conds
+      lets = createLets (Map.toList maps) expr
+  in MLIR.MkExprTernary condition lets (MLIR.MkExprApplication (MLIR.MkExprVariable "panic") [MLIR.MkExprLiteral (HLIR.MkLitString "non-exhaustive pattern")])
+createSequentialIfs (((conds, maps), expr) : rest) =
+  let condition = createFinalCondition conds
+      lets = createLets (Map.toList maps) expr
+      elseCase = createSequentialIfs rest
+  in MLIR.MkExprTernary condition lets elseCase
+
+-- | Find the longest common condition prefix among all cases
+findCommonConditionPrefix :: 
+  [(([MLIR.MLIR "expression"], Map Text (MLIR.MLIR "expression")), MLIR.MLIR "expression")] -> 
+  ([MLIR.MLIR "expression"], [(([MLIR.MLIR "expression"], Map Text (MLIR.MLIR "expression")), MLIR.MLIR "expression")])
+findCommonConditionPrefix [] = ([], [])
+findCommonConditionPrefix [x] = (fst (fst x), [])
+findCommonConditionPrefix cases =
+  let conditionLists = map (fst . fst) cases
+      commonPrefix = takeWhileCommon conditionLists
+      remainingCases = map (\((conds, maps), expr)  -> 
+                                 ((drop (length commonPrefix) conds, maps), expr)) cases
+  in (commonPrefix, remainingCases)
+
+-- | Take elements while they are common across all lists
+takeWhileCommon :: [[MLIR.MLIR "expression"]] -> [MLIR.MLIR "expression"]
+takeWhileCommon [] = []
+takeWhileCommon [x] = x
+takeWhileCommon lists = 
+  let heads = map safeHead lists
+  in case heads of
+    [] -> []
+    (Nothing : _) -> []
+    (Just h : _) -> 
+      if all (== Just h) heads
+        then h : takeWhileCommon (map safeTail lists)
+        else []
+  where
+    safeHead [] = Nothing
+    safeHead (x : _) = Just x
+    
+    safeTail [] = []
+    safeTail (_ : xs) = xs
+
+data CMap
+  = ConditionMap (MLIR.MLIR "expression") CMap CMap
+  | Null
+
+conditionsToMap :: [MLIR.MLIR "expression"] -> CMap
+conditionsToMap [] = Null
+conditionsToMap (x : xs) = ConditionMap x (conditionsToMap xs) Null
+
+combineConditions :: CMap -> CMap -> MLIR.Expression
+combineConditions Null Null = MLIR.MkExprLiteral (HLIR.MkLitInt 1)
+combineConditions (ConditionMap c1 m1 m1') (ConditionMap c2 m2 m2') =
+  if c1 == c2
+    then MLIR.MkExprTernary c1 (combineConditions m1 m2) (combineConditions m1' m2')
+    else MLIR.MkExprTernary c1 (combineConditions m1 m2) (combineConditions m1' (ConditionMap c2 m2 m2'))
+combineConditions Null (ConditionMap c2 m2 m2') = 
+  MLIR.MkExprTernary c2 (combineConditions Null m2) (combineConditions Null m2')
+combineConditions (ConditionMap c1 m1 m1') Null = 
+  MLIR.MkExprTernary c1 (combineConditions m1 Null) (combineConditions m1' Null)
+
 -- | Create a sequence of conditions based on a pattern match
 -- | The function returns a list of conditions and a map of variables that need
 -- | to be substituted.
@@ -219,14 +304,8 @@ createCondition x (HLIR.MkPatSpecial n) = do
 createCondition x (HLIR.MkPatLocated y p) = do
   let (conds, maps) = createCondition x y
   (MLIR.MkExprLoc p <$> conds, maps)
-createCondition x (HLIR.MkPatOr y y') = do
-  let (conds, maps) = createCondition x y
-  let (conds', maps') = createCondition x y'
-  ([MLIR.MkExprApplication (MLIR.MkExprVariable "||") [MLIR.MkExprBlock conds, MLIR.MkExprBlock conds', MLIR.MkExprRecord mempty]], maps <> maps')
-createCondition x (HLIR.MkPatCondition e y) = do
-  let (conds, maps) = createCondition x y
-  let e' = convert e
-  ([MLIR.MkExprApplication (MLIR.MkExprVariable "&&") [MLIR.MkExprBlock conds, susbstituteMap (Map.toList maps) e', MLIR.MkExprRecord mempty]], maps)
+createCondition _x (HLIR.MkPatOr _y _y') = compilerError "Pattern matching with 'or' is not supported in MLIR conversion"
+createCondition _x (HLIR.MkPatCondition _e _y) = compilerError "Pattern matching with 'condition' is not supported in MLIR conversion"
 createCondition x (HLIR.MkPatList pats slice _) =
   let (conds, maps) =
         unzip $
