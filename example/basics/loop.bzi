@@ -1,0 +1,12 @@
+require "std:foundation"
+
+mut i = 0
+
+while true {
+  if i.value >= 10 then {
+    break
+  }
+
+  print("Iteration: " + i.toString())
+  i += 1
+}
