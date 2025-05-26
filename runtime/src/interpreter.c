@@ -62,6 +62,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return,
                        &&case_get_value,
                        &&case_get_record_access,
                        &&case_make_record,
+                       &&case_jump,
                        UNKNOWN};
 
   goto *jmp_table[op];
@@ -688,6 +689,13 @@ case_make_record: {
   module->stack->stack_pointer = sp + 1;
 
   INCREASE_IP(module);
+  goto *jmp_table[op];
+}
+
+case_jump: {
+  safe_point(module);
+
+  module->pc = i1 * 5;
   goto *jmp_table[op];
 }
 

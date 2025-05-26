@@ -167,14 +167,6 @@ void gc(struct Module* mod) {
     obj = obj->next;
   }
 
-  obj = gc_->young.first_object;
-  while (obj != NULL) {
-    if (obj->is_marked) {
-      obj->is_marked = false;
-    }
-    obj = obj->next;
-  }
-
   pthread_mutex_lock(&gc_->gc_mutex);
   gc_->young.max_objects = gc_->young.num_objects < INIT_OBJECTS
                                ? INIT_OBJECTS
@@ -273,11 +265,11 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
   v->generation = GEN_YOUNG;
   v->next_remembered = NULL;
   v->next = gc_->young.first_object;
-  // pthread_mutex_init(&v->mutex, NULL);
-  // pthread_cond_init(&v->cond, NULL);
+  pthread_mutex_init(&v->mutex, NULL);
+  pthread_cond_init(&v->cond, NULL);
 
   // Insert in young generation
-
+  pthread_mutex_lock(&gc_->gc_mutex);
   gc_->young.first_object = v;
   gc_->young.num_objects++;
   pthread_mutex_unlock(&gc_->gc_mutex);
