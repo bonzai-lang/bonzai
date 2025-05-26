@@ -177,6 +177,11 @@ void print_with_level(Value value, int level) {
       break;
     }
 
+    case TYPE_CHAR: {
+      printf("'%c'", GET_CHAR(value));
+      break;
+    }
+
     case TYPE_LIST: {
       HeapValue* list = GET_PTR(value);
 
