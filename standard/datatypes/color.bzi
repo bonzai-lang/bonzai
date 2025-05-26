@@ -1,3 +1,13 @@
+/*
+ * BONZAI COLOR MODULE
+ *
+ * This module provides functions to format strings with ANSI escape codes 
+ * for colors and text styles. It allows you to change the foreground and
+ * background colors of text, as well as apply various text styles such as
+ * bold, italic, underline, etc.
+ *
+ */
+
 require "std:math"
 require "std:datatypes/unit"
 
