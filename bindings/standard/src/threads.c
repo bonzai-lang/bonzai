@@ -20,12 +20,8 @@ void* value_to_function(void* value) {
   int sc = new_module->gc->stacks.stack_count;
   new_module->gc->stacks.stacks[sc] = new_module->stack;
   new_module->gc->stacks.stack_count++;
-  // memcpy(new_module->stack->values, module->stack->values,
-  //        GLOBALS_SIZE * sizeof(Value));
-
-  for (int i = 0; i < GLOBALS_SIZE; i++) {
-    new_module->stack->values[i] = module->stack->values[i];
-  }
+  memcpy(new_module->stack->values, module->stack->values,
+         GLOBALS_SIZE * sizeof(Value));
 
   new_module->instr_count = module->instr_count;
   new_module->instrs = module->instrs;
