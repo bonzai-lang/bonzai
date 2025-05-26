@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module Language.Bonzai.Backend.LLIR.Conversion where
 
 -- | LLIR ASSEMBLER
@@ -55,6 +56,20 @@ eventPool = IO.unsafePerformIO $ newIORef mempty
 includeLocations :: IORef Bool
 includeLocations = IO.unsafePerformIO $ newIORef False
 
+locals :: IORef (Set Text)
+locals = IO.unsafePerformIO $ newIORef Set.empty
+
+local' :: MonadIO m => (Set Text -> Set Text) -> m a -> m a
+local' f action = do
+  oldLocals <- readIORef locals
+  modifyIORef' locals f
+  result <- action
+  writeIORef locals oldLocals
+  pure result
+
+ask' :: MonadIO m => m (Set Text)
+ask' = readIORef locals
+
 fetchEvent :: MonadIO m => Text -> m Int
 fetchEvent name = do
   events <- readIORef eventPool
@@ -82,7 +97,7 @@ fetchConstant lit = do
       pure (Map.size cnst)
 
 class Assemble a where
-  assemble :: MonadIO m => a -> ReaderT (Set Text) m [LLIR.Segment]
+  assemble :: MonadIO m => a -> m [LLIR.Segment]
 
 instance Assemble a => Assemble [a] where
   assemble = fmap concat . mapM assemble
@@ -116,8 +131,8 @@ instance Assemble MLIR.Expression where
     let body'' = filter shouldNotBeLabel body'
     let finalBody = concatMap extractFrom body''
 
-    let locals = List.nub $ args <> Set.toList freed
-        localSpace = zip locals [0..]
+    let locals' = List.nub $ args <> Set.toList freed
+        localSpace = zip locals' [0..]
 
     pure [LLIR.Function name args localSpaceSize localSpace finalBody]
 
@@ -131,15 +146,17 @@ instance Assemble MLIR.Expression where
         freed = M.free reserved body
         env   = freed <> args'
 
-    body' <- local (<> env) $ assemble body
+    body' <- local' (<> args') $ assemble body
 
     let localSpaceSize = Set.size env
 
     let body'' = filter shouldNotBeLabel body'
         finalBody = concatMap extractFrom body''
 
-    let locals = List.nub $ args <> Set.toList freed
-        localSpace = zip locals [0..]
+    let locals' = List.nub $ args <> Set.toList freed
+        localSpace = zip locals' [0..]
+
+    print (name, localSpace)
 
     writeIORef isFunctionCurrently False
 
@@ -150,14 +167,13 @@ instance Assemble MLIR.Expression where
       assemble (MLIR.MkExprLet n (removeLoc e))
     else do
       e' <- assemble e
-      gs <- readIORef globals
-      locals <- ask
+      locals' <- ask'
 
-      if Set.member n locals then
+      if Set.member n locals' then
         pure $ e' <> LLIR.storeLocal n
-      else if Set.member n gs then
-        pure $ e' <> LLIR.storeGlobal n
-      else compilerError $ "Variable " <> n <> " not found in globals, locals or natives"
+      else do
+        modifyIORef' locals (Set.insert n)
+        pure $ e' <> LLIR.instr (LLIR.StoreLocal n)
 
     where
       isFunction (MLIR.MkExprLoc _ e') = isFunction e'
@@ -170,9 +186,9 @@ instance Assemble MLIR.Expression where
   assemble (MLIR.MkExprVariable n) = do
     gs <- readIORef globals
     nats <- readIORef natives
-    locals <- ask
+    locals' <- ask'
 
-    if Set.member n locals then
+    if Set.member n locals' then
       pure $ LLIR.loadLocal n
     else if Set.member n gs then
       pure $ LLIR.loadGlobal n
@@ -184,22 +200,22 @@ instance Assemble MLIR.Expression where
   assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "&&") [a, b]) = do
     a' <- assemble a
     b' <- assemble b
-    pure $ a' <> LLIR.instr (LLIR.JumpIfFalse (length b' + 2)) <> b'
+    pure $ a' <> LLIR.instr (LLIR.JumpIfFalse (computeLen b' + 2)) <> b'
 
   assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "||") [a, b]) = do
     a' <- assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "!") [a])
     b' <- assemble b
-    pure $ a' <> LLIR.instr (LLIR.JumpIfFalse (length b' + 2)) <> b'
+    pure $ a' <> LLIR.instr (LLIR.JumpIfFalse (computeLen b' + 2)) <> b'
 
   assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "value") [a]) = do
     a' <- assemble a
     pure $ a' <> LLIR.instr LLIR.GetValue
 
-  assemble (MLIR.MkExprApplication (MLIR.MkExprVariable op) [a, b]) 
+  assemble (MLIR.MkExprApplication (MLIR.MkExprVariable op) [a, b])
     | op `elem` ["==", "!=", "<", ">", "<=", ">="] = do
       a' <- assemble a
       b' <- assemble b
-      
+
       let op' = case op of
             "==" -> LLIR.EqualTo
             "!=" -> LLIR.NotEqualTo
@@ -210,7 +226,7 @@ instance Assemble MLIR.Expression where
             _ -> error "Impossible"
 
       pure $ a' <> b' <> LLIR.instr (LLIR.Compare op')
-  
+
   assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "+") [a, b]) = do
     a' <- assemble a
     b' <- assemble b
@@ -220,17 +236,17 @@ instance Assemble MLIR.Expression where
     a' <- assemble a
     b' <- assemble b
     pure $ a' <> b' <> LLIR.instr LLIR.Sub
-  
+
   assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "*") [a, b]) = do
     a' <- assemble a
     b' <- assemble b
     pure $ a' <> b' <> LLIR.instr LLIR.Mul
-  
+
   assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "/") [a, b]) = do
     a' <- assemble a
     b' <- assemble b
     pure $ a' <> b' <> LLIR.instr LLIR.Div
-  
+
   assemble (MLIR.MkExprApplication (MLIR.MkExprVariable "%") [a, b]) = do
     a' <- assemble a
     b' <- assemble b
@@ -248,9 +264,9 @@ instance Assemble MLIR.Expression where
   assemble (MLIR.MkExprApplication (MLIR.MkExprVariable name) args) = do
     glbs <- readIORef globals
     nats <- readIORef natives
-    locals <- ask
+    locals' <- ask'
 
-    if Set.member name locals then do
+    if Set.member name locals' then do
       args' <- assemble args
       pure $ args' <> LLIR.instr (LLIR.CallLocal name (length args))
     else if Set.member name glbs then do
@@ -274,7 +290,7 @@ instance Assemble MLIR.Expression where
     t' <- assemble t
     e' <- assemble e
 
-    pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (length t' + 2)) <> t' <> LLIR.instr (LLIR.JumpRel (length e' + 1)) <> e'
+    pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (computeLen t' + 2)) <> t' <> LLIR.instr (LLIR.JumpRel (computeLen e' + 1)) <> e'
 
   assemble (MLIR.MkExprUpdate u e) = do
     u' <- assemble u
@@ -329,7 +345,7 @@ instance Assemble MLIR.Expression where
 
   assemble (MLIR.MkExprLoc (p1, _) e) = do
     e' <- assemble e
-    
+
     include <- readIORef includeLocations
 
     if include then do
@@ -340,7 +356,18 @@ instance Assemble MLIR.Expression where
   assemble (MLIR.MkExprWhile c e) = do
     c' <- assemble c
     e' <- assemble e
-    pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (length e' + 2)) <> e' <> LLIR.instr (LLIR.JumpRel (-(length c' + length e' + 1)))
+
+    let c'' = map (\case
+          LLIR.Instruction instr -> instr
+          _ -> error "Expected instruction in while condition"
+          ) c'
+
+    let e'' = map (\case
+          LLIR.Instruction instr -> instr
+          _ -> error "Expected instruction in while body"
+          ) e'
+
+    pure . LLIR.instr $ LLIR.While c'' e''
 
   assemble MLIR.MkExprSpecial = do
     pure (LLIR.instr LLIR.Special)
@@ -364,21 +391,21 @@ instance Assemble MLIR.Expression where
           _ -> error "Impossible"
 
     pure $ e1' <> e2' <> LLIR.instr op'
-  
+
   assemble (MLIR.MkExprRecordAccess e n) = do
     e' <- assemble e
     i <- fetchConstant (MLIR.MkLitString n)
     pure $ e' <> LLIR.instr (LLIR.GetRecordAccess i)
-  
+
   assemble (MLIR.MkExprSingleIf c e) = do
     c' <- assemble c
     e' <- assemble e
-    pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (length e' + 1)) <> e'
+    pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (computeLen e' + 1)) <> e'
 
   assemble (MLIR.MkExprReturn e) = do
     e' <- assemble e
     pure $ e' <> LLIR.instr LLIR.Return
-  
+
   assemble (MLIR.MkExprRecord m) = do
     let list = Map.toList m
 
@@ -390,14 +417,20 @@ instance Assemble MLIR.Expression where
 
     pure $ es <> LLIR.instr (LLIR.MakeRecord len)
 
+  assemble MLIR.MkExprBreak = do
+    pure $ LLIR.instr (LLIR.Break Nothing)
+
+  assemble MLIR.MkExprContinue = do
+    pure $ LLIR.instr (LLIR.Continue Nothing)
+
 instance Assemble MLIR.Update where
-  assemble :: MonadIO m => MLIR.Update -> ReaderT (Set Text) m [LLIR.Segment]
+  assemble :: MonadIO m => MLIR.Update -> m [LLIR.Segment]
   assemble (MLIR.MkUpdtVariable n) = do
     gs <- readIORef globals
     nats <- readIORef natives
-    locals <- ask
+    locals' <- ask'
 
-    if Set.member n locals then
+    if Set.member n locals' then
       pure $ LLIR.loadLocal n
     else if Set.member n gs then
       pure $ LLIR.loadGlobal n
@@ -421,12 +454,95 @@ runLLIRConversion exprs = do
   let ns = getNatives exprs
   writeIORef natives ns
 
-  res <- runReaderT (assemble exprs) Set.empty
+  res <- concat <$> mapM assembleToplevel exprs
 
   consts <- readIORef constantPool
   let cs = IntMap.fromList $ invertList (Map.toList consts)
 
   pure (res, IntMap.elems cs, gs)
+
+assembleToplevel :: MonadIO m => MLIR.Expression -> m [LLIR.Segment]
+assembleToplevel (MLIR.MkExprLet n e) = do
+  if isFunction e then do
+    assemble (MLIR.MkExprLet n (removeLoc e))
+  else do
+    e' <- assembleToplevel e
+
+    pure $ e' <> LLIR.storeGlobal n
+
+  where
+    isFunction (MLIR.MkExprLoc _ e') = isFunction e'
+    isFunction (MLIR.MkExprLambda {}) = True
+    isFunction _ = False
+
+    removeLoc (MLIR.MkExprLoc _ e') = removeLoc e'
+    removeLoc e' = e'
+assembleToplevel (MLIR.MkExprLoc _ e) = assembleToplevel e
+assembleToplevel (MLIR.MkExprFunction name args body) = do
+  writeIORef isFunctionCurrently True
+  glbs <- readIORef globals
+  ntvs <- readIORef natives
+  let reserved = glbs <> ntvs
+
+  let args' = Set.fromList args
+      freed = M.free reserved body
+      env   = freed <> args'
+
+  body' <- local' (<> args') $ assemble body
+
+  let localSpaceSize = Set.size env
+
+  let body'' = filter shouldNotBeLabel body'
+      finalBody = concatMap extractFrom body''
+
+  let locals' = List.nub $ args <> Set.toList freed
+      localSpace = zip locals' [0..]
+
+  writeIORef isFunctionCurrently False
+
+  pure [LLIR.Function name args localSpaceSize localSpace finalBody]
+assembleToplevel (MLIR.MkExprBlock es) = concat <$> mapM assembleToplevel es
+assembleToplevel (MLIR.MkExprList es) = do
+  es' <- mapM assembleToplevel es
+  let len = length es
+  pure $ concat es' <> LLIR.instr (LLIR.MakeList len)
+assembleToplevel (MLIR.MkExprTernary c t e) = do
+  c' <- assembleToplevel c
+  t' <- assembleToplevel t
+  e' <- assembleToplevel e
+
+  pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (computeLen t' + 2)) <> t' <> LLIR.instr (LLIR.JumpRel (computeLen e' + 1)) <> e'
+assembleToplevel (MLIR.MkExprWhile c e) = do
+  c' <- assembleToplevel c
+  e' <- assembleToplevel e
+
+  let c'' = map (\case
+        LLIR.Instruction instr -> instr
+        _ -> error "Expected instruction in while condition"
+        ) c'
+
+  let e'' = map (\case
+        LLIR.Instruction instr -> instr
+        _ -> error "Expected instruction in while body"
+        ) e'
+
+  pure . LLIR.instr $ LLIR.While c'' e''
+assembleToplevel (MLIR.MkExprMut e) = do
+  e' <- assembleToplevel e
+  pure $ e' <> LLIR.instr LLIR.MakeMutable
+assembleToplevel (MLIR.MkExprIndex e i) | isIntLiteral i = do
+  e' <- assembleToplevel e
+  let i' = getInteger i
+  pure $ e' <> LLIR.instr (LLIR.ListGet (fromInteger i'))
+assembleToplevel (MLIR.MkExprIndex e i) = do
+  e' <- assembleToplevel e
+  i' <- assembleToplevel i
+  pure $ e' <> i' <> LLIR.instr LLIR.GetIndex
+assembleToplevel (MLIR.MkExprUnpack n e e') = do
+  e'' <- assembleToplevel e
+  e''' <- assembleToplevel e'
+  pure $ e'' <> LLIR.instr (LLIR.StoreGlobal n) <> e'''
+assembleToplevel e = assemble e
 
 invertList :: [(b, a)] -> [(a, b)]
 invertList = map (\(a, b) -> (b, a))
@@ -466,3 +582,15 @@ getNatives (MLIR.MkExprNative ann _ : xs) = Set.insert ann.name (getNatives xs)
 getNatives (MLIR.MkExprLoc _ e : xs) = getNatives (e : xs)
 getNatives (_ : xs) = getNatives xs
 getNatives [] = mempty
+
+computeLen :: [LLIR.Segment] -> Int
+computeLen =
+  foldl' (\acc x -> acc + case x of
+    LLIR.Instruction (LLIR.While cond body) -> sum (map go cond) + sum (map go body) + 2
+    _ -> 1
+    ) 0
+
+  where
+    go :: LLIR.Instruction -> Int
+    go (LLIR.While cond body) = sum (map go cond) + sum (map go body) + 2
+    go _ = 1

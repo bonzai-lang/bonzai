@@ -129,6 +129,8 @@ encodeInstruction (GetRecordAccess i) =
   encodeInstr 35 >> encodeInteger i >> replicateNull 3
 encodeInstruction (MakeRecord i) =
   encodeInstr 36 >> encodeInteger i >> replicateNull 3
+encodeInstruction (Jump i) =
+  encodeInstr 37 >> encodeInteger i >> replicateNull 3
 
 encodeText :: Text -> Put
 encodeText w = do

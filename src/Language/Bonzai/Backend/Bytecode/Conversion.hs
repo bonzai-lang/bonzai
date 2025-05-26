@@ -20,26 +20,43 @@ import Control.Monad.Result (compilerError)
 localPool :: IORef (Map Text Int)
 localPool = IO.unsafePerformIO $ newIORef mempty
 
+{-# NOINLINE currentContinueAddress #-}
+currentContinueAddress :: IORef (Maybe Int)
+currentContinueAddress = IO.unsafePerformIO $ newIORef Nothing
+
+{-# NOINLINE currentBreakAddress #-}
+currentBreakAddress :: IORef (Maybe Int)
+currentBreakAddress = IO.unsafePerformIO $ newIORef Nothing
+
 {-# NOINLINE globalPool #-}
 globalPool :: IORef (Map Text Int)
 globalPool = IO.unsafePerformIO $ newIORef mempty
 
+{-# NOINLINE currentIPC #-}
+currentIPC :: IORef Int
+currentIPC = IO.unsafePerformIO $ newIORef 0
+
 class Assemble a where
   assemble :: MonadIO m => a -> m [BC.Instruction]
+
+increase :: MonadIO m => m a -> m a
+increase act = do
+  modifyIORef' currentIPC (+ 1)
+  act
 
 instance Assemble a => Assemble [a] where
   assemble = fmap concat . mapM assemble
 
 instance Assemble LLIR.Instruction where
-  assemble (LLIR.LoadLocal n) = do
+  assemble (LLIR.LoadLocal n) = increase $ do
     locals <- readIORef localPool
     case Map.lookup n locals of
       Just address -> do
         address' <- negIdx address
         pure [BC.LoadLocal address']
       Nothing -> error $ "Local " <> n <> " not found"
-    
-  assemble (LLIR.StoreLocal name) = do
+
+  assemble (LLIR.StoreLocal name) = increase $ do
     locals <- readIORef localPool
     case Map.lookup name locals of
       Just address -> do
@@ -47,75 +64,141 @@ instance Assemble LLIR.Instruction where
         pure [BC.StoreLocal address']
       Nothing -> error $ "Local " <> name <> " not found"
 
-  assemble (LLIR.LoadConstant address) = pure [BC.LoadConstant address]
+  assemble (LLIR.LoadConstant address) = increase $ do
+    pure [BC.LoadConstant address]
 
-  assemble (LLIR.LoadGlobal address) = do
+  assemble (LLIR.LoadGlobal address) = increase $ do
     globals <- readIORef globalPool
     case Map.lookup address globals of
       Just address' -> pure [BC.LoadGlobal address']
       Nothing -> error $ "Global " <> address <> " not found"
-  
-  assemble (LLIR.StoreGlobal address) = do
+
+  assemble (LLIR.StoreGlobal address) = increase $ do
     globals <- readIORef globalPool
     case Map.lookup address globals of
       Just address' -> pure [BC.StoreGlobal address']
       Nothing -> error $ "Global " <> address <> " not found"
   
-  assemble (LLIR.LoadNative name) = pure [BC.LoadNative name]
+  assemble (LLIR.LoadNative name) = increase $ do
+    pure [BC.LoadNative name]
 
-  assemble LLIR.Update = pure [BC.Update]
-  assemble LLIR.Return = pure [BC.Return]
-  assemble (LLIR.Compare cmp) = pure [BC.Compare cmp]
-  assemble (LLIR.MakeList size) = pure [BC.MakeList size]
-  assemble (LLIR.ListGet index) = pure [BC.ListGet index]
+  assemble LLIR.Update = increase $ do
+    pure [BC.Update]
+  assemble LLIR.Return = increase $ do
+    pure [BC.Return]
+  assemble (LLIR.Compare cmp) = increase $ do
+    pure [BC.Compare cmp]
+  assemble (LLIR.MakeList size) = increase $ do
+    pure [BC.MakeList size]
+  assemble (LLIR.ListGet index) = increase $ do
+    pure [BC.ListGet index]
 
-  assemble (LLIR.Call arity) = pure [BC.Call arity]
-  assemble (LLIR.CallGlobal index arity) = do
+  assemble (LLIR.Call arity) = increase $ do
+    pure [BC.Call arity]
+  assemble (LLIR.CallGlobal index arity) = increase $ do
     globals <- readIORef globalPool
     case Map.lookup index globals of
       Just idx -> pure [BC.CallGlobal idx arity]
       Nothing -> error $ "Global " <> index <> " not found"
-  assemble (LLIR.CallLocal index arity) = do
+  assemble (LLIR.CallLocal index arity) = increase $ do
     locals <- readIORef localPool
     case Map.lookup index locals of
       Just idx -> do
         addr <- negIdx idx
         pure [BC.CallLocal addr arity]
       Nothing -> error $ "Local " <> index <> " not found"
-  assemble (LLIR.CallNative index arity) = pure [BC.CallNative index arity]
-  
-  assemble (LLIR.JumpIfFalse address) = pure [BC.JumpIfFalse address]
-  assemble (LLIR.JumpRel address) = pure [BC.JumpRel address]
-  assemble LLIR.GetIndex = pure [BC.GetIndex]
-  assemble LLIR.Special = pure [BC.Special]
-  assemble LLIR.Halt = pure [BC.Halt]
+  assemble (LLIR.CallNative index arity) = increase $ do
+    pure [BC.CallNative index arity]
+
+  assemble (LLIR.JumpIfFalse address) = increase $ do
+    pure [BC.JumpIfFalse address]
+  assemble (LLIR.JumpRel address) = increase $ do
+    pure [BC.JumpRel address]
+  assemble LLIR.GetIndex = increase $ do
+    pure [BC.GetIndex]
+  assemble LLIR.Special = increase $ do
+    pure [BC.Special]
+  assemble LLIR.Halt = increase $ do
+    pure [BC.Halt]
 
   assemble (LLIR.MakeEvent {}) = compilerError "Anonymous events should not appear in the bytecode"
-  assemble (LLIR.Send args body) = pure [BC.Send args body]
-  assemble LLIR.Spawn = pure [BC.Spawn]
-  assemble LLIR.MakeMutable = pure [BC.MakeMutable]
-  assemble (LLIR.Loc a b c) = pure [BC.Loc a b c]
-  assemble LLIR.Add = pure [BC.Add]
-  assemble LLIR.Sub = pure [BC.Sub]
-  assemble LLIR.Mul = pure [BC.Mul]
-  assemble LLIR.Div = pure [BC.Div]
-  assemble LLIR.Mod = pure [BC.Mod]
+  assemble (LLIR.Send args body) = increase $ do
+    pure [BC.Send args body]
+  assemble LLIR.Spawn = increase $ do
+    pure [BC.Spawn]
+  assemble LLIR.MakeMutable = increase $ do
+    pure [BC.MakeMutable]
+  assemble (LLIR.Loc a b c) = increase $ do
+    pure [BC.Loc a b c]
+  assemble LLIR.Add = increase $ do
+    pure [BC.Add]
+  assemble LLIR.Sub = increase $ do
+    pure [BC.Sub]
+  assemble LLIR.Mul = increase $ do
+    pure [BC.Mul]
+  assemble LLIR.Div = increase $ do
+    pure [BC.Div]
+  assemble LLIR.Mod = increase $ do
+    pure [BC.Mod]
 
-  assemble (LLIR.TryCatch jumpAddr) = do
+  assemble (LLIR.TryCatch jumpAddr) = increase $ do
     pure [BC.TryCatch jumpAddr]
-  
-  assemble LLIR.GetValue = pure [BC.GetValue]
 
-  assemble (LLIR.GetRecordAccess index) = pure [BC.GetRecordAccess index]
+  assemble LLIR.GetValue = increase $ do
+    pure [BC.GetValue]
 
-  assemble (LLIR.MakeRecord size) = pure [BC.MakeRecord size]
+  assemble (LLIR.GetRecordAccess index) = increase $ do
+    pure [BC.GetRecordAccess index]
+
+  assemble (LLIR.MakeRecord size) = increase $ do
+    pure [BC.MakeRecord size]
+
+  assemble (LLIR.While body instructions) = do
+    loopBegin <- readIORef currentIPC
+    body' <- assemble body
+    
+    modifyIORef' currentIPC (+ 1)
+
+    oldContinue <- readIORef currentContinueAddress
+    oldBreak <- readIORef currentBreakAddress
+
+    currentIPC' <- readIORef currentIPC
+    -- Continue should jump back to the beginning of the loop condition
+    writeIORef currentContinueAddress (Just loopBegin)
+    -- Break should jump to after the entire while construct
+    writeIORef currentBreakAddress (Just (currentIPC' + computeLen instructions + 1))
+
+    instructions' <- assemble instructions
+
+    writeIORef currentContinueAddress oldContinue
+    writeIORef currentBreakAddress oldBreak
+
+    modifyIORef' currentIPC (+ 1)
+
+    pure $ body' <> [BC.JumpIfFalse (length instructions' + 2)] <> instructions' <> [BC.JumpRel (- (length instructions' + length body' + 1))]
+
+  assemble (LLIR.Break _) = do
+    mbBreak <- readIORef currentBreakAddress
+    case mbBreak of
+      Just addr -> increase $ pure [BC.Jump addr]
+      Nothing -> compilerError "Break statement outside of loop"
+    
+  assemble (LLIR.Continue _) = do
+    mbContinue <- readIORef currentContinueAddress
+    case mbContinue of
+      Just addr -> increase $ pure [BC.Jump addr]
+      Nothing -> compilerError "Continue statement outside of loop"
+
+computeLen :: [LLIR.Instruction] -> Int
+computeLen =
+  foldl' (\acc x -> acc + case x of
+    LLIR.While cond body -> computeLen cond + computeLen body + 2
+    _ -> 1
+    ) 0
 
 instance Assemble LLIR.Segment where
-  assemble (LLIR.EventOn id' arity bodyLength ls instructions) = do
-    let freed' = Map.fromList ls
-    instructions' <- withLocals freed' $ assemble instructions
-    
-    pure (BC.EventOn id' arity bodyLength (length ls) : instructions')
+  assemble (LLIR.EventOn {}) = 
+    compilerError "Events should not appear in the bytecode, they should be converted to functions"
 
   assemble (LLIR.Function name _ ls freed instructions) = do
     let freed' = Map.fromList freed
@@ -123,21 +206,14 @@ instance Assemble LLIR.Segment where
     globals <- readIORef globalPool
     case Map.lookup name globals of
       Just addr -> do
+        modifyIORef' currentIPC (+ 2)
         instructions' <- withLocals freed' $ assemble instructions
         pure (BC.MakeFunctionAndStore addr (length instructions' + 1) ls : instructions' <> [BC.Return])
       
       Nothing -> error $ "Global " <> name <> " not found"
 
-  assemble (LLIR.Event name _ ls instructions eq) = do
-    let freed' = Map.fromList ls
-
-    globals <- readIORef globalPool
-    case Map.lookup name globals of
-      Just addr -> do
-        instructions' <- withLocals freed' $ assemble instructions
-        pure (BC.MakeEvent eq (length instructions' + 1) : instructions' <> [BC.ReturnEvent, BC.StoreGlobal addr])
-      
-      Nothing -> error $ "Global " <> name <> " not found"
+  assemble (LLIR.Event {}) = 
+    compilerError "Events should not appear in the bytecode, they should be converted to functions"
 
   assemble (LLIR.Instruction instruction) = assemble instruction
 
@@ -160,7 +236,10 @@ fromMap = Set.fromList . Map.keys
 runBytecodeConversion :: MonadIO m => Set Text -> [LLIR.Segment] -> m [BC.Instruction]
 runBytecodeConversion globals xs = do
   let globals' = Map.fromList . (`zip` [0..]) $ Set.toList globals
+  
+  mapM_ print (Map.toList globals')
 
+  writeIORef currentIPC 0
   writeIORef globalPool globals'
 
   res <- assemble xs
