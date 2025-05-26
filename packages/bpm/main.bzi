@@ -1,8 +1,5 @@
 require "std:foundation"
-require "std:language/parser": 
-  satisfy, many, right, left, Parser::bind, 
-  Parser::map, noneOf, is_whitespace, is_alphanumeric, 
-  implode, explode, many1, choice, runParser
+require "std:language/parser"
 require "std:datatypes/color"
 
 extern fn get_args(): list<string>
@@ -10,8 +7,8 @@ extern fn slice<A>(xs: list<A>, start: int, end: int): list<A>
 extern fn get_cwd(): string
 extern fn file_exists(path: string): bool
 extern fn get_env(name: string): string
-extern fn execute_command(command: string)
-extern fn execute_command_silent(command: string)
+extern fn execute_command(command: string): unit
+extern fn execute_command_silent(command: string): unit
 extern fn length<A>(xs: list<A>): int
 
 let bziPath = get_env("BONZAI_PATH")
@@ -28,33 +25,33 @@ type Argument {
 }
 
 fn parseCLI(args: list<string>) => {
-  fn lex<A>(p: Parser<A>): Parser<A> => {
-    let ws = satisfy(is_whitespace).many()
-    ws :right: p :left: ws
+  fn lex<A>(p: fn(list<char>): Result<A>): fn(list<char>): Result<A> => {
+    let ws = Parser::satisfy(is_whitespace).Parser::many()
+    ws :Parser::right: p :Parser::left: ws
   }
 
   fn parseArgument() => {
-    let minus = satisfy(fn(x) => x == '-')
+    let minus = Parser::satisfy(fn(x) => x == '-')
 
-    let optionParser = minus :right: satisfy(is_alphanumeric).many1() :Parser::bind: fn(flag) =>
-      noneOf([' ']).many1().lex() :Parser::map: fn(value) => Option(flag.implode, value.implode)
+    let optionParser = minus :Parser::right: Parser::satisfy(is_alphanumeric).Parser::many1() :Parser::bind: fn(flag) =>
+      Parser::noneOf([' ']).Parser::many1().lex() :Parser::map: fn(value) => Option(flag.implode, value.implode)
 
-    let bioptionParser = minus :right: minus :right: satisfy(is_alphanumeric).many1() :Parser::bind: fn(flag) =>
-      noneOf([' ']).many1().lex() :Parser::map: fn(value) => Option(flag.implode, value.implode)
-      
-    let argumentParser = noneOf([' ']).many1() :Parser::map: fn(value) => Argument(value.implode)
+    let bioptionParser = minus :Parser::right: minus :Parser::right: Parser::satisfy(is_alphanumeric).Parser::many1() :Parser::bind: fn(flag) =>
+      Parser::noneOf([' ']).Parser::many1().lex() :Parser::map: fn(value) => Option(flag.implode, value.implode)
 
-    let flagParser = minus :right: satisfy(is_alphanumeric).many1() :Parser::map: fn(flag) => Flag(flag.implode)
-    let biflagParser = minus :right: minus :right: satisfy(is_alphanumeric).many1() :Parser::map: fn(flag) => Flag(flag.implode)
+    let argumentParser = Parser::noneOf([' ']).Parser::many1() :Parser::map: fn(value) => Argument(value.implode)
 
-    choice([optionParser, bioptionParser, flagParser, biflagParser, argumentParser])
+    let flagParser = minus :Parser::right: Parser::satisfy(is_alphanumeric).Parser::many1() :Parser::map: fn(flag) => Flag(flag.implode)
+    let biflagParser = minus :Parser::right: minus :Parser::right: Parser::satisfy(is_alphanumeric).Parser::many1() :Parser::map: fn(flag) => Flag(flag.implode)
+
+    Parser::choice([optionParser, bioptionParser, flagParser, biflagParser, argumentParser])
   };
 
-  let parser = parseArgument().lex.many()
+  let parser = parseArgument().lex.Parser::many()
 
   let formattedArgs = List::concat(List::join(args.map(explode), [' ']))
 
-  parser.runParser(formattedArgs)
+  parser(formattedArgs)
 }
 
 fn interpretCLIResult(cli: list<Argument>): (string, list<Argument>) => {
@@ -77,7 +74,7 @@ fn runCLI(commands: list<CLI>, args: list<string>) => {
         case Some(Command(_, _, action)) => action(args)
         case None => print(" BPM ".white.bgBlue.bold.reset + " Command not found")
       }
-    } 
+    }
 
     case ParseError(msg, _) => print(msg)
   }
