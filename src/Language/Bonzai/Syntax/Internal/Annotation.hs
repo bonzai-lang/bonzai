@@ -9,11 +9,14 @@ import Data.Aeson (ToJSON, FromJSON)
 data Annotation a = MkAnnotation {
   name :: Text,
   value :: a
-} deriving (Eq, Ord, Show, Generic)
+} deriving (Ord, Show, Generic)
 
 instance {-# OVERLAPS #-} ToText a => ToText (Annotation (Maybe a)) where
   toText (MkAnnotation n (Just v)) = T.concat [n, ": ", toText v]
   toText (MkAnnotation n Nothing) = n
+
+instance Eq (Annotation a) where
+  (MkAnnotation n1 _) == (MkAnnotation n2 _) = n1 == n2
 
 instance ToText a => ToText (Annotation a) where
   toText (MkAnnotation n v) = T.concat [n, ": ", toText v]

@@ -149,7 +149,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprLet _ (Right p) e b) = T.concat ["let ", toText p, " = ", toText e, " in ", toText b]
   toText (MkExprBlock es) = "{" <> T.concat [T.intercalate "; " (map toText es)] <> "}"
   toText (MkExprRequire n vars) = T.concat ["require ", n, ": ", T.intercalate ", " (toList vars)]
-  toText (MkExprLoc e _) = toText e
+  toText (MkExprLoc e (start, end)) = "((" <> toText start <> "-" <> toText end <> ") " <> toText e <> ")"
   toText (MkExprList es) = T.concat ["[", T.intercalate ", " (map toText es), "]"]
   toText (MkExprNative ann ty) = T.concat ["native ", toText ann.name, "<", T.intercalate ", " ann.value, "> ", toText ty]
   toText (MkExprMut e) = T.concat ["mut ", toText e]
@@ -203,10 +203,10 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprLiteral l == MkExprLiteral l' = l == l'
   MkExprVariable a == MkExprVariable b = a == b
   MkExprApplication e es == MkExprApplication e' es' = e == e' && es == es'
-  MkExprLambda as ret e == MkExprLambda as' ret' e' = as == as' && ret == ret' && e == e'
+  MkExprLambda as _ e == MkExprLambda as' _ e' = as == as' && e == e'
   MkExprTernary c t e == MkExprTernary c' t' e' = c == c' && t == t' && e == e'
   MkExprUpdate u e == MkExprUpdate u' e' = u == u' && e == e'
-  MkExprLet g a e b == MkExprLet g' a' e' b' = a == a' && e == e' && g == g' && b == b'
+  MkExprLet _ a e b == MkExprLet _ a' e' b' = a == a' && e == e' && b == b'
   MkExprMut e == MkExprMut e' = e == e'
   MkExprBlock es == MkExprBlock es' = es == es'
   MkExprRequire n v == MkExprRequire n' v' = n == n' && v == v'
@@ -214,22 +214,30 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprLoc e _ == e' = e == e'
   e == MkExprLoc e' _ = e == e'
   MkExprList es == MkExprList es' = es == es'
-  MkExprNative ann ty == MkExprNative ann' ty' = ann == ann' && ty == ty'
+  MkExprNative ann _ == MkExprNative ann' _ = ann == ann'
   MkExprInterface ann as == MkExprInterface ann' as' = ann == ann' && as == as'
   MkExprWhile c e == MkExprWhile c' e' = c == c' && e == e'
   MkExprIndex e e' == MkExprIndex e'' e''' = e == e'' && e' == e'''
   MkExprData ann cs == MkExprData ann' cs' = ann == ann' && cs == cs'
-  MkExprMatch e cs == MkExprMatch e' cs' = e == e' && cs == cs'
+  MkExprMatch e cs == MkExprMatch e' cs' = e == e' && all (\(p, b, _) -> any (\(p', b', _) -> p == p' && b == b') cs') cs
   MkExprPublic e == MkExprPublic e' = e == e'
+  MkExprRecordExtension e f False v == MkExprRecordExtension e' f' False v' = e == e' && f == f' && v == v'
+  MkExprRecordExtension e f True v == MkExprRecordExtension e' f' True v' = e == e' && f == f' && v == v'
+  MkExprRecordEmpty == MkExprRecordEmpty = True
+  MkExprRecordAccess e f == MkExprRecordAccess e' f' = e == e' && f == f'
+  MkExprSingleIf c t == MkExprSingleIf c' t' = c == c' && t == t'
+  MkExprBreak == MkExprBreak = True
+  MkExprContinue == MkExprContinue = True
+  MkExprReturn e == MkExprReturn e' = e == e'
   _ == _ = False
 
 instance (Eq t) => Eq (DataConstructor t) where
   MkDataVariable v == MkDataVariable v' = v == v'
-  MkDataConstructor c ts == MkDataConstructor c' ts' = c == c' && ts == ts'
+  MkDataConstructor c ts == MkDataConstructor c' ts' = c == c' && length ts == length ts'
   _ == _ = False
 
 instance (Eq (f t), Eq t) => Eq (Pattern f t) where
-  MkPatVariable n t == MkPatVariable n' t' = n == n' && t == t'
+  MkPatVariable n _ == MkPatVariable n' _ = n == n'
   MkPatConstructor n ps == MkPatConstructor n' ps' = n == n' && ps == ps'
   MkPatLiteral l == MkPatLiteral l' = l == l'
   MkPatWildcard == MkPatWildcard = True
