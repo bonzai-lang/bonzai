@@ -649,20 +649,20 @@ parseFunction = do
 
   ((_, end), expr) <- parseExpression
 
-  (args'', body') <-
+  (args'', body', _) <-
     List.foldlM
-      ( \(vars, acc) x -> case x of
-          Right a -> pure (vars <> [a], acc)
+      ( \(vars, acc, i) x -> case x of
+          Right a -> pure (vars <> [a], acc, i)
           Left (HLIR.MkPatVariable name' _) ->
-            pure (vars <> [HLIR.MkAnnotation name' Nothing], acc)
+            pure (vars <> [HLIR.MkAnnotation name' Nothing], acc, i)
           Left (HLIR.MkPatLocated p _)
             | Just name' <- getPatVar p ->
-                pure (vars <> [HLIR.MkAnnotation name' Nothing], acc)
+                pure (vars <> [HLIR.MkAnnotation name' Nothing], acc, i)
           Left p -> do
-            name' <- freshSymbol
-            pure (vars <> [HLIR.MkAnnotation name' Nothing], HLIR.MkExprMatch (HLIR.MkExprVariable (HLIR.MkAnnotation name' Nothing)) [(p, acc, Nothing)])
+            let name' = "$symbol_" <> Text.pack (show i)
+            pure (vars <> [HLIR.MkAnnotation name' Nothing], HLIR.MkExprMatch (HLIR.MkExprVariable (HLIR.MkAnnotation name' Nothing)) [(p, acc, Nothing)], i + 1)
       )
-      (mempty, expr)
+      (mempty, expr, 0 :: Int)
       args'
 
   ty <-
@@ -710,20 +710,20 @@ parseLambda = do
 
   ((_, end), body) <- parseExpression
 
-  (args'', body') <-
+  (args'', body', _) <-
     List.foldlM
-      ( \(vars, acc) x -> case x of
-          Right a -> pure (vars <> [a], acc)
+      ( \(vars, acc, i) x -> case x of
+          Right a -> pure (vars <> [a], acc, i)
           Left (HLIR.MkPatVariable name _) ->
-            pure (vars <> [HLIR.MkAnnotation name Nothing], acc)
+            pure (vars <> [HLIR.MkAnnotation name Nothing], acc, i)
           Left (HLIR.MkPatLocated p _)
             | Just name <- getPatVar p ->
-                pure (vars <> [HLIR.MkAnnotation name Nothing], acc)
+                pure (vars <> [HLIR.MkAnnotation name Nothing], acc, i)
           Left p -> do
-            name <- freshSymbol
-            pure (vars <> [HLIR.MkAnnotation name Nothing], HLIR.MkExprMatch (HLIR.MkExprVariable (HLIR.MkAnnotation name Nothing)) [(p, acc, Nothing)])
+            let name = "$symbol_" <> Text.pack (show i)
+            pure (vars <> [HLIR.MkAnnotation name Nothing], HLIR.MkExprMatch (HLIR.MkExprVariable (HLIR.MkAnnotation name Nothing)) [(p, acc, Nothing)], i + 1)
       )
-      (mempty, body)
+      (mempty, body, 0 :: Int)
       args'
 
   ty <-
@@ -947,14 +947,6 @@ parseExpression = Lex.locateWith <$> P.makeExprParser parseTerm table
           P.InfixR $ Lex.symbol "<<=" >> pure (makeOperator "<<="),
           P.InfixR $ Lex.symbol ">>=" >> pure (makeOperator ">>=")
         ],
-        -- Niveau 4: Addition et soustraction
-        [ P.InfixL $ do
-            void $ Lex.symbol "+"
-            pure $ makeOperator "+",
-          P.InfixL $ do
-            void $ Lex.symbol "-"
-            pure $ makeOperator "-"
-        ],
         -- Niveau 5: Multiplication et division
         [ P.InfixL $ do
             void $ Lex.symbol "*"
@@ -962,6 +954,14 @@ parseExpression = Lex.locateWith <$> P.makeExprParser parseTerm table
           P.InfixL $ do
             void $ Lex.symbol "/"
             pure $ makeOperator "/"
+        ],
+                -- Niveau 4: Addition et soustraction
+        [ P.InfixL $ do
+            void $ Lex.symbol "+"
+            pure $ makeOperator "+",
+          P.InfixL $ do
+            void $ Lex.symbol "-"
+            pure $ makeOperator "-"
         ],
         [ P.InfixN $ do
             void $ Lex.symbol "=="
