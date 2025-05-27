@@ -149,7 +149,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprLet _ (Right p) e b) = T.concat ["let ", toText p, " = ", toText e, " in ", toText b]
   toText (MkExprBlock es) = "{" <> T.concat [T.intercalate "; " (map toText es)] <> "}"
   toText (MkExprRequire n vars) = T.concat ["require ", n, ": ", T.intercalate ", " (toList vars)]
-  toText (MkExprLoc e (start, end)) = "((" <> toText start <> "-" <> toText end <> ") " <> toText e <> ")"
+  toText (MkExprLoc e _) = toText e
   toText (MkExprList es) = T.concat ["[", T.intercalate ", " (map toText es), "]"]
   toText (MkExprNative ann ty) = T.concat ["native ", toText ann.name, "<", T.intercalate ", " ann.value, "> ", toText ty]
   toText (MkExprMut e) = T.concat ["mut ", toText e]
