@@ -1,5 +1,5 @@
 require "b"
 
-extern fn print<A>(x: A)
+extern fn print<A>(x: A): unit
 
 print(x)

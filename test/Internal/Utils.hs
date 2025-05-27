@@ -7,9 +7,16 @@ import System.FilePath (takeFileName, takeDirectory)
 import Language.Bonzai.Frontend.Module.Conversion (moduleState, ModuleState (MkModuleState), resolve, resultState, removeRequires)
 import Control.Monad.Result (Error)
 import Language.Bonzai.Frontend.Typechecking.Monad (CheckerState(MkCheckerState))
-import Language.Bonzai.Frontend.Typechecking.Checker (typecheck)
+import Language.Bonzai.Frontend.Typechecking.Checker (synthesize)
 import qualified Language.Bonzai.Frontend.Typechecking.Monad as M
 import qualified Data.Map as Map
+
+shouldBeRight' :: (Show b) => Either b (c, HLIR.HLIR "expression") -> HLIR.HLIR "expression" -> Expectation
+shouldBeRight' (Right (_, y)) z = 
+  if removeLocation y == removeLocation z
+  then pure ()
+  else expectationFailure $ "Expected " <> show (removeLocation z) <> ",\nbut got  " <> show (removeLocation y)
+shouldBeRight' (Left x) _ = expectationFailure $ "Expected Right, but got Left: " <> show x
 
 shouldBeRight :: (Show a, Eq a, Show b) => Either b a -> a -> Expectation
 shouldBeRight (Right x) y = x `shouldBe` y
@@ -20,13 +27,10 @@ shouldBeError (Left _) = pure ()
 shouldBeError (Right x) = expectationFailure $ "Expected Left, but got Right " <> show x
 
 ifThenElse :: HLIR.HLIR "expression" -> HLIR.HLIR "expression" -> HLIR.HLIR "expression" -> HLIR.HLIR "expression"
-ifThenElse c t e = HLIR.MkExprTernary c t e Nothing
-
-on :: Text -> [Text] -> HLIR.HLIR "expression" -> HLIR.HLIR "expression"
-on name args = HLIR.MkExprOn name (map (`HLIR.MkAnnotation` Nothing) args)
+ifThenElse = HLIR.MkExprTernary 
 
 function :: Text -> [Text] -> HLIR.HLIR "expression" -> HLIR.HLIR "expression"
-function name args body = HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing) (HLIR.MkExprLambda (map (`HLIR.MkAnnotation` Nothing) args) Nothing body)
+function name args body = HLIR.MkExprLet mempty (Left (HLIR.MkAnnotation name Nothing)) (HLIR.MkExprLambda (map (`HLIR.MkAnnotation` Nothing) args) Nothing body) (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
 
 var :: Text -> HLIR.HLIR "expression"
 var = HLIR.MkExprVariable . (`HLIR.MkAnnotation` Nothing)
@@ -39,12 +43,6 @@ int = HLIR.MkExprLiteral . HLIR.MkLitInt
 
 bool :: Bool -> HLIR.HLIR "expression"
 bool b = HLIR.MkExprLiteral (HLIR.MkLitBool b)
-
-anonActor :: Text -> [HLIR.HLIR "expression"] -> HLIR.HLIR "expression"
-anonActor = HLIR.MkExprActor . HLIR.MkTyId
-
-actor :: Text -> Text -> [HLIR.HLIR "expression"] -> HLIR.HLIR "expression"
-actor name arg body = HLIR.MkExprLet mempty (HLIR.MkAnnotation name Nothing) (HLIR.MkExprActor (HLIR.MkTyId arg) body)
 
 fromFile :: FilePath -> IO [HLIR.HLIR "expression"]
 fromFile path = do
@@ -92,8 +90,8 @@ runTypechecking'
   -> Map Text (Map Text HLIR.Type)
   -> IO (Either Error HLIR.Type)
 runTypechecking' ast vars interfaces = do
-  let st = MkCheckerState vars (Map.mapKeys (,[]) interfaces) mempty mempty
-  res <- M.with M.checkerState (const st) $ runExceptT $ traverse typecheck [ast]
+  let st = MkCheckerState vars (Map.mapKeys (,[]) interfaces) mempty mempty Nothing
+  res <- M.with M.checkerState (const st) $ runExceptT $ traverse synthesize [ast]
   
   case res of
     Left err -> pure $ Left err
@@ -102,29 +100,39 @@ runTypechecking' ast vars interfaces = do
 
 removeLocation :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
 removeLocation (HLIR.MkExprLoc e _) = removeLocation e
-removeLocation (HLIR.MkExprBlock es t) = HLIR.MkExprBlock (map removeLocation es) t
-removeLocation (HLIR.MkExprLet ann e1 e2) = HLIR.MkExprLet ann e1 (removeLocation e2)
+removeLocation (HLIR.MkExprBlock es) = HLIR.MkExprBlock (map removeLocation es)
+removeLocation (HLIR.MkExprLet g ann e1 e2) = HLIR.MkExprLet g ann (removeLocation e1) (removeLocation e2)
 removeLocation (HLIR.MkExprLambda ann e1 e2) = HLIR.MkExprLambda ann e1 (removeLocation e2)
-removeLocation (HLIR.MkExprTernary e1 e2 e3 t) = HLIR.MkExprTernary (removeLocation e1) (removeLocation e2) (removeLocation e3) t
+removeLocation (HLIR.MkExprTernary e1 e2 e3) = HLIR.MkExprTernary (removeLocation e1) (removeLocation e2) (removeLocation e3)
 removeLocation (HLIR.MkExprUpdate ann e) = HLIR.MkExprUpdate ann (removeLocation e)
-removeLocation (HLIR.MkExprActor ann es) = HLIR.MkExprActor ann (map removeLocation es)
-removeLocation (HLIR.MkExprOn n ann e) = HLIR.MkExprOn n ann (removeLocation e)
-removeLocation (HLIR.MkExprSend e n es t) = HLIR.MkExprSend (removeLocation e) n (map removeLocation es) t
-removeLocation (HLIR.MkExprSpawn e) = HLIR.MkExprSpawn (removeLocation e)
 removeLocation (HLIR.MkExprList es) = HLIR.MkExprList $ map removeLocation es
-removeLocation (HLIR.MkExprMut e ty) = HLIR.MkExprMut (removeLocation e) ty
+removeLocation (HLIR.MkExprMut e) = HLIR.MkExprMut (removeLocation e)
 removeLocation (HLIR.MkExprWhile e1 e2) = HLIR.MkExprWhile (removeLocation e1) (removeLocation e2)
 removeLocation (HLIR.MkExprIndex e1 e2) = HLIR.MkExprIndex (removeLocation e1) (removeLocation e2)
-removeLocation (HLIR.MkExprMatch e t cs t') = HLIR.MkExprMatch (removeLocation e) t (map (\(p, b, pos) -> (p, removeLocation b, pos)) cs) t'
-removeLocation (HLIR.MkExprRequire _ _) = HLIR.MkExprLiteral $ HLIR.MkLitInt 0
-removeLocation (HLIR.MkExprApplication f args t) = HLIR.MkExprApplication (removeLocation f) (map removeLocation args) t
+removeLocation (HLIR.MkExprMatch e cs) = HLIR.MkExprMatch (removeLocation e) (map (\(p, b, _) -> (removeLocationPattern p, removeLocation b, Nothing)) cs)
+removeLocation (HLIR.MkExprRequire path vars) = HLIR.MkExprRequire path vars
+removeLocation (HLIR.MkExprApplication f args) = HLIR.MkExprApplication (removeLocation f) (map removeLocation args) 
 removeLocation l@(HLIR.MkExprLiteral {}) = l
 removeLocation v@(HLIR.MkExprVariable {}) = v
 removeLocation n@(HLIR.MkExprNative {}) = n
 removeLocation i@(HLIR.MkExprInterface {}) = i
 removeLocation d@(HLIR.MkExprData {}) = d
-removeLocation (HLIR.MkExprLive ann e) = HLIR.MkExprLive ann (removeLocation e)
-removeLocation (HLIR.MkExprUnwrapLive e t) = HLIR.MkExprUnwrapLive (removeLocation e) t
-removeLocation (HLIR.MkExprWrapLive e t) = HLIR.MkExprWrapLive (removeLocation e) t
 removeLocation (HLIR.MkExprPublic e) = HLIR.MkExprPublic (removeLocation e)
-removeLocation (HLIR.MkExprTryCatch e n e') = HLIR.MkExprTryCatch (removeLocation e) n (removeLocation e')
+removeLocation (HLIR.MkExprRecordExtension r k opt v) = HLIR.MkExprRecordExtension (removeLocation r) k opt (removeLocation v)
+removeLocation (HLIR.MkExprRecordAccess e f) = HLIR.MkExprRecordAccess (removeLocation e) f
+removeLocation HLIR.MkExprRecordEmpty = HLIR.MkExprRecordEmpty
+removeLocation (HLIR.MkExprSingleIf c e) = HLIR.MkExprSingleIf (removeLocation c) (removeLocation e)
+removeLocation (HLIR.MkExprReturn e) = HLIR.MkExprReturn (removeLocation e)
+removeLocation HLIR.MkExprBreak = HLIR.MkExprBreak
+removeLocation HLIR.MkExprContinue = HLIR.MkExprContinue
+
+removeLocationPattern :: HLIR.HLIR "pattern" -> HLIR.HLIR "pattern"
+removeLocationPattern (HLIR.MkPatVariable a t) = HLIR.MkPatVariable a t
+removeLocationPattern (HLIR.MkPatLiteral a) = HLIR.MkPatLiteral a
+removeLocationPattern (HLIR.MkPatConstructor a b) = HLIR.MkPatConstructor a (map removeLocationPattern b)
+removeLocationPattern (HLIR.MkPatList a b t) = HLIR.MkPatList (map removeLocationPattern a) (removeLocationPattern <$> b) t
+removeLocationPattern HLIR.MkPatWildcard = HLIR.MkPatWildcard
+removeLocationPattern (HLIR.MkPatSpecial a) = HLIR.MkPatSpecial a
+removeLocationPattern (HLIR.MkPatCondition a b) = HLIR.MkPatCondition (removeLocation a) (removeLocationPattern b)
+removeLocationPattern (HLIR.MkPatLocated p _) = removeLocationPattern p
+removeLocationPattern (HLIR.MkPatOr a b) = HLIR.MkPatOr (removeLocationPattern a) (removeLocationPattern b)
