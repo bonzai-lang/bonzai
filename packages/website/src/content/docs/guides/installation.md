@@ -1,44 +1,87 @@
 ---
-title: Installation
-description: Build locally Bonzai and start beginning your first project with it.
-sidebar:
-  order: 0
+title: Installing Bonzai
+description: Follow the instructions to install Bonzai on your computer.
 ---
 
-To get started with Bonzai, you first need to install it. At the time of writing, Bonzai is only available by cloning the repository and running it locally.
+Installing Bonzai results in two options: 
+- Installing the latest release version (could contain missing features)
+- Installing the latest development version (could contain bugs)
 
-**Note:** Bonzai is still in development and is not yet available as a stable release. If you encounter any issues, please report them on the [GitHub repository](https://github.com/thomasvergne/bonzai). Furthermore, the language might be only available for **suitable Unix-based systems**.
+> **Note:** Bonzai is not currently available on Windows. We plan to support Windows in the future, but for now, you can use Bonzai on macOS and Linux.
 
-## Dependencies
+## Installing the latest release version
 
-Before you can install Bonzai, you need to have the following dependencies installed:
+To install the latest release version of Bonzai:
 
-- **Python 3** in order to run the build script that builds the programming language automatically.
-- **Haskell** with GHC 2021
-- **XMake** with a suitable version of the C compiler
-
-## Installation
-
-To install Bonzai, follow these steps:
-
-1. Clone the repository:
+1. You may fetch it from the [releases page](https://github.com/bonzai-lang/bonzai/releases).
+2. Download the appropriate binary for your operating system.
+3. Extract the binary from the downloaded archive.
+4. Move the folder into a directory that will be added to your `PATH` environment variable.
+5. Edit your shell configuration file (e.g., `.bashrc`, `.zshrc`, etc.) to include the directory where you placed the Bonzai binary:
 
     ```bash
-    git clone https://github.com/thomasvergne/bonzai
+    export BONZAI_PATH="/path/to/bonzai"
+    export PATH="$BONZAI_PATH/bin:$PATH"
+    ```
+6. Reload your shell configuration file:
+
+    ```bash
+    source ~/.bashrc  # or source ~/.zshrc
+    ```
+
+7. Verify the installation by running:
+
+    ```bash
+    bonzai # should throw an error
+    ```
+
+## Installing the latest development version
+
+To install the latest development version of Bonzai, you will need to have [Haskell](https://www.haskell.org/downloads/) and [Cabal](https://www.haskell.org/cabal/) installed on your system. Once you have those installed, follow these steps:
+1. Clone the Bonzai repository:
+
+    ```bash
+    git clone https://github.com/bonzai-lang/bonzai.git
+    ```
+
+2. Navigate to the cloned directory:
+
+    ```bash
     cd bonzai
     ```
 
-2. Run the build script
+3. Build the project using Cabal:
 
     ```bash
-    python3 scripts/build.py
+    python scripts/build.py
     ```
 
-3. Export the Bonzai binary path to your PATH and the Bonzai folder path to BONZAI_PATH
-  
+4. After the build is complete, you can install Bonzai by editing your shell configuration file (e.g., `.bashrc`, `.zshrc`, etc.) to include the directory where you placed the Bonzai binary:
+
     ```bash
     export BONZAI_PATH="/path/to/bonzai"
-    export PATH="/path/to/bonzai/bin:$PATH"
-    ``` 
+    export PATH="$BONZAI_PATH/bin:$PATH"
+    ```
 
-4. You're all set! You can now run Bonzai by typing `bonzaic` in your terminal.
+5. Reload your shell configuration file:
+
+    ```bash
+    source ~/.bashrc  # or source ~/.zshrc
+    ```
+
+6. Verify the installation by running:
+
+    ```bash
+    bonzai # should throw an error
+    ```
+
+
+## Troubleshooting
+
+If you encounter any issues during the installation process, here are some common troubleshooting steps:
+- Ensure that you have the correct permissions to execute the Bonzai binary.
+- Make sure that the directory where you placed the Bonzai binary is included in your `PATH` environment variable.
+- If you are using a shell other than Bash or Zsh, make sure to edit the appropriate shell configuration file.
+- If you are using the development version, ensure that you have the required dependencies installed and that you have built the project successfully.
+
+If you continue to experience issues, please post an issue on the [Bonzai GitHub repository](https://github.com/bonzai-lang/bonzai/issues).
