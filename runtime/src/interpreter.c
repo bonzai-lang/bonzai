@@ -700,6 +700,6 @@ case_jump: {
 }
 
 case_unknown:
-  printf("Unknown opcode: %d\n", op);
+  THROW_FMT(module, "Unknown opcode %d", op);
   exit(1);
 }
