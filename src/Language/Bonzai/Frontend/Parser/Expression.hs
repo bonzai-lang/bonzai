@@ -878,27 +878,14 @@ makeOperator op ((start, _), a) ((_, end), b) =
       a
       b
   )
-
 parseExpression :: (MonadIO m) => P.Parser m (HLIR.Position, HLIR.HLIR "expression")
 parseExpression = Lex.locateWith <$> P.makeExprParser parseTerm table
   where
     table =
-      [ [ P.InfixN $ Lex.symbol "+=" >> pure (makeOperator "+="),
-          P.InfixN $ Lex.symbol "-=" >> pure (makeOperator "-="),
-          P.InfixN $ Lex.symbol "*=" >> pure (makeOperator "*="),
-          P.InfixN $ Lex.symbol "/=" >> pure (makeOperator "/="),
-          P.InfixN $ Lex.symbol "%=" >> pure (makeOperator "%="),
-          P.InfixN $ Lex.symbol "&=" >> pure (makeOperator "&="),
-          P.InfixN $ Lex.symbol "|=" >> pure (makeOperator "|="),
-          P.InfixN $ Lex.symbol "^=" >> pure (makeOperator "^="),
-          P.InfixN $ Lex.symbol "<<=" >> pure (makeOperator "<<="),
-          P.InfixN $ Lex.symbol ">>=" >> pure (makeOperator ">>=")
-        ],
-        [ P.Postfix . Lex.makeUnaryOp $ do
-            ((_, end), field) <- P.string "->" *> Lex.nonLexedID <* Lex.scn
-            pure $ \((start, _), e) -> ((start, end), HLIR.MkExprRecordAccess e field)
-        ],
-        [ P.Postfix . Lex.makeUnaryOp $ do
+      [
+        -- Niveau 10: Toutes les opérations postfixes (accès, appels) - précédence la plus élevée
+        [ -- Essayer d'abord l'appel de fonction avec parenthèses
+          P.Postfix . Lex.makeUnaryOp $ do
             let labelledArgument = do
                   (_, name) <- Lex.identifier
                   void $ Lex.symbol ":"
@@ -909,12 +896,13 @@ parseExpression = Lex.locateWith <$> P.makeExprParser parseTerm table
 
             let labelledArgs = rights args
                 positionalArgs = lefts args
-
             let label = List.foldl (\acc (name, expr) -> HLIR.MkExprRecordExtension acc name False (some' expr)) HLIR.MkExprRecordEmpty labelledArgs
 
             pure $ \((start, _), e) -> ((start, end), HLIR.MkExprApplication e (positionalArgs ++ [label]))
         ],
-        [ P.Postfix . Lex.makeUnaryOp $ do
+        [
+          -- Ensuite l'appel de méthode avec point (qui peut inclure des parenthèses)
+          P.Postfix . Lex.makeUnaryOp $ do
             let labelledArgument = do
                   (_, name) <- Lex.identifier
                   void $ Lex.symbol ":"
@@ -924,38 +912,56 @@ parseExpression = Lex.locateWith <$> P.makeExprParser parseTerm table
             ((_, end'), field) <- P.char '.' *> Lex.nonLexedID <* Lex.scn
             (end, args) <- P.option (end', []) $ do
               ((_, end), args) <- Lex.parens (P.sepBy (P.try labelledArgument <|> Left . snd <$> parseExpression) Lex.comma)
-
               pure (end, args)
 
             let labelledArgs = rights args
                 positionalArgs = lefts args
-
             let label = List.foldl (\acc (name, expr) -> HLIR.MkExprRecordExtension acc name False (some' expr)) HLIR.MkExprRecordEmpty labelledArgs
-
             let var = HLIR.MkExprVariable (HLIR.MkAnnotation field Nothing)
 
             pure $ \((start, _), e) -> ((start, end), HLIR.MkExprApplication var (e : positionalArgs ++ [label]))
         ],
-        [ P.Postfix . Lex.makeUnaryOp $ do
+        [
+          -- Indexation avec crochets
+          P.Postfix . Lex.makeUnaryOp $ do
             void $ Lex.symbol "["
             (_, idx) <- parseExpression
             ((_, end), _) <- Lex.symbol "]"
-
             pure $ \((start, _), e) -> ((start, end), HLIR.MkExprIndex e idx)
         ],
-        [ P.InfixL $ do
-            void $ Lex.symbol "*"
-            pure $ makeOperator "*",
-          P.InfixL $ do
-            void $ Lex.symbol "/"
-            pure $ makeOperator "/"
+        [
+          -- Accès aux champs de record avec ->
+          P.Postfix . Lex.makeUnaryOp $ do
+            ((_, end), field) <- P.string "->" *> Lex.nonLexedID <* Lex.scn
+            pure $ \((start, _), e) -> ((start, end), HLIR.MkExprRecordAccess e field)
         ],
+        -- Niveau 6: Opérateurs d'assignement (associativité droite)
+        [ P.InfixR $ Lex.symbol "+=" >> pure (makeOperator "+="),
+          P.InfixR $ Lex.symbol "-=" >> pure (makeOperator "-="),
+          P.InfixR $ Lex.symbol "*=" >> pure (makeOperator "*="),
+          P.InfixR $ Lex.symbol "/=" >> pure (makeOperator "/="),
+          P.InfixR $ Lex.symbol "%=" >> pure (makeOperator "%="),
+          P.InfixR $ Lex.symbol "&=" >> pure (makeOperator "&="),
+          P.InfixR $ Lex.symbol "|=" >> pure (makeOperator "|="),
+          P.InfixR $ Lex.symbol "^=" >> pure (makeOperator "^="),
+          P.InfixR $ Lex.symbol "<<=" >> pure (makeOperator "<<="),
+          P.InfixR $ Lex.symbol ">>=" >> pure (makeOperator ">>=")
+        ],
+        -- Niveau 4: Addition et soustraction
         [ P.InfixL $ do
             void $ Lex.symbol "+"
             pure $ makeOperator "+",
           P.InfixL $ do
             void $ Lex.symbol "-"
             pure $ makeOperator "-"
+        ],
+        -- Niveau 5: Multiplication et division
+        [ P.InfixL $ do
+            void $ Lex.symbol "*"
+            pure $ makeOperator "*",
+          P.InfixL $ do
+            void $ Lex.symbol "/"
+            pure $ makeOperator "/"
         ],
         [ P.InfixN $ do
             void $ Lex.symbol "=="
@@ -964,6 +970,7 @@ parseExpression = Lex.locateWith <$> P.makeExprParser parseTerm table
             void $ Lex.symbol "!="
             pure $ makeOperator "!="
         ],
+        -- Niveau 3: Opérateurs relationnels (non-associatifs)
         [ P.InfixN $ do
             void $ Lex.symbol ">="
             pure $ makeOperator ">=",
@@ -978,28 +985,32 @@ parseExpression = Lex.locateWith <$> P.makeExprParser parseTerm table
             pure $ makeOperator "<"
         ],
         [ P.InfixL $ do
-            void $ Lex.symbol "&&"
-            pure $ makeOperator "&&",
-          P.InfixL $ do
             void $ Lex.symbol "||"
             pure $ makeOperator "||"
         ],
-        [ P.Prefix . Lex.makeUnaryOp $ do
-            ((start, _), _) <- Lex.symbol "!"
-            pure $ \((_, end), a) -> ((start, end), HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "!" Nothing)) [a, HLIR.MkExprRecordEmpty])
+        -- Niveau 1: AND logique (&&)
+        [ P.InfixL $ do
+            void $ Lex.symbol "&&"
+            pure $ makeOperator "&&"
         ],
+        -- Niveau 7: Opérateurs personnalisés définis par l'utilisateur
         [ P.InfixL $ do
             (_, op) <- Lex.operator
             pure $ makeOperator op
         ],
+        -- Niveau 8: Opérateurs personnalisés avec syntaxe :name:
         [ P.InfixL $ do
             Lex.scn
             void $ P.char ':'
             (_, name) <- Lex.nonLexedID
             void $ P.char ':'
             Lex.scn
-
             pure $ makeOperator name
+        ],
+        -- Niveau 9: Opérateurs unaires préfixes
+        [ P.Prefix . Lex.makeUnaryOp $ do
+            ((start, _), _) <- Lex.symbol "!"
+            pure $ \((_, end), a) -> ((start, end), HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "!" Nothing)) [a, HLIR.MkExprRecordEmpty])
         ]
       ]
 
