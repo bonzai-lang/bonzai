@@ -15,13 +15,13 @@ fn Actor::create<A>(events: list<(string, fn(A): bool)>): (Queue<(string, A)>, T
       let x = queue_dequeue(q, running)
 
       match x {
-        case Some((event, data)) => match List::lookup(event, events) {
+        case Some(Tuple(event, data)) => match List::lookup(event, events) {
           case Some(fun) => {
             running = fun(data)
           }
 
           case None => {
-            print("Unknown event: $event")
+            break
           }
         }
 
@@ -35,13 +35,17 @@ fn Actor::create<A>(events: list<(string, fn(A): bool)>): (Queue<(string, A)>, T
   (q, thread)
 }
 
-fn Actor::send<A>(act: (Queue<(string, A)>, Thread<unit>), event: string, data: A): unit => {
-  let (q, _) = act
+fn Actor::send<A>(
+    act: (Queue<(string, A)>, Thread<unit>),
+    event: string,
+    data: A
+): unit => {
+  let Tuple(q, _) = act
   queue_enqueue(q, (event, data))
 }
 
 fn Actor::wait<A>(act: (Queue<(string, A)>, Thread<unit>)): unit => {
-  let (_, thread) = act
+  let Tuple(_, thread) = act
   thread.wait()
 }
 
@@ -54,15 +58,15 @@ type Message {
 let act = Actor::create([
   ("Say", fn(Say(msg)) => {
     print("Message: $msg")
-    return true
+    true
   }),
   ("Exit", fn(Exit) => {
     print("Exiting...")
-    return false
+    false
   }),
   ("Welcome", fn(Welcome(user)) => {
     print("Welcome, $user!")
-    return true
+    true
   })
 ])
 
