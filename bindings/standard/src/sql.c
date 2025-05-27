@@ -2,6 +2,7 @@
 #include <libpq-fe.h>
 #include <error.h>
 #include <values.h>
+void psql_destructor(Module* module, HeapValue* value);
 
 Value psql_connect(Module* module, Value* args, int argc) {
   ASSERT_ARGC(module, "connect", argc, 1);
@@ -18,9 +19,19 @@ Value psql_connect(Module* module, Value* args, int argc) {
 
   HeapValue* conn_value = allocate(module, TYPE_API);
   conn_value->as_any = conn;
-
+  conn_value->destructor = psql_destructor;
 
   return throwable_ok(module, MAKE_PTR(conn_value));
+}
+
+void psql_destructor(Module* module, HeapValue* value) {
+  (void) module; // Unused parameter
+
+  if (value->type == TYPE_API && value->as_any != NULL) {
+    PGconn* conn = value->as_any;
+    PQfinish(conn);
+    value->as_any = NULL;
+  }
 }
 
 Value psql_query(Module* module, Value* args, int argc) {
