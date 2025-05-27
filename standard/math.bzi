@@ -1,5 +1,4 @@
 require "std:datatypes/unit"
-require "std:datatypes/optional"
 
 extern fn mul_value<A>(x: A, y: A): A
 extern fn add_value<A>(x: A, y: A): A

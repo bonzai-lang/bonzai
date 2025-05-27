@@ -30,7 +30,7 @@ pub fn String::map(s: string, f: fn(char): char): string => {
 
   while i.value < sLength {
     let c = getIndexChar(s, i.value)
-    str += (f(c).toString())
+    str += f(c).toString()
     i += 1
   }
 
