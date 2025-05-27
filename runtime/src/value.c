@@ -222,6 +222,8 @@ void* gc_thread(void* data) {
     if (atomic_load(&gc_is_requested) && are_all_threads_stopped(vm) &&
         vm->gc->gc_enabled) {
       gc(vm);
+    } else {
+      usleep(1000);
     }
   }
 
@@ -741,21 +743,6 @@ void gc_old(Module* mod) {
       mod->gc->old.num_objects--;
     }
   }
-}
-
-__attribute__((__always_inline__)) inline void safe_point(Module* mod) {
-  if (atomic_load(&gc_is_requested)) {
-    atomic_store(&mod->stack->is_stopped, true);
-  }
-
-  while (atomic_load(&gc_is_requested)) {
-    if (atomic_load(&mod->stack->is_halted)) {
-      atomic_store(&mod->stack->is_stopped, false);
-      break;
-    }
-  }
-
-  atomic_store(&mod->stack->is_stopped, false);
 }
 
 void writeBarrier(Module* mod, HeapValue* parent, Value child) {

@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 typedef uint64_t Value;
 
@@ -342,7 +343,39 @@ inline static char* type_to_str(ValueType t) {
   }
 }
 
-void safe_point(struct Module* mod);
+// __attribute__((__always_inline__)) inline void safe_point(Module* mod) {
+//   if (atomic_load(&gc_is_requested)) {
+//     atomic_store(&mod->stack->is_stopped, true);
+//   }
+
+//   while (atomic_load(&gc_is_requested)) {
+//     if (atomic_load(&mod->stack->is_halted)) {
+//       atomic_store(&mod->stack->is_stopped, false);
+//       break;
+//     }
+//   }
+
+//   atomic_store(&mod->stack->is_stopped, false);
+// }
+
+// void safe_point(struct Module* mod);
+
+#define safe_point(mod) \
+  do { \
+    if (atomic_load(&gc_is_requested)) { \
+      atomic_store(&mod->stack->is_stopped, true); \
+    } \
+    while (atomic_load(&gc_is_requested)) { \
+      if (atomic_load(&mod->stack->is_halted)) { \
+        atomic_store(&mod->stack->is_stopped, false); \
+        break; \
+      } else {\
+        usleep(1000); \
+      } \
+    } \
+    atomic_store(&mod->stack->is_stopped, false); \
+  } while (0)
+
 void stop_the_world(struct Module* mod, bool stop);
 void writeBarrier(struct Module* mod, HeapValue* parent, Value child);
 
