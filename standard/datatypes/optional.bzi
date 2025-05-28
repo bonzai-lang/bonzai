@@ -5,6 +5,22 @@ pub type Optional<A> {
   None
 }
 
+pub fn Optional::isNone<A>(x: Optional<A>): bool => {
+  match x {
+    case Some(_) => false
+    case None => true
+  }
+}
+
+pub fn Optional::isSome<A>(x: Optional<A>): bool => {
+  match x {
+    case Some(_) => true
+    case None => false
+  }
+}
+
+pub let { Some, None } = Optional
+
 pub fn Optional::or<A>(x: Optional<A>, y: Optional<A>): Optional<A> => {
   match x {
     case Some(value) => Some(value)

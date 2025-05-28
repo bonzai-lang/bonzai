@@ -7,6 +7,8 @@ pub type Tuple<A, B> {
   Tuple(x: A, y: B)
 }
 
+pub let { Tuple: test } = Tuple
+
 pub fn Tuple::first(self) => 
   match self {
     case Tuple(x, _) => x
@@ -19,20 +21,20 @@ pub fn Tuple::second(self) =>
 
 pub fn Tuple::mapFirst<A, B, C>(self, f: fn(A): B) =>
   match self {
-    case Tuple(x, y) => Tuple(f(x), y)
+    case Tuple(x, y) => (f(x), y)
   }
 
 pub fn Tuple::mapSecond<A, B, C>(self, f: fn(B): C) =>
   match self {
-    case Tuple(x, y) => Tuple(x, f(y))
+    case Tuple(x, y) => (x, f(y))
   }
 
 pub fn Tuple::map<A, B, C, D>(self, f: fn(A): B, g: fn(C): D) =>
   match self {
-    case Tuple(x, y) => Tuple(f(x), g(y))
+    case Tuple(x, y) => (f(x), g(y))
   }
 
 pub fn Tuple::swap<A, B>(self) =>
   match self {
-    case Tuple(x, y) => Tuple(y, x)
+    case Tuple(x, y) => (y, x)
   }

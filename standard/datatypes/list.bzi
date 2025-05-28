@@ -120,8 +120,8 @@ pub fn List::splitAt<A>(xs: list<A>, n: int): (list<A>, list<A>) =>
   else match xs {
     case [] => ([], [])
     case [x .. xs] => {
-      let Tuple(ys, zs) = List::splitAt(xs, n - 1)
-      Tuple([x] + ys, zs)
+      let Tuple(ys, zs) = List::splitAt(xs, n - 1);
+      ([x] + ys, zs)
     }
   }
 
@@ -130,22 +130,3 @@ pub fn List::lookup<A, B>(key: A, xs: list<(A, B)>): Optional<B> =>
     case [] => None
     case [Tuple(k, v) .. xs] => if key == k then Some(v) else List::lookup(key, xs)
   }
-
-pub type State<A> {
-  Break,
-  Continue,
-  Return(x: A)
-}
-
-pub fn List::while<A>(cond: fn(): bool, f: fn(): State<A>): State<A> => {
-  if cond() then {
-    let res = f()
-    match res {
-      case Break => Break
-      case Continue => List::while(cond, f)
-      case Return(x) => Return(x)
-    }
-  }
-
-  Break
-}

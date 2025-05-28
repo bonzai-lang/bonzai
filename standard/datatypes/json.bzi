@@ -20,16 +20,6 @@ pub type JSON {
   Null
 }
 
-pub let json = {
-  object: fn(fields: list<(string, JSON)>) => Object(fields),
-  array: fn(values: list<JSON>) => Array(values),
-  string: fn(value: string) => String(value),
-  integer: fn(value: int) => Integer(value),
-  float: fn(value: float) => Float(value),
-  boolean: fn(value: bool) => Boolean(value),
-  null: Null
-}
-
 fn jsonParser(input: list<char>): Throwable<JSON> => {
   mut i = 0
   let len = input.length
@@ -58,7 +48,7 @@ fn jsonParser(input: list<char>): Throwable<JSON> => {
       if i.value < len && input[i.value] == '"' then {
         let strValue = input.slice(start, i.value)
         i += 1 // Skip the closing quote
-        Ok(String(strValue.implode()))
+        Ok(JSON->String(strValue.implode()))
       } else {
         Error("Unterminated string at position $i")
       }
@@ -77,9 +67,9 @@ fn jsonParser(input: list<char>): Throwable<JSON> => {
     if start < i.value then {
       let numStr = input.slice(start, i.value).implode()
       if String::includes('.', numStr) then {
-        Ok(Float(numStr.toFloat()))
+        Ok(JSON->Float(numStr.toFloat()))
       } else {
-        Ok(Integer(numStr.toInt()))
+        Ok(JSON->Integer(numStr.toInt()))
       }
     } else {
       Error("Expected number at position $i")
@@ -109,7 +99,7 @@ fn jsonParser(input: list<char>): Throwable<JSON> => {
 
       if i.value < len && input[i.value] == ']' then {
         i += 1 // Skip the closing bracket
-        Ok(Array(values.value))
+        Ok(JSON->Array(values.value))
       } else {
         Error("Expected ']' at position $i")
       }
@@ -123,15 +113,15 @@ fn jsonParser(input: list<char>): Throwable<JSON> => {
       case [] => Error("Empty input")
       case ['t', 'r', 'u', 'e' .. _] => {
         i += 4 // Skip the 'true'
-        Ok(Boolean(true))
+        Ok(JSON->Boolean(true))
       }
       case ['f', 'a', 'l', 's', 'e' .. _] => {
         i += 5 // Skip the 'false'
-        Ok(Boolean(false))
+        Ok(JSON->Boolean(false))
       }
       case ['n', 'u', 'l', 'l' .. _] => { 
         i += 4 // Skip the 'null'
-        Ok(Null)
+        Ok(JSON->Null)
       }
       case ['"' .. _] => parseString(i)
       case ['{' .. _] => {
@@ -170,7 +160,7 @@ fn jsonParser(input: list<char>): Throwable<JSON> => {
 
         if i.value < len && input[i.value] == '}' then {
           i += 1 // Skip the closing brace
-          Ok(Object(fields.value))
+          Ok(JSON->Object(fields.value))
         } else {
           Error("Expected '}' at position $i")
         }
@@ -206,7 +196,7 @@ fn parseJSON(input: string): Optional<JSON> =>
 fn getJSON(input: string): JSON =>
   match parseJSON(input) {
     case Some(x) => x
-    case None => Null
+    case None => JSON->Null
   }
 
 pub fn JSON::parse(input: string): JSON => getJSON(input)

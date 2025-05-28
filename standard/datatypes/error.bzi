@@ -8,6 +8,8 @@ pub type Throwable<A> {
   Error(err: string)
 }
 
+pub let { Ok, Error } = Throwable
+
 pub fn Throwable::map<A, B>(self, f: fn(A): B): Throwable<B> =>
   match self {
     case Ok(x) => Ok(f(x))

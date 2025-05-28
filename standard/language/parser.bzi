@@ -22,8 +22,8 @@ pub type Result<A> {
 pub fn Parser::try<A>(parser: fn(list<char>): Result<A>): fn(list<char>): Result<A> =>
   fn(input) => {
     match parser(input) {
-      case ParseResult(x, rest) => ParseResult(x, rest)
-      case ParseError(msg, rest) => ParseError("Error: $msg", rest)
+      case ParseResult(x, rest) => Result->ParseResult(x, rest)
+      case ParseError(msg, rest) => Result->ParseError("Error: $msg", rest)
     }
   }
 
@@ -33,8 +33,8 @@ pub fn Parser::map<A, B>(
 ): fn(list<char>): Result<B> =>
   fn(input) => {
     match self(input) {
-      case ParseResult(x, rest) => ParseResult(f(x), rest)
-      case ParseError(msg, rest) => ParseError(msg, rest)
+      case ParseResult(x, rest) => Result->ParseResult(f(x), rest)
+      case ParseError(msg, rest) => Result->ParseError(msg, rest)
     }
   }
   
@@ -45,7 +45,7 @@ pub fn Parser::bind<A, B>(
   fn(input) => {
     match self(input) {
       case ParseResult(x, rest) => f(x)(rest)
-      case ParseError(msg, rest) => ParseError(msg, rest)
+      case ParseError(msg, rest) => Result->ParseError(msg, rest)
     }
   }
 
@@ -56,7 +56,7 @@ pub fn Parser::andThen<A, B>(
   fn(input) => {
     match self(input) {
       case ParseResult(_, rest) => other(rest)
-      case ParseError(msg, rest) => ParseError(msg, rest)
+      case ParseError(msg, rest) => Result->ParseError(msg, rest)
     }
   }
 
@@ -66,7 +66,7 @@ pub fn Parser::or<A>(
 ): fn(list<char>): Result<A> =>
   fn(input): Result<A> => {
     match self(input) {
-      case ParseResult(x, rest) => ParseResult(x, rest)
+      case ParseResult(x, rest) => Result->ParseResult(x, rest)
       case ParseError(_, _) => other(input)
     }
   }
@@ -76,7 +76,7 @@ pub fn Parser::choice<A>(
 ): fn(list<char>): Result<A> =>
   fn(input) => {
     match parsers {
-      case [] => ParseError("No parsers available", input)
+      case [] => Result->ParseError("No parsers available", input)
       case [p] => p(input)
       case [p .. ps] => Parser::or(p, Parser::choice(ps))(input)
     }
@@ -87,10 +87,10 @@ pub fn Parser::satisfy(
 ): fn(list<char>): Result<char> =>
   fn(input) => {
     match input {
-      case [] => ParseError("Unexpected end of input", input)
+      case [] => Result->ParseError("Unexpected end of input", input)
       case [c .. cs] => if pred(c) 
-        then ParseResult(c, cs) 
-        else ParseError("Unexpected character $c", input)
+        then Result->ParseResult(c, cs) 
+        else Result->ParseError("Unexpected character $c", input)
     }
   }
 
@@ -103,8 +103,8 @@ pub fn Parser::string(s: string): fn(list<char>): Result<string> =>
     let inputLen = length(input)
     let str = List::slice(input, end: len)
     if list_equals_string(str, s) 
-      then ParseResult(s, List::slice(input, start: len, end: inputLen)) 
-      else ParseError("Unexpected string $s", input)
+      then Result->ParseResult(s, List::slice(input, start: len, end: inputLen)) 
+      else Result->ParseError("Unexpected string $s", input)
   }
 
 pub fn Parser::anything(): fn(list<char>): Result<char> =>
@@ -136,7 +136,7 @@ pub fn Parser::many<A>(
       }
     }
 
-    ParseResult(acc.value, newInput.value)
+    Result->ParseResult(acc.value, newInput.value)
   }
 
 pub fn Parser::many1<A>(
@@ -147,11 +147,11 @@ pub fn Parser::many1<A>(
       case ParseResult(x, rest) => {
         let acc = [x]
         match Parser::many(parser)(rest) {
-          case ParseResult(xs, rest) => ParseResult(acc + xs, rest)
-          case ParseError(_, rest) => ParseResult(acc, rest)
+          case ParseResult(xs, rest) => Result->ParseResult(acc + xs, rest)
+          case ParseError(_, rest) => Result->ParseResult(acc, rest)
         }
       }
-      case ParseError(_, _) => ParseError("Unexpected end of input", input)
+      case ParseError(_, _) => Result->ParseError("Unexpected end of input", input)
     }
   }
 
@@ -184,7 +184,7 @@ pub fn Parser::sepBy<A, B>(
       }
     }
 
-    ParseResult(acc.value, newInput.value)
+    Result->ParseResult(acc.value, newInput.value)
   }
 
 pub fn Parser::sepBy1<A, B>(
@@ -196,11 +196,11 @@ pub fn Parser::sepBy1<A, B>(
       case ParseResult(x, rest) => {
         let acc = [x]
         match Parser::sepBy(parser, sep)(rest) {
-          case ParseResult(xs, rest) => ParseResult(acc + xs, rest)
-          case ParseError(_, rest) => ParseResult(acc, rest)
+          case ParseResult(xs, rest) => Result->ParseResult(acc + xs, rest)
+          case ParseError(_, rest) => Result->ParseResult(acc, rest)
         }
       }
-      case ParseError(_, _) => ParseError("Unexpected end of input", input)
+      case ParseError(_, _) => Result->ParseError("Unexpected end of input", input)
     }
   }
 
@@ -209,7 +209,7 @@ pub fn Parser::between<A, B, C>(
   close: fn(list<char>): Result<C>,
   parser: fn(list<char>): Result<B>
 ): fn(list<char>): Result<B> =>
-  Parser::andThen(open, Parser::bind(parser, fn(x) => Parser::andThen(close, fn(input) => ParseResult(x, input))))
+  Parser::andThen(open, Parser::bind(parser, fn(x) => Parser::andThen(close, fn(input) => Result->ParseResult(x, input))))
 
 pub fn Parser::right<A, B>(
   parser: fn(list<char>): Result<A>,
@@ -221,7 +221,7 @@ pub fn Parser::left<A, B>(
   parser: fn(list<char>): Result<A>,
   f: fn(list<char>): Result<B>
 ): fn(list<char>): Result<A> =>
-  Parser::bind(parser, fn(x) => Parser::andThen(f, fn(input) => ParseResult(x, input)))
+  Parser::bind(parser, fn(x) => Parser::andThen(f, fn(input) => Result->ParseResult(x, input)))
 
 pub fn Parser::manyTill<A, B>(
   parser: fn(list<char>): Result<A>,
@@ -230,11 +230,11 @@ pub fn Parser::manyTill<A, B>(
   fn(input) => {
     fn loop(input, acc: list<A>): Result<list<A>> => {
       match end(input) {
-        case ParseResult(_, rest) => ParseResult(acc, rest)
+        case ParseResult(_, rest) => Result->ParseResult(acc, rest)
         case ParseError(_, _) => {
           match parser(input) {
             case ParseResult(x, rest) => loop(rest, acc + [x])
-            case ParseError(_, _) => ParseError("Unexpected end of input", input)
+            case ParseError(_, _) => Result->ParseError("Unexpected end of input", input)
           }
         }
       }
@@ -248,11 +248,11 @@ pub fn Parser::manyN<A>(
 ): fn(list<char>): Result<list<A>> =>
   fn(input) => {
     fn loop(input, acc: list<A>, n: int): Result<list<A>> => {
-      if n == 0 then ParseResult(acc, input)
+      if n == 0 then Result->ParseResult(acc, input)
       else {
         match parser(input) {
           case ParseResult(x, rest) => loop(rest, acc + [x], n - 1)
-          case ParseError(_, _) => ParseResult(acc, input)
+          case ParseError(_, _) => Result->ParseResult(acc, input)
         }
       }
     }

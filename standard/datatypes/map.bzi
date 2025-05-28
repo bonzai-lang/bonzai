@@ -11,11 +11,11 @@ pub type Map<V> {
 }
 
 pub fn Map::empty<V>(): Map<V> =>
-  Map([])
+  Map->Map([])
 
 pub fn Map::insert<V>(self: Map<V>, key: string, value: V): Map<V> =>
   match self {
-    case Map(entries) => Map(entries + [Tuple(key, value)])
+    case Map(entries) => Map->Map(entries + [(key, value)])
   }
 
 pub fn Map::lookup<V>(self: Map<V>, key: string): Optional<V> =>
@@ -23,13 +23,13 @@ pub fn Map::lookup<V>(self: Map<V>, key: string): Optional<V> =>
     case Map(entries) => 
       match entries {
         case [] => None
-        case [Tuple(k, v) .. rest] => if k == key then Some(v) else Map::lookup(Map(rest), key)
+        case [Tuple(k, v) .. rest] => if k == key then Some(v) else Map::lookup(Map->Map(rest), key)
       }
   }
   
 pub fn Map::map<V, W>(self: Map<V>, f: fn(V): W): Map<W> =>
   match self {
-    case Map(entries) => Map(List::map(entries, fn (entry) => Tuple::mapSecond(entry, fn (v) => f(v))))
+    case Map(entries) => Map->Map(List::map(entries, fn (entry) => Tuple::mapSecond(entry, fn (v) => f(v))))
   }
 
 pub fn Map::foldl<V, A>(self: Map<V>, f: fn(string, V, A): A, acc: A): A =>
@@ -65,7 +65,7 @@ pub fn Map::values<V>(self: Map<V>): list<V> =>
   }
 
 pub fn Map::fromList<V>(entries: list<Tuple<string, V>>): Map<V> =>
-  Map(entries)
+  Map->Map(entries)
 
 pub fn Map::toString<V>(self: Map<V>): string =>
   match self {
