@@ -9,3 +9,22 @@ fn fib(n: int): int => {
 }
 
 print(fib(30))
+
+fn fibIter(n: int): int => {
+  if n <= 1 then {
+    return n
+  }
+
+  mut a = 0
+  mut b = 1
+
+  for _ in range(2, n) {
+    let temp = a.value + b.value
+    a = b.value
+    b = temp
+  }
+
+  return b.value
+}
+
+print(fibIter(30))
