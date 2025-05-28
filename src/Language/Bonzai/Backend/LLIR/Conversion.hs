@@ -331,6 +331,7 @@ instance Assemble MLIR.Expression where
     pure $ e' <> i' <> LLIR.instr LLIR.GetIndex
 
   assemble (MLIR.MkExprUnpack n e e') = do
+    modifyIORef' locals (Set.insert n)
     e'' <- assemble e
     e''' <- assemble e'
     pure $ e'' <> LLIR.instr (LLIR.StoreLocal n) <> e'''

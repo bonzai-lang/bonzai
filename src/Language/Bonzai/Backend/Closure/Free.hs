@@ -28,6 +28,7 @@ instance Free MLIR.Expression where
       freeBlock :: [MLIR.Expression] -> Set Text
       freeBlock [] = mempty
       freeBlock (MLIR.MkExprLet a e:es') = (free e <> freeBlock es') Set.\\ Set.singleton a
+      freeBlock (MLIR.MkExprUnpack a e b : es') = (free e <> freeBlock (b:es')) Set.\\ Set.singleton a
       freeBlock (MLIR.MkExprLoc _ e:es') = freeBlock (e : es')
       freeBlock (e:es') = free e <> freeBlock es'
   free (MLIR.MkExprList es) = free es
