@@ -4,19 +4,19 @@ require "std:datatypes/json"
 require "std:http"
 
 let res = fetch(
-  "http://localhost:8080/",
+  "http://localhost:8000/",
   method: "POST",
   headers: [
     "Content-Type: application/json"
   ],
   body: JSON::stringify(
-    json->object([
-      ("name", json->string("John Doe")),
-      ("age", json->integer(30)),
-      ("is_student", json->boolean(false)),
-      ("courses", json->array([
-        json->string("Math"),
-        json->string("Science")
+    JSON->Object([
+      ("name", JSON->String("John Doe")),
+      ("age", JSON->Integer(30)),
+      ("is_student", JSON->Boolean(false)),
+      ("courses", JSON->Array([
+        JSON->String("Math"),
+        JSON->String("Science")
       ]))
     ])
   )

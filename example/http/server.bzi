@@ -7,9 +7,12 @@ let thread = spawn HTTP::create(
     let headers = req->get()
 
     match Header::from(headers) {
-      case Some(Header(_, _, content)) => {
+      case Some(Header(top, _, content)) => {
         let json = JSON::parse(content)
-        print(JSON::prettify(json))
+        let [method, path .. _] = String::split(top, " ")
+
+        print("[$method] Received request on $path")
+
         req->send(JSON::stringify(json))
 
         true
@@ -18,17 +21,17 @@ let thread = spawn HTTP::create(
       case None => {
         print("Invalid JSON")
         req->send(JSON::stringify(
-            json->object([
-                ("error", json->string("Invalid JSON")),
-                ("status", json->string("400 Bad Request"))
-            ])
+          JSON->Object([
+            ("error", JSON->String("Invalid JSON")),
+            ("status", JSON->String("400 Bad Request"))
+          ])
         ))
 
         false
       }
     }
   },
-  8080
+  8000
 )
 
 print("Server started on port 8000")
