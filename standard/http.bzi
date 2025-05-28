@@ -98,6 +98,8 @@ type Header {
   Header(toplevel: string, rules: list<(string, string)>, content: string)
 }
 
+let { Header } = Header
+
 pub fn Header::from(headers: string): Optional<Header> => {
   let result = String::split(headers, "\r\n\r\n")
 
