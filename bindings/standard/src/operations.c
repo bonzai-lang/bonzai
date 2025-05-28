@@ -495,6 +495,29 @@ Value sliceFrom(Module* mod, Value* args, int argc) {
   return MAKE_LIST(mod, new_list, list->length - start);
 }
 
+Value isFunction(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "isFunction", argc, 1);
+
+  debug_value(args[0]); printf("\n");
+
+  ValueType ty = get_type(args[0]);
+
+  if (ty == TYPE_FUNCTION || ty == TYPE_NATIVE) return MAKE_INTEGER(1);
+
+  if (ty == TYPE_LIST) {
+    int len = GET_PTR(args[0])->length;
+    ASSERT_FMT(
+        mod, GET_PTR(args[0])->length > 0,
+        "Length of closure should be higher than 0, received %d", len);
+    Value* list = GET_LIST(args[0]);
+    ValueType ty = get_type(list[0]);
+
+    if (ty == TYPE_FUNCTION) return MAKE_INTEGER(1);
+  }
+
+  return MAKE_INTEGER(0);
+}
+
 Value toString(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "toString", argc, 1);
 
