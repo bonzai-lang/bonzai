@@ -38,7 +38,7 @@ parseType =
 
         kwarg <- M.fresh
 
-        pure $ ((start, end), (tys ++ [kwarg]) HLIR.:->: ret),
+        pure ((start, end), (tys ++ [kwarg]) HLIR.:->: ret),
       -- Mutable type constructor
       -- Defined as the following:
       --

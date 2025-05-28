@@ -11,6 +11,8 @@ import Language.Bonzai.Frontend.Parser.Lexer qualified as Lex
 import Language.Bonzai.Frontend.Typechecking.Monad qualified as M
 import Language.Bonzai.Syntax.HLIR qualified as HLIR
 import Text.Megaparsec.Char qualified as P
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 -- | PARSE ANNOTATION
 -- | Parse an annotation. An annotation is used to attach metadata to an AST node.
@@ -282,9 +284,10 @@ parseDirectData = do
 
   pure
     ( pos',
-      HLIR.MkExprData
-        (HLIR.MkAnnotation name gens)
-        [HLIR.MkDataConstructor name (map (.value) params ++ [kwarg])]
+      HLIR.MkExprLet (fromList gens) (Left (HLIR.MkAnnotation name Nothing))
+      (HLIR.MkExprData
+        [HLIR.MkDataConstructor name (map (.value) params ++ [kwarg])])
+      (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
     )
 
 -- | PARSE DATA
@@ -302,7 +305,13 @@ parseDatatype = do
 
   ((_, end), constructors) <- Lex.braces (P.sepBy1 parseDataConstructor Lex.comma)
 
-  pure ((start, end), HLIR.MkExprData (HLIR.MkAnnotation name gens) constructors)
+  pure ((start, end), 
+    HLIR.MkExprLet
+      (fromList gens)
+      (Left (HLIR.MkAnnotation name Nothing))
+      (HLIR.MkExprData constructors)
+      (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
+    )
   where
     -- \| PARSE DATA CONSTRUCTOR
     -- \| Parse a data constructor. A data constructor is used to define a constructor
@@ -413,6 +422,22 @@ parsePatternTerm =
 
         pure $ HLIR.MkPatLocated (HLIR.MkPatConstructor n pats) (start, end),
       P.try $ do
+        ((start, _), _) <- Lex.symbol "{"
+        pats <- P.sepBy (P.choice [
+          P.try $ do
+            (pos, name) <- Lex.identifier
+            void $ Lex.symbol ":"
+            pat <- parsePattern
+            pure (name, HLIR.MkPatLocated pat pos),
+          do
+            (pos, name) <- Lex.identifier
+            pure (name, HLIR.MkPatLocated (HLIR.MkPatVariable name Nothing) pos)
+          ]) Lex.comma
+        ((_, end), _) <- Lex.symbol "}"
+
+        pure $ HLIR.MkPatLocated (HLIR.MkPatRecord (Map.fromList pats)) (start, end),
+        
+      P.try $ do
         ((start, _), _) <- Lex.symbol "("
         pats <- P.sepBy parsePattern Lex.comma
         ((_, end), _) <- Lex.symbol ")"
@@ -444,6 +469,13 @@ parsePattern = P.makeExprParser parsePatternTerm table
       [ [ P.InfixL $ do
             void $ Lex.symbol "|"
             pure $ \a b -> HLIR.MkPatOr a b
+        ],
+        [
+          P.Postfix . Lex.makeUnaryOp $ do
+            void $ Lex.reserved "if"
+            (_, e) <- parseExpression
+
+            pure $ \p -> HLIR.MkPatCondition e p
         ]
       ]
 
@@ -544,6 +576,73 @@ parseForIn = do
           HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing)
         ]
     )
+
+-- | PARSE MODULE EXPRESSION
+-- | Parse a module expression. A module expression is an expression that consists
+-- | of a module definition. It is used to define a module in Bonzai.
+parseModule :: (MonadIO m) => P.Parser m (HLIR.Position, HLIR.HLIR "expression")
+parseModule = do
+  ((start, _), _) <- Lex.reserved "mod"
+  (_, name) <- Lex.identifier
+  gens <- P.option [] $ snd <$> Lex.angles (map snd <$> P.sepBy Lex.identifier Lex.comma)
+  void $ Lex.symbol "{"
+  body <- P.many (snd <$> parseToplevel)
+  ((_, end), _) <- Lex.symbol "}"
+
+  let names = getNames body
+  let record = foldl' 
+        (\acc n -> HLIR.MkExprRecordExtension acc n False (HLIR.MkExprVariable (HLIR.MkAnnotation n Nothing)))
+        HLIR.MkExprRecordEmpty
+        names
+  let expr = makeOneExpression body record
+
+  pure (
+      (start, end),
+      HLIR.MkExprLet 
+        (Set.fromList gens)
+        (Left (HLIR.MkAnnotation name Nothing)) 
+        expr 
+        (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
+    )
+
+  where
+    getNames :: [HLIR.HLIR "expression"] -> [Text]
+    getNames (HLIR.MkExprLet _ (Left (HLIR.MkAnnotation name _)) _ _ : xs) = name : getNames xs
+    getNames (HLIR.MkExprPublic expr : xs) = getNames (expr :xs)
+    getNames (HLIR.MkExprNative (HLIR.MkAnnotation name _) _ : xs) = name : getNames xs
+    getNames (HLIR.MkExprLet _ (Right pat) _ _ : xs) = getNamesInPattern pat <> getNames xs
+    getNames (HLIR.MkExprLoc expr _ : xs) = getNames (expr : xs)
+    getNames (_:xs) = getNames xs
+    getNames [] = []
+    
+    getNamesInPattern :: HLIR.HLIR "pattern" -> [Text]
+    getNamesInPattern (HLIR.MkPatVariable name' _) = [name']
+    getNamesInPattern (HLIR.MkPatLocated p _) = getNamesInPattern p
+    getNamesInPattern (HLIR.MkPatList xs sl _) = do
+      let sl' = maybe [] getNamesInPattern sl
+      let xs' = concatMap getNamesInPattern xs
+      sl' <> xs'
+    getNamesInPattern (HLIR.MkPatRecord m) = concatMap (getNamesInPattern . snd) (Map.toList m)
+    getNamesInPattern (HLIR.MkPatConstructor _ xs) = concatMap getNamesInPattern xs
+    getNamesInPattern HLIR.MkPatWildcard = []
+    getNamesInPattern (HLIR.MkPatSpecial _) = []
+    getNamesInPattern (HLIR.MkPatOr p1 p2) = getNamesInPattern p1 <> getNamesInPattern p2
+    getNamesInPattern (HLIR.MkPatCondition _ cond) = getNamesInPattern cond
+    getNamesInPattern (HLIR.MkPatLiteral _) = []
+
+    makeOneExpression :: [HLIR.HLIR "expression"] -> HLIR.HLIR "expression" -> HLIR.HLIR "expression"
+    makeOneExpression [] e = e
+    makeOneExpression (HLIR.MkExprPublic expr : xs) e =
+      makeOneExpression (expr : xs) e
+    makeOneExpression (HLIR.MkExprLet _ (Left (HLIR.MkAnnotation name _)) e body : xs) e' =
+      HLIR.MkExprLet mempty (Left (HLIR.MkAnnotation name Nothing)) e (makeOneExpression (body : xs) e')
+    makeOneExpression (HLIR.MkExprLet _ (Right pat) e body : xs) e' =
+      HLIR.MkExprLet mempty (Right pat) e (makeOneExpression (body : xs) e')
+    makeOneExpression (HLIR.MkExprNative _ _ : xs) e =
+      makeOneExpression xs e
+    makeOneExpression (HLIR.MkExprLoc expr pos : xs) e =
+      HLIR.MkExprLoc (makeOneExpression (expr : xs) e) pos
+    makeOneExpression (_ : xs) e = makeOneExpression xs e
 
 -- | PARSE BLOCK EXPRESSION
 -- | Parse a block expression. A block expression is an expression that consists of
@@ -795,6 +894,44 @@ parseSpawn = do
         ]
     )
 
+-- | PARSE ANONYMOUS TYPE
+-- | Parse an anonymous type expression. An anonymous type expression is an expression
+-- | that consists of a type definition without a name. It is used to define a type
+-- | in Bonzai that is not a named type.
+parseType :: (MonadIO m) => P.Parser m (HLIR.Position, HLIR.HLIR "expression")
+parseType = do
+  ((start, _), _) <- Lex.reserved "type"
+  void $ Lex.symbol "{"
+  constrs <- P.sepBy parseDataConstructor Lex.comma
+  ((_, end), _) <- Lex.symbol "}"
+  pure ((start, end), HLIR.MkExprData constrs)
+
+  where
+    -- \| PARSE DATA CONSTRUCTOR
+    -- \| Parse a data constructor. A data constructor is used to define a constructor
+    -- \| for a sum type in Bonzai. It is used to define a constructor for a sum type.
+    -- \| The syntax of a data constructor is as follows:
+    -- \|
+    -- \| - identifier "(" (annotation ",")* ")"
+    -- \| - identifier
+    parseDataConstructor :: (MonadIO m) => P.Parser m (HLIR.DataConstructor HLIR.Type)
+    parseDataConstructor =
+      P.choice
+        [ P.try $ do
+            (_, name) <- Lex.identifier
+            (_, args) <- Lex.parens (P.sepBy (parseAnnotation' (snd <$> Typ.parseType)) Lex.comma)
+
+            kwarg <- M.fresh
+
+            pure $ HLIR.MkDataConstructor name (map (.value) args ++ [kwarg]),
+          HLIR.MkDataVariable . snd <$> Lex.identifier
+        ]
+
+parseUnit :: (MonadIO m) => P.Parser m (HLIR.Position, HLIR.HLIR "expression")
+parseUnit = do
+  ((start, _), _) <- Lex.symbol "unit"
+  pure ((start, start), HLIR.MkExprRecordAccess (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing)) "unit")
+
 -- | PARSE TERM EXPRESSION
 -- | Parse a term expression. A term expression is an expression that consists of a term.
 -- | It is used to represent a non-recursive value in Bonzai.
@@ -804,6 +941,8 @@ parseTerm =
     <$> P.choice
       [ parseLambda,
         parseLet,
+        parseType,
+        P.try parseModule,
         parseSpawn,
         P.try parseMut,
         parseMutExpr,
@@ -814,6 +953,7 @@ parseTerm =
         parseBlock,
         parseList,
         P.try parseTuple,
+        parseUnit,
         parseVariable,
         snd <$> Lex.parens parseExpression
       ]
@@ -841,7 +981,7 @@ parseStatement =
       ]
 
 some' :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
-some' e = HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "Some" Nothing)) [e, HLIR.MkExprRecordEmpty]
+some' e = HLIR.MkExprApplication (HLIR.MkExprRecordAccess (HLIR.MkExprVariable (HLIR.MkAnnotation "Optional" Nothing)) "Some") [e, HLIR.MkExprRecordEmpty]
 
 -- | PARSE EXPRESSION
 -- | Parse an expression. An expression is a piece of code that can be evaluated to
@@ -883,6 +1023,20 @@ parseExpression = Lex.locateWith <$> P.makeExprParser parseTerm table
   where
     table =
       [
+        [
+          -- Indexation avec crochets
+          P.Postfix . Lex.makeUnaryOp $ do
+            void $ Lex.symbol "["
+            (_, idx) <- parseExpression
+            ((_, end), _) <- Lex.symbol "]"
+            pure $ \((start, _), e) -> ((start, end), HLIR.MkExprIndex e idx)
+        ],
+        [
+          -- Accès aux champs de record avec ->
+          P.Postfix . Lex.makeUnaryOp $ do
+            ((_, end), field) <- P.string "->" *> Lex.nonLexedID <* Lex.scn
+            pure $ \((start, _), e) -> ((start, end), HLIR.MkExprRecordAccess e field)
+        ],
         -- Niveau 10: Toutes les opérations postfixes (accès, appels) - précédence la plus élevée
         [ -- Essayer d'abord l'appel de fonction avec parenthèses
           P.Postfix . Lex.makeUnaryOp $ do
@@ -920,20 +1074,6 @@ parseExpression = Lex.locateWith <$> P.makeExprParser parseTerm table
             let var = HLIR.MkExprVariable (HLIR.MkAnnotation field Nothing)
 
             pure $ \((start, _), e) -> ((start, end), HLIR.MkExprApplication var (e : positionalArgs ++ [label]))
-        ],
-        [
-          -- Indexation avec crochets
-          P.Postfix . Lex.makeUnaryOp $ do
-            void $ Lex.symbol "["
-            (_, idx) <- parseExpression
-            ((_, end), _) <- Lex.symbol "]"
-            pure $ \((start, _), e) -> ((start, end), HLIR.MkExprIndex e idx)
-        ],
-        [
-          -- Accès aux champs de record avec ->
-          P.Postfix . Lex.makeUnaryOp $ do
-            ((_, end), field) <- P.string "->" *> Lex.nonLexedID <* Lex.scn
-            pure $ \((start, _), e) -> ((start, end), HLIR.MkExprRecordAccess e field)
         ],
         -- Niveau 6: Opérateurs d'assignement (associativité droite)
         [ P.InfixR $ Lex.symbol "+=" >> pure (makeOperator "+="),
@@ -1023,7 +1163,7 @@ parseToplevel =
     <$> P.choice
       [ parsePublic,
         P.try parseDatatype,
-        parseDirectData,
+        P.try parseDirectData,
         parseRequire,
         parseExtern,
         parseStatement

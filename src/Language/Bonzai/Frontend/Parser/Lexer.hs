@@ -52,7 +52,7 @@ scn = L.space space1 lineComment multilineComment
 reservedWords :: Set Text
 reservedWords =
   Set.fromList
-    [ "module",
+    [ "mod",
       "let",
       "mut",
       "require",
