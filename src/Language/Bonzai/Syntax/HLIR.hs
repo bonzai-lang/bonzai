@@ -30,6 +30,7 @@ import Language.Bonzai.Syntax.Internal.Literal as Lit
 import Language.Bonzai.Syntax.Internal.Position as Pos
 import Language.Bonzai.Syntax.Internal.Type as Ty
 import Prelude hiding (Type)
+import qualified Data.Map as Map
 
 -- | UPDATE TYPE
 -- | Update type is used to represent updates to variables, fields, and indices.
@@ -65,7 +66,7 @@ data Expression f t
   | MkExprInterface (Annotation [QuVar]) [Annotation t]
   | MkExprWhile (Expression f t) (Expression f t)
   | MkExprIndex (Expression f t) (Expression f t)
-  | MkExprData (Annotation [Text]) [DataConstructor t]
+  | MkExprData [DataConstructor t]
   | MkExprMatch (Expression f t) [(Pattern f t, Expression f t, Maybe Position)]
   | MkExprPublic (Expression f t)
   | MkExprRecordExtension (Expression f t) Text Bool (Expression f t)
@@ -98,6 +99,7 @@ data Pattern f t
   | MkPatOr (Pattern f t) (Pattern f t)
   | MkPatCondition (Expression f t) (Pattern f t)
   | MkPatList [Pattern f t] (Maybe (Pattern f t)) (f t)
+  | MkPatRecord (Map Text (Pattern f t))
   deriving (Show, Generic)
 
 instance (ToText t, ToText (f t)) => Show (Expression f t) where
@@ -116,7 +118,7 @@ pattern MkExprString s = MkExprLiteral (MkLitString s)
 -- | TUPLE EXPRESSION PATTERN
 -- | A pattern synonym to represent tuple expressions in Bonzai.
 pattern MkExprTuple :: Expression Maybe t -> Expression Maybe t -> Expression Maybe t
-pattern MkExprTuple a b = MkExprApplication (MkExprVariable (MkAnnotation "Tuple" Nothing)) [a, b, MkExprRecordEmpty]
+pattern MkExprTuple a b = MkExprApplication (MkExprRecordAccess (MkExprVariable (MkAnnotation "Tuple" Nothing)) "Tuple") [a, b, MkExprRecordEmpty]
 
 pattern MkExprMutableOperation :: Text -> Expression Maybe t -> Expression Maybe t -> Expression Maybe t
 pattern MkExprMutableOperation op a b = MkExprApplication (MkExprVariable (MkAnnotation op Nothing)) [a, b, MkExprRecordEmpty]
@@ -149,14 +151,14 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText (MkExprLet _ (Right p) e b) = T.concat ["let ", toText p, " = ", toText e, " in ", toText b]
   toText (MkExprBlock es) = "{" <> T.concat [T.intercalate "; " (map toText es)] <> "}"
   toText (MkExprRequire n vars) = T.concat ["require ", n, ": ", T.intercalate ", " (toList vars)]
-  toText (MkExprLoc e (start, end)) = "((" <> toText start <> "-" <> toText end <> ") " <> toText e <> ")"
+  toText (MkExprLoc e _) = toText e
   toText (MkExprList es) = T.concat ["[", T.intercalate ", " (map toText es), "]"]
   toText (MkExprNative ann ty) = T.concat ["native ", toText ann.name, "<", T.intercalate ", " ann.value, "> ", toText ty]
   toText (MkExprMut e) = T.concat ["mut ", toText e]
   toText (MkExprInterface ann as) = T.concat ["interface ", toText ann.name, "<", T.intercalate ", " (map toText as), ">"]
   toText (MkExprWhile c e) = T.concat ["while ", toText c, " { ", toText e, " }"]
   toText (MkExprIndex e e') = T.concat [toText e, "[", toText e', "]"]
-  toText (MkExprData ann cs) = T.concat ["data ", toText ann.name, "<", T.intercalate ", " (map toText cs), ">"]
+  toText (MkExprData cs) = T.concat ["data <", T.intercalate ", " (map toText cs), ">"]
   toText (MkExprMatch e cs) = T.concat ["match ", toText e, " { ", T.intercalate ", " (map (\(c, b, _) -> T.concat [toText c, " => ", toText b]) cs), " }"]
   toText (MkExprPublic e) = T.concat ["pub ", toText e]
   toText (MkExprRecordExtension e f False v) = T.concat [toText e, ".", f, " = ", toText v]
@@ -173,7 +175,7 @@ instance (ToText t) => ToText (DataConstructor t) where
   toText (MkDataConstructor c ts) = T.concat [c, "<", T.intercalate ", " (map toText ts), ">"]
 
 instance (ToText (f t), ToText t) => ToText (Pattern f t) where
-  toText (MkPatVariable n t) = T.concat [n, ":", toText t]
+  toText (MkPatVariable n _) = n
   toText (MkPatConstructor n ps) = T.concat [n, "(", T.intercalate ", " (map toText ps), ")"]
   toText (MkPatLiteral l) = toText l
   toText MkPatWildcard = "_"
@@ -183,6 +185,10 @@ instance (ToText (f t), ToText t) => ToText (Pattern f t) where
   toText (MkPatCondition e p) = T.concat [toText p, " if ", toText e]
   toText (MkPatList ps Nothing _) = T.concat ["[", T.intercalate ", " (map toText ps), "]"]
   toText (MkPatList ps (Just p) _) = T.concat ["[", T.intercalate ", " (map toText ps), " ..", toText p, "]"]
+  toText (MkPatRecord m) = 
+    if null m
+      then "{}"
+      else T.concat ["{ ", T.intercalate ", " (map (\(k, v) -> k <> ": " <> toText v) (Map.toList m)), " }"]
 
 instance (ToText t, ToText (f t)) => ToText [Expression f t] where
   toText = T.intercalate "\n" . map toText
@@ -218,7 +224,7 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprInterface ann as == MkExprInterface ann' as' = ann == ann' && as == as'
   MkExprWhile c e == MkExprWhile c' e' = c == c' && e == e'
   MkExprIndex e e' == MkExprIndex e'' e''' = e == e'' && e' == e'''
-  MkExprData ann cs == MkExprData ann' cs' = ann == ann' && cs == cs'
+  MkExprData cs == MkExprData cs' = cs == cs'
   MkExprMatch e cs == MkExprMatch e' cs' = e == e' && all (\(p, b, _) -> any (\(p', b', _) -> p == p' && b == b') cs') cs
   MkExprPublic e == MkExprPublic e' = e == e'
   MkExprRecordExtension e f False v == MkExprRecordExtension e' f' False v' = e == e' && f == f' && v == v'
