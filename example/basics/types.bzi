@@ -1,32 +1,22 @@
 require "std:foundation"
 
-type Option<A> {
-  Some(x: A),
-  None
-}
-
 print("test")
 
 print(Some(8))
 
 print("tset")
 
-fn Option::map(self, f) =>
+fn Optional::map(self, f) =>
   match self {
     case Some(x) => Some(f(x))
     case None => None
   }
 
-print(Option::map(Some(8), fn(x) => x + 1))
-
-type Result<A, B> {
-  Ok(x: A),
-  Err(x: B)
-}
+print(Optional::map(Some(8), fn(x) => x + 1))
 
 let test = Ok(8)
 
 print(match test {
-  case Ok(x) => "ok"
-  case Ok(x) => "not ok"
+  case Ok(x) if x > 7 => "ok"
+  case Error(_) | Ok(_) => "not ok"
 })
