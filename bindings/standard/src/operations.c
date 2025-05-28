@@ -245,7 +245,7 @@ void print_with_level(Value value, int level) {
     }
 
     case TYPE_API: {
-      printf("<api>");
+      printf("<api %p>", GET_PTR(value)->as_any);
       break;
     }
 

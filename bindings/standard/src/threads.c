@@ -17,7 +17,16 @@ void* value_to_function(void* value) {
   pthread_mutex_lock(&module->module_mutex);
   new_module->stack = stack_new();
   new_module->gc = module->gc;
+
   int sc = new_module->gc->stacks.stack_count;
+  
+  if (sc >= module->gc->stacks.stack_capacity) {
+    module->gc->stacks.stack_capacity *= 2;
+    module->gc->stacks.stacks = realloc(module->gc->stacks.stacks,
+                                        module->gc->stacks.stack_capacity *
+                                            sizeof(Stack*));
+  }
+
   new_module->gc->stacks.stacks[sc] = new_module->stack;
   new_module->gc->stacks.stack_count++;
   memcpy(new_module->stack->values, module->stack->values,
@@ -44,8 +53,14 @@ void* value_to_function(void* value) {
 
   Value ret = new_module->call_function(new_module, function, 0, NULL);
 
+  sc = find_stacks_current_sp(new_module, pthread_self());
+  if (sc < 0 || sc >= new_module->gc->stacks.stack_count) {
+    THROW(new_module, "Current stack not found in stacks");
+  }
+
+  pthread_mutex_lock(&new_module->gc->gc_mutex);
   new_module->gc->stacks.stacks[sc] = NULL;
-  rearrange_stacks(new_module);
+  pthread_mutex_unlock(&new_module->gc->gc_mutex);
 
   // Free the stack and the module
   free(new_module->stack->values);
@@ -104,8 +119,12 @@ Value wait_thread(Module* mod, Value* args, int argc) {
   pthread_t thread = thread_value->as_any;
   atomic_store(&mod->stack->is_stopped, true);
   Value* thread_returned;
-  pthread_join(thread, (void**)&thread_returned);
+  int join_result = pthread_join(thread, (void**)&thread_returned);
   atomic_store(&mod->stack->is_stopped, false);
+
+  if (join_result != 0 || thread_returned == NULL) {
+    THROW(mod, "Thread join failed or returned NULL");
+  }
 
   Value object = *thread_returned;
 
