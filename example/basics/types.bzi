@@ -8,8 +8,8 @@ print("tset")
 
 fn Optional::map(self, f) =>
   match self {
-    case Some(x) => Some(f(x))
     case None => None
+    case Some(x) => Some(f(x))
   }
 
 print(Optional::map(Some(8), fn(x) => x + 1))
