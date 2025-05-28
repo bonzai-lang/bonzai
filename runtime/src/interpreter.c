@@ -316,6 +316,7 @@ case_special: {
 
 case_halt: {
   atomic_store(&module->stack->is_halted, true);
+  module->gc->stacks.stacks[0] = NULL;
   pthread_join(module->gc->gc_thread, NULL);
   module->is_terminated = true;
   

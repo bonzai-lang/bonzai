@@ -241,6 +241,7 @@ void free_value(struct Module* mod, HeapValue* unreached);
 void safe_point(struct Module* mod);
 pthread_t start_gc(struct Module* vm);
 void rearrange_stacks(struct Module* mod);
+int find_stacks_current_sp(struct Module* mod, pthread_t thread);
 bool is_at_least_one_programs_running(struct Module* vm);
 
 static atomic_bool gc_is_requested;
@@ -342,23 +343,6 @@ inline static char* type_to_str(ValueType t) {
       return "char";
   }
 }
-
-// __attribute__((__always_inline__)) inline void safe_point(Module* mod) {
-//   if (atomic_load(&gc_is_requested)) {
-//     atomic_store(&mod->stack->is_stopped, true);
-//   }
-
-//   while (atomic_load(&gc_is_requested)) {
-//     if (atomic_load(&mod->stack->is_halted)) {
-//       atomic_store(&mod->stack->is_stopped, false);
-//       break;
-//     }
-//   }
-
-//   atomic_store(&mod->stack->is_stopped, false);
-// }
-
-// void safe_point(struct Module* mod);
 
 #define safe_point(mod) \
   do { \

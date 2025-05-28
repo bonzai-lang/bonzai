@@ -67,7 +67,7 @@ void init_gc(gc_t* gc, Module* mod) {
 
   gc->stacks.stack_count = 0;
   gc->stacks.stack_capacity = STACKS_SIZE;
-  gc->stacks.stacks = calloc(STACKS_SIZE, sizeof(Stack*));
+  gc->stacks.stacks = malloc(STACKS_SIZE * sizeof(Stack*));
 
   gc->remembered_set = NULL;
 

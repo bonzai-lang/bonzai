@@ -80,10 +80,9 @@ bool are_all_threads_stopped(struct Module* vm) {
 }
 
 bool is_at_least_one_programs_running(struct Module* vm) {
-  // printf("sc: %d\n", vm->gc->stacks.stack_count);
-  for (int i = 0; i < vm->gc->stacks.stack_count; i++) {
+  for (int i = 0; i < vm->gc->stacks.stack_count - 1; i++) {
     Stack* stack = vm->gc->stacks.stacks[i];
-    if (!stack) continue;
+    if (!stack || !stack->values) continue;
 
     if (!atomic_load(&stack->is_halted)) {
       return true;
@@ -142,6 +141,7 @@ void gc_young(struct Module* mod);
 void gc_old(struct Module* mod);
 
 void gc(struct Module* mod) {
+  rearrange_stacks(mod);
   // printf("Running GC\n");
   // printf("  => SP: %d\n", mod->stack->stack_pointer);
   gc_t* gc_ = mod->gc;
@@ -457,13 +457,12 @@ Stack* stack_new() {
   stack->stack_pointer = GLOBALS_SIZE;
   stack->stack_capacity = MAX_STACK_SIZE;
   stack->values = calloc(stack->stack_capacity + 1, sizeof(Value));
+  stack->thread = pthread_self();
 
   atomic_store(&stack->is_stopped, false);
   atomic_store(&stack->is_halted, false);
 
   pthread_mutex_init(&stack->mutex, NULL);
-
-  stack->thread = pthread_self();
 
   return stack;
 }
@@ -654,31 +653,51 @@ Value clone_value(Module* mod, Value value) {
   }
 }
 
+int find_stacks_current_sp(Module* mod, pthread_t thread) {
+  for (int i = 0; i < mod->gc->stacks.stack_count; i++) {
+    pthread_mutex_lock(&mod->gc->gc_mutex);
+    Stack* stack = mod->gc->stacks.stacks[i];
+    pthread_mutex_unlock(&mod->gc->gc_mutex);
+
+    // pthread_mutex_lock(&stack->mutex);
+    pthread_t stack_thread = stack ? stack->thread : 0;
+    Value* values = stack ? stack->values : NULL;
+    // pthread_mutex_unlock(&stack->mutex);
+
+    if (stack && values && pthread_equal(stack_thread, thread)) {
+      return i;
+    }
+  }
+  return -1; // Not found
+}
+
 void rearrange_stacks(Module* mod) {
-#define st mod->gc->stacks
   int new_size = 0;
 
-  for (int i = 0; i < st.stack_count; i++) {
-    if (st.stacks[i] == NULL) continue;
+  for (int i = 0; i < mod->gc->stacks.stack_count; i++) {
+    if (mod->gc->stacks.stacks[i] == NULL) continue;
     new_size++;
   }
 
-  Stack** new_stacks = calloc(new_size, sizeof(Stack*));
+  int size = new_size < STACKS_SIZE ? STACKS_SIZE : new_size;
+
+  Stack** new_stacks = malloc(size * sizeof(Stack*));
   if (new_stacks == NULL) {
     perror("Failed to allocate memory for new stacks");
     exit(EXIT_FAILURE);
   }
 
   int j = 0;
-  for (int i = 0; i < st.stack_count; i++) {
-    if (st.stacks[i] == NULL) continue;
-    new_stacks[j++] = st.stacks[i];
+  for (int i = 0; i < mod->gc->stacks.stack_count; i++) {
+    if (mod->gc->stacks.stacks[i] == NULL) continue;
+    new_stacks[j++] = mod->gc->stacks.stacks[i];
   }
-
+  
   // Free the old stacks
-  free(st.stacks);
-  st.stacks = new_stacks;
-  st.stack_count = new_size;
+  free(mod->gc->stacks.stacks);
+  mod->gc->stacks.stacks = new_stacks;
+  mod->gc->stacks.stack_count = size;
+  mod->gc->stacks.stack_capacity = size;
 }
 
 // Young generation collection and promotion
