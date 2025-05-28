@@ -160,8 +160,8 @@ resolve path isPublic = do
 
       case cst of
         Left err -> throw (ParseError err)
-        Right cst' -> do
-          ast <- solveModule cst'
+        Right ast -> do
+          -- ast <- solveModule cst'
 
           -- Get the public variables, types, and classes
           let imports = mempty
@@ -205,9 +205,24 @@ getPublicVariables = foldl' getPublicVariables' mempty
     getPublicVariables' s (HLIR.MkExprLoc e _) = getPublicVariables' s e
     getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLoc e _)) = getPublicVariables' s (HLIR.MkExprPublic e)
     getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLet _ (Left name) _ _)) = Set.insert name.name s
+    getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprLet _ (Right p) _ _)) =
+      getPublicVarInPattern s p
     getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprNative ann _)) = Set.insert ann.name s
-    getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprData _ cs)) = foldl' getPublicVariablesDataConstr s cs
+    getPublicVariables' s (HLIR.MkExprPublic (HLIR.MkExprData cs)) = foldl' getPublicVariablesDataConstr s cs
     getPublicVariables' s _ = s
+
+    getPublicVarInPattern :: Set Text -> HLIR.HLIR "pattern" -> Set Text
+    getPublicVarInPattern s (HLIR.MkPatVariable n _) = Set.insert n s
+    getPublicVarInPattern s (HLIR.MkPatConstructor _ ps) = foldl' getPublicVarInPattern s ps
+    getPublicVarInPattern s (HLIR.MkPatLiteral _) = s
+    getPublicVarInPattern s HLIR.MkPatWildcard = s
+    getPublicVarInPattern s (HLIR.MkPatSpecial _) = s
+    getPublicVarInPattern s (HLIR.MkPatLocated p _) = getPublicVarInPattern s p
+    getPublicVarInPattern s (HLIR.MkPatOr p p') = getPublicVarInPattern (getPublicVarInPattern s p) p'
+    getPublicVarInPattern s (HLIR.MkPatCondition e p) = getPublicVarInPattern (getPublicVariables' s e) p
+    getPublicVarInPattern s (HLIR.MkPatList ps slice _) = foldl' getPublicVarInPattern s ps <> maybe mempty (getPublicVarInPattern s) slice
+    getPublicVarInPattern s (HLIR.MkPatRecord ps) =
+      foldl' (\s' (k, v) -> Set.insert k (getPublicVarInPattern s' v)) s (Map.toList ps)
 
     getPublicVariablesDataConstr :: Set Text -> HLIR.DataConstructor HLIR.Type -> Set Text
     getPublicVariablesDataConstr s (HLIR.MkDataVariable n) = Set.insert n s
@@ -222,7 +237,10 @@ getPublicTypes = foldl' getPublicTypes' mempty
     getPublicTypes' :: Set Text -> HLIR.HLIR "expression" -> Set Text
     getPublicTypes' s (HLIR.MkExprLoc e _) = getPublicTypes' s e
     getPublicTypes' s (HLIR.MkExprPublic (HLIR.MkExprLoc e _)) = getPublicTypes' s (HLIR.MkExprPublic e)
-    getPublicTypes' s (HLIR.MkExprPublic (HLIR.MkExprData ann _)) = Set.insert ann.name s
+    getPublicTypes' s (HLIR.MkExprPublic (HLIR.MkExprLet g ann (HLIR.MkExprLoc e _) b)) =
+      getPublicTypes' s (HLIR.MkExprPublic (HLIR.MkExprLet g ann e b))
+    getPublicTypes' s (HLIR.MkExprPublic (HLIR.MkExprLet _ (Left ann) (HLIR.MkExprData _) b)) =
+      getPublicTypes' (Set.insert ann.name s) b
     getPublicTypes' s _ = s
 
 foldM' :: (Monad m) => (a -> b -> m a) -> a -> [b] -> m a
@@ -250,11 +268,18 @@ resolveImports m (HLIR.MkExprLambda args _ body) = do
   writeIORef moduleState old
 
   return m'
+resolveImports m (HLIR.MkExprLet _ (Left ann) e b) | isData e = do
+  let m' = m { types = Set.singleton ann.name <> types m }
+  m'' <- resolveImports m' e
+  resolveImports m'' b
 resolveImports m (HLIR.MkExprLet _ (Left name) expr b) = do
   let m' = m {variables = Set.singleton name.name <> variables m}
   void $ resolveImports m' expr
   resolveImports m' b
-resolveImports _ (HLIR.MkExprLet _ (Right p) _ _) = compilerError $ "impossible: pattern match (" <> show p <> ") in let binding"
+resolveImports m (HLIR.MkExprLet _ (Right p) expr b) = do
+  m1 <- resolveImportsPattern m p
+  m2 <- resolveImports m1 expr
+  resolveImports m2 b
 resolveImports m (HLIR.MkExprBlock exprs) = do
   void $ foldlM resolveImports m exprs
   pure m
@@ -306,9 +331,8 @@ resolveImports m (HLIR.MkExprIndex e e') = do
   m1 <- resolveImports m e
   void $ resolveImports m1 e'
   pure m
-resolveImports m (HLIR.MkExprData ann cs) = do
-  let m' = m {types = Set.singleton ann.name <> types m}
-  foldM' resolveImportsDataConstr m' cs
+resolveImports m (HLIR.MkExprData cs) = do
+  foldM' resolveImportsDataConstr m cs
 resolveImports m (HLIR.MkExprMatch e cs) = do
   void $ resolveImports m e
   mapM_
@@ -347,10 +371,23 @@ resolveImportsPattern m (HLIR.MkPatList ps slice _) = do
   case slice of
     Just p -> resolveImportsPattern m1 p
     Nothing -> pure m1
+resolveImportsPattern m (HLIR.MkPatRecord ps) = 
+  foldM' (\m' (k, v) -> do
+    -- add the variable to the module unit
+    let m1 = m' {variables = Set.insert k m'.variables}
+
+    resolveImportsPattern m1 v
+    ) m (Map.toList ps)
 
 resolveImportsDataConstr :: (MonadConversion m) => ModuleUnit -> HLIR.DataConstructor HLIR.Type -> m ModuleUnit
 resolveImportsDataConstr m (HLIR.MkDataVariable n) = pure m {variables = Set.insert n m.variables}
 resolveImportsDataConstr m (HLIR.MkDataConstructor n _) = pure m {variables = Set.insert n m.variables}
+
+isData :: HLIR.HLIR "expression" -> Bool
+isData (HLIR.MkExprData _) = True
+isData (HLIR.MkExprPublic e) = isData e
+isData (HLIR.MkExprLoc e _) = isData e
+isData _ = False
 
 type Depth = Int
 

@@ -45,7 +45,7 @@ data CheckerState = MkCheckerState {
     variables :: Map Text HLIR.Scheme
   , interfaces :: Map (Text, [HLIR.QuVar]) (Map Text HLIR.Type)
   , varPos :: [(Text, (HLIR.Scheme, HLIR.Position))]
-  , dataConstructors :: Set Text
+  , dataConstructors :: Map Text HLIR.Scheme
   , returnType :: Maybe HLIR.Type
 } deriving (Eq, Show)
 
@@ -128,6 +128,7 @@ instantiateWithSub s (HLIR.Forall qvars ty) = do
     go subst (HLIR.MkTyRecord r) = do
       (r', subst') <- go subst r
       pure (HLIR.MkTyRecord r', subst')
+    go subst HLIR.MkTyAbstractType = pure (HLIR.MkTyAbstractType, subst)
 
     goMany :: (MonadChecker m) => Substitution -> [HLIR.Type] -> m ([HLIR.Type], Substitution)
     goMany subst (x : xs) = do

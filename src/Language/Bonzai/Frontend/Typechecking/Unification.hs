@@ -4,6 +4,7 @@ module Language.Bonzai.Frontend.Typechecking.Unification where
 import qualified Language.Bonzai.Syntax.HLIR as HLIR
 import qualified Language.Bonzai.Frontend.Typechecking.Monad as M
 import qualified Data.Map as Map
+import Control.Color (printText)
 
 -- Check to see if a TVar (the first argument) occurs in the type
 -- given as the second argument. Fail if it does.
@@ -64,6 +65,7 @@ unifiesWith t t' = do
         -- ^ apply side-condition to ensure termination
         case snd $ toList' rowTail1 of
           Just tv -> do
+            readIORef tv >>= printText
             b <- liftIO $ doesOccurB tv fieldTy2
             when b $ M.throw (M.UnificationFail t1 t2)
           _ -> do

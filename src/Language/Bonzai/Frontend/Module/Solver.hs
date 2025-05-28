@@ -186,7 +186,7 @@ solveExpression (HLIR.MkExprPublic e) = do
   e' <- solveExpression e
 
   pure $ HLIR.MkExprPublic e'
-solveExpression (HLIR.MkExprData ann cs) = pure $ HLIR.MkExprData ann cs
+solveExpression (HLIR.MkExprData cs) = pure $ HLIR.MkExprData cs
 solveExpression (HLIR.MkExprReturn e) = do
   e' <- solveExpression e
 
