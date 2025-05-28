@@ -418,8 +418,7 @@ createCondition x (HLIR.MkPatList pats slice _) =
    in (lenCond : concat conds <> conds', mconcat maps <> maps')
 createCondition x (HLIR.MkPatRecord fields) =
   let (conds, maps) = unzip $ map (\(key, pat) -> createCondition (MLIR.MkExprRecordAccess x key) pat) (Map.toList fields)
-      fieldMaps = Map.fromList $ map (\(k, _) -> (k, MLIR.MkExprRecordAccess x k)) (Map.toList fields)
-   in (concat conds, mconcat maps <> fieldMaps)
+   in (concat conds, mconcat maps)
 
 susbstituteMap :: [(Text, MLIR.MLIR "expression")] -> MLIR.MLIR "expression" -> MLIR.MLIR "expression"
 susbstituteMap xs e = List.foldl (flip substitute) e xs
