@@ -62,27 +62,31 @@ convert (HLIR.MkExprLet _ (Left ann) e b) = case convert b of
   b' -> MLIR.MkExprUnpack ann.name (convert e) b'
 convert (HLIR.MkExprLet _ (Right pat) e b) | isUnit b = do
   let e' = convert e
-  let (conds, maps) = createCondition e' pat
+
+  let var = MLIR.MkExprVariable "scrut"
+
+  let (conds, maps) = createCondition var pat
 
   let lets = Map.toList maps
 
-  let var
-        | null conds = createIfs' conds maps
-        | otherwise = foldl' (\acc (k, _) -> MLIR.MkExprUnpack k MLIR.MkExprSpecial acc) (createIfs' conds maps) lets
+  let vars
+        | null conds = MLIR.MkExprUnpack "scrut" e' (createIfs' conds maps)
+        | otherwise = foldl' (\acc (k, _) -> MLIR.MkExprUnpack k MLIR.MkExprSpecial acc) (MLIR.MkExprUnpack "scrut" e' (createIfs' conds maps)) lets
 
-  var
+  vars
 convert (HLIR.MkExprLet _ (Right pat) e b) = do
   let e' = convert e
-  let (conds, maps) = createCondition e' pat
+  let var = MLIR.MkExprVariable "scrut"
+  let (conds, maps) = createCondition var pat
   let b' = convert b
 
   let lets = Map.toList maps
   
-  let var
-        | null conds = createIfs' conds maps
-        | otherwise = foldl' (\acc (k, _) -> MLIR.MkExprUnpack k MLIR.MkExprSpecial acc) (createIfs' conds maps) lets
+  let vars
+        | null conds = MLIR.MkExprUnpack "scrut" e' (createIfs' conds maps)
+        | otherwise = foldl' (\acc (k, _) -> MLIR.MkExprUnpack k MLIR.MkExprSpecial acc) (MLIR.MkExprUnpack "scrut" e' (createIfs' conds maps)) lets
 
-  MLIR.MkExprUnpack "_" var b'
+  MLIR.MkExprUnpack "_" vars b'
 convert (HLIR.MkExprBlock es) = MLIR.MkExprBlock (map convert es)
 convert (HLIR.MkExprRequire _ _) = compilerError "require is not supported in MLIR"
 convert (HLIR.MkExprLoc e p) = MLIR.MkExprLoc p (convert e)
