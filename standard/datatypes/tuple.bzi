@@ -7,8 +7,6 @@ pub type Tuple<A, B> {
   Tuple(x: A, y: B)
 }
 
-pub let { Tuple: test } = Tuple
-
 pub fn Tuple::first(self) => 
   match self {
     case Tuple(x, _) => x
