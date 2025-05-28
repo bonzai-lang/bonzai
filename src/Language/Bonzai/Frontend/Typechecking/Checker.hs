@@ -168,7 +168,7 @@ synthesize (HLIR.MkExprLet gens (Left ann) e b) | Just constrs <- getData e = do
 synthesize (HLIR.MkExprLet generics (Right pattern) expr body) = do
   M.enterLevel
 
-  (pat, patTy, env) <- typecheckPattern pattern
+  (pat, patTy, env) <- typecheckPattern False pattern
 
   (expr', exprTy) <- synthesize expr
 
@@ -282,7 +282,7 @@ synthesize (HLIR.MkExprMatch scrut cases) = do
     mapMWithAcc
       ( \acc (pat, e, p) -> do
           Foldable.for_ p HLIR.pushPosition
-          (pat', patTy, env) <- typecheckPattern pat
+          (pat', patTy, env) <- typecheckPattern False pat
           scrutTy `U.unifiesWith` patTy
           Foldable.for_ p (const HLIR.popPosition)
 
@@ -462,7 +462,7 @@ check (HLIR.MkExprMatch scrut cases) ty = do
       <$> traverse
         ( \(pat, e, p) -> do
             Foldable.for_ p HLIR.pushPosition
-            (pat', patTy, env) <- typecheckPattern pat
+            (pat', patTy, env) <- typecheckPattern False pat
             scrutTy `U.unifiesWith` patTy
             Foldable.for_ p (const HLIR.popPosition)
 
@@ -538,19 +538,25 @@ unsnoc :: [a] -> Maybe ([a], a)
 unsnoc [] = Nothing
 unsnoc xs = (,) <$> viaNonEmpty init xs <*> viaNonEmpty last xs
 
-typecheckPattern :: (M.MonadChecker m) => HLIR.HLIR "pattern" -> m (HLIR.TLIR "pattern", HLIR.Type, Map Text HLIR.Scheme)
-typecheckPattern (HLIR.MkPatVariable name varTy) = do
+typecheckPattern :: (M.MonadChecker m) => Bool -> HLIR.HLIR "pattern" -> m (HLIR.TLIR "pattern", HLIR.Type, Map Text HLIR.Scheme)
+typecheckPattern isInRecord (HLIR.MkPatVariable name varTy) = do
   st <- readIORef M.checkerState
 
   case Map.lookup name st.dataConstructors of
     Just s -> do
       ty' <- M.instantiate s
-      pure (HLIR.MkPatVariable name (Identity ty'), ty', Map.singleton name s)
+      pure ( 
+          if isInRecord 
+            then HLIR.MkPatVariable name (Identity ty')
+            else HLIR.MkPatSpecial name, 
+          ty', 
+          Map.singleton name s
+        )
     _ -> do
       ty <- maybe M.fresh pure varTy
       let scheme = HLIR.Forall [] ty
       pure (HLIR.MkPatVariable name (Identity ty), ty, Map.singleton name scheme)
-typecheckPattern (HLIR.MkPatLiteral l) = do
+typecheckPattern _ (HLIR.MkPatLiteral l) = do
   let ty = case l of
         HLIR.MkLitChar _ -> HLIR.MkTyChar
         HLIR.MkLitInt _ -> HLIR.MkTyInt
@@ -558,7 +564,7 @@ typecheckPattern (HLIR.MkPatLiteral l) = do
         HLIR.MkLitString _ -> HLIR.MkTyString
         HLIR.MkLitBool _ -> HLIR.MkTyBool
   pure (HLIR.MkPatLiteral l, ty, Map.empty)
-typecheckPattern (HLIR.MkPatConstructor name pats) = do
+typecheckPattern _ (HLIR.MkPatConstructor name pats) = do
   st <- readIORef M.checkerState
   case Map.lookup name st.dataConstructors of
     Just sch -> do
@@ -569,7 +575,7 @@ typecheckPattern (HLIR.MkPatConstructor name pats) = do
             unzip
               <$> zipWithM
                 ( \pat ty' -> do
-                    (pat', ty'', env) <- typecheckPattern pat
+                    (pat', ty'', env) <- typecheckPattern False pat
                     ty' `U.unifiesWith` ty''
                     pure (pat', env)
                 )
@@ -579,16 +585,16 @@ typecheckPattern (HLIR.MkPatConstructor name pats) = do
           pure (HLIR.MkPatConstructor name pats', ret, Map.unions env)
         _ -> throw (M.InvalidConstructor name)
     _ -> throw (M.InvalidConstructor name)
-typecheckPattern HLIR.MkPatWildcard = do
+typecheckPattern _ HLIR.MkPatWildcard = do
   ty <- M.fresh
   pure (HLIR.MkPatWildcard, ty, Map.empty)
-typecheckPattern (HLIR.MkPatSpecial {}) =
+typecheckPattern _ (HLIR.MkPatSpecial {}) =
   throw (CompilerError "typecheckPattern: special patterns are not supported")
-typecheckPattern (HLIR.MkPatLocated p loc) =
-  HLIR.pushPosition loc *> typecheckPattern p <* HLIR.popPosition
-typecheckPattern (HLIR.MkPatOr p1 p2) = do
-  (p1', ty, env1) <- typecheckPattern p1
-  (p2', ty', env2) <- typecheckPattern p2
+typecheckPattern isInRecord (HLIR.MkPatLocated p loc) =
+  HLIR.pushPosition loc *> typecheckPattern isInRecord p <* HLIR.popPosition
+typecheckPattern _ (HLIR.MkPatOr p1 p2) = do
+  (p1', ty, env1) <- typecheckPattern False p1
+  (p2', ty', env2) <- typecheckPattern False p2
 
   ty `U.unifiesWith` ty'
 
@@ -609,30 +615,30 @@ typecheckPattern (HLIR.MkPatOr p1 p2) = do
       if and common
         then pure (HLIR.MkPatOr p1' p2', ty, Map.union env1 env2)
         else throw (M.InvalidPatternUnion (Map.keysSet env1') (Map.keysSet env2'))
-typecheckPattern (HLIR.MkPatCondition e p) = do
-  (p', ty, env) <- typecheckPattern p
+typecheckPattern _ (HLIR.MkPatCondition e p) = do
+  (p', ty, env) <- typecheckPattern False p
 
   (e', ty') <- M.with M.checkerState (\st -> st {M.variables = env <> st.variables}) $ synthesize e
 
   ty' `U.unifiesWith` HLIR.MkTyBool
 
   pure (HLIR.MkPatCondition e' p', ty, env)
-typecheckPattern (HLIR.MkPatList pats slice _) = do
+typecheckPattern _ (HLIR.MkPatList pats slice _) = do
   ty <- M.fresh
 
-  (pats', tys, env) <- unzip3 <$> traverse typecheckPattern pats
+  (pats', tys, env) <- unzip3 <$> traverse (typecheckPattern False) pats
 
   forM_ tys $ U.unifiesWith ty
 
   case slice of
     Just p -> do
-      (p', ty', env') <- typecheckPattern p
+      (p', ty', env') <- typecheckPattern False p
       HLIR.MkTyList ty `U.unifiesWith` ty'
       pure (HLIR.MkPatList pats' (Just p') (Identity (HLIR.MkTyList ty)), HLIR.MkTyList ty, Map.unions env <> env')
     Nothing -> pure (HLIR.MkPatList pats' Nothing (Identity (HLIR.MkTyList ty)), HLIR.MkTyList ty, Map.unions env)
-typecheckPattern (HLIR.MkPatRecord pats) = do
+typecheckPattern isInRecord (HLIR.MkPatRecord pats) = do
   (pats', env) <- unzip <$> traverse (\(k, p) -> do
-    (p', ty', env') <- typecheckPattern p
+    (p', ty', env') <- typecheckPattern (isInRecord || True) p
     pure ((k, p', ty'), env'))
     (Map.toList pats)
 
