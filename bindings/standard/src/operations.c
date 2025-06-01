@@ -498,8 +498,6 @@ Value sliceFrom(Module* mod, Value* args, int argc) {
 Value isFunction(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "isFunction", argc, 1);
 
-  debug_value(args[0]); printf("\n");
-
   ValueType ty = get_type(args[0]);
 
   if (ty == TYPE_FUNCTION || ty == TYPE_NATIVE) return MAKE_INTEGER(1);
@@ -789,7 +787,15 @@ Value write_file(Module* mod, Value* args, int argc) {
 Value run_gc(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "run_gc", argc, 0);
 
-  atomic_store(&gc_is_requested, 1);
+  if (mod->gc == NULL) {
+    THROW(mod, "Garbage collector is not initialized");
+  }
+
+  gc_t* gc_ = mod->gc;
+
+  atomic_store(&gc_->gc_is_requested, true);
+
+  safe_point(mod);
 
   return MAKE_INTEGER(0);
 }

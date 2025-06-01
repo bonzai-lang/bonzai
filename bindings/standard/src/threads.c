@@ -17,18 +17,27 @@ void* value_to_function(void* value) {
   pthread_mutex_lock(&module->module_mutex);
   new_module->stack = stack_new();
   new_module->gc = module->gc;
+  mark_value(new_module, function);
 
+  pthread_mutex_lock(&new_module->gc->gc_mutex);
   int sc = new_module->gc->stacks.stack_count;
-  
   if (sc >= module->gc->stacks.stack_capacity) {
     module->gc->stacks.stack_capacity *= 2;
     module->gc->stacks.stacks = realloc(module->gc->stacks.stacks,
                                         module->gc->stacks.stack_capacity *
                                             sizeof(Stack*));
+
+    if (module->gc->stacks.stacks == NULL) {
+      pthread_mutex_unlock(&module->module_mutex);
+      THROW(new_module, "Failed to allocate memory for stacks");
+    }
   }
 
   new_module->gc->stacks.stacks[sc] = new_module->stack;
+  atomic_store(&new_module->stack->stack_id, sc);
   new_module->gc->stacks.stack_count++;
+  pthread_mutex_unlock(&new_module->gc->gc_mutex);
+
   memcpy(new_module->stack->values, module->stack->values,
          GLOBALS_SIZE * sizeof(Value));
 
@@ -49,11 +58,18 @@ void* value_to_function(void* value) {
   new_module->callstack = 1;
   pthread_mutex_init(&new_module->module_mutex, NULL);
 
-  // printf("Thread %p\n", new_module->stack->values);
+  bool old_gc_enabled = atomic_load(&new_module->gc->gc_enabled);
+
+  atomic_store(&new_module->gc->gc_enabled, true);
 
   Value ret = new_module->call_function(new_module, function, 0, NULL);
+  
+  atomic_store(&new_module->gc->gc_enabled, old_gc_enabled);
 
-  sc = find_stacks_current_sp(new_module, pthread_self());
+  // sc = find_stacks_current_sp(new_module, pthread_self());
+
+  sc = atomic_load(&new_module->stack->stack_id);
+
   if (sc < 0 || sc >= new_module->gc->stacks.stack_count) {
     THROW(new_module, "Current stack not found in stacks");
   }
@@ -63,8 +79,7 @@ void* value_to_function(void* value) {
   pthread_mutex_unlock(&new_module->gc->gc_mutex);
 
   // Free the stack and the module
-  free(new_module->stack->values);
-  free(new_module->stack);
+  atomic_store(&new_module->stack->is_halted, true);
 
   free(new_module);
 
@@ -84,12 +99,14 @@ Value create_thread(Module* mod, Value* args, int argc) {
   pthread_t thread;
   struct thread_data_t* data = malloc(sizeof(struct thread_data_t));
   data->function = args[0];
+  mark_value(mod, args[0]);
   data->mod = mod;
   pthread_create(&thread, NULL, value_to_function, data);
 
   HeapValue* thread_value = allocate(mod, TYPE_API);
   thread_value->as_any = thread;
   thread_value->destructor = NULL;
+  thread_value->mark = NULL;
   return MAKE_PTR(thread_value);
 }
 
@@ -100,6 +117,7 @@ Value create_detached_thread(Module* mod, Value* args, int argc) {
   pthread_t thread;
   struct thread_data_t* data = malloc(sizeof(struct thread_data_t));
   data->function = args[0];
+  mark_value(mod, args[0]);
   data->mod = mod;
   pthread_create(&thread, NULL, value_to_function, data);
   pthread_detach(thread);
@@ -107,12 +125,12 @@ Value create_detached_thread(Module* mod, Value* args, int argc) {
   HeapValue* thread_value = allocate(mod, TYPE_API);
   thread_value->as_any = thread;
   thread_value->destructor = NULL;
+  thread_value->mark = NULL;
   return MAKE_PTR(thread_value);
 }
 
 Value wait_thread(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "wait_thread", argc, 1);
-  // printf("Thread: "); debug_value(args[0]); printf("\n");
   ASSERT_TYPE(mod, "wait_thread", args[0], TYPE_API);
 
   HeapValue* thread_value = GET_PTR(args[0]);
