@@ -55,13 +55,14 @@ void* find_function(Module* module, struct Native callee) {
 
 void op_native_call(Module* module, Value callee, int32_t argc) {
   ASSERT_TYPE(module, "op_native_call", callee, TYPE_NATIVE);
-  module->gc->gc_enabled = false;
+  atomic_store(&module->gc->gc_enabled, false);
   struct Native fun = GET_NATIVE(callee);
 
   Value* args = malloc(sizeof(Value) * argc);
+  int sp = module->stack->stack_pointer - argc;
   // Pop args in reverse order
   for (int i = argc - 1; i >= 0; i--) {
-    args[i] = stack_pop(module);
+    args[i] = module->stack->values[module->stack->stack_pointer - argc + i];
     // mark_value(args[i]);
   }
 
@@ -73,9 +74,14 @@ void op_native_call(Module* module, Value callee, int32_t argc) {
 
   Value ret = handler(module, args, argc);
 
-  stack_push(module, ret);
+  for (int i = 0; i < argc; i++) {
+    module->stack->values[module->stack->stack_pointer - argc + i] = kNull;
+  }
 
-  module->gc->gc_enabled = true;
+  module->stack->values[sp] = ret;
+  module->stack->stack_pointer = sp + 1;
+
+  atomic_store(&module->gc->gc_enabled, true);
 
   free(args);
   module->pc += 5;
@@ -84,13 +90,13 @@ void op_native_call(Module* module, Value callee, int32_t argc) {
 void direct_native_call(Module* module, struct Native fun, int32_t argc) {
   Value* args = malloc(sizeof(Value) * argc);
 
-  pthread_mutex_lock(&module->gc->gc_mutex);
-  module->gc->gc_enabled = false;
-  pthread_mutex_unlock(&module->gc->gc_mutex);
+  atomic_store(&module->gc->gc_enabled, false);
+
+  int sp = module->stack->stack_pointer - argc;
 
   // Pop args in reverse order
   for (int i = argc - 1; i >= 0; i--) {
-    args[i] = stack_pop(module);
+    args[i] = module->stack->values[module->stack->stack_pointer - argc + i];
   }
 
   NativeFunction handler = find_function(module, fun);
@@ -101,11 +107,14 @@ void direct_native_call(Module* module, struct Native fun, int32_t argc) {
 
   Value ret = handler(module, args, argc);
 
-  stack_push(module, ret);
+  for (int i = 0; i < argc; i++) {
+    module->stack->values[module->stack->stack_pointer - argc + i] = kNull;
+  }
 
-  pthread_mutex_lock(&module->gc->gc_mutex);
-  module->gc->gc_enabled = true;
-  pthread_mutex_unlock(&module->gc->gc_mutex);
+  module->stack->values[sp] = ret;
+  module->stack->stack_pointer = sp + 1;
+
+  atomic_store(&module->gc->gc_enabled, true);
 
   free(args);
   module->pc += 5;

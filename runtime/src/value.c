@@ -47,7 +47,6 @@ void mark_value(Module* mod, Value value) {
 }
 
 void free_value(struct Module* mod, HeapValue* unreached) {
-  // printf("Freed %p: ", unreached); debug_value(MAKE_PTR(unreached)); printf("\n");
   if (unreached->type == TYPE_LIST || unreached->type == TYPE_MUTABLE) {
     free(unreached->as_ptr);
   } else if (unreached->type == TYPE_STRING) {
@@ -64,15 +63,27 @@ void free_value(struct Module* mod, HeapValue* unreached) {
 }
 
 bool are_all_threads_stopped(struct Module* vm) {
-  for (int i = 0; i < vm->gc->stacks.stack_count; i++) {
+  pthread_mutex_lock(&vm->gc->gc_mutex);
+  int stack_count = vm->gc->stacks.stack_count;
+  pthread_mutex_unlock(&vm->gc->gc_mutex);
+
+  for (int i = 0; i < stack_count; i++) {
+    pthread_mutex_lock(&vm->gc->gc_mutex);
     Stack* stack = vm->gc->stacks.stacks[i];
+    pthread_mutex_unlock(&vm->gc->gc_mutex);
+
     if (!stack) continue;
 
-    if (atomic_load(&stack->is_halted)) {
+    pthread_mutex_lock(&stack->mutex);
+    atomic_bool is_stopped = stack->is_stopped;
+    atomic_bool is_halted = stack->is_halted;
+    pthread_mutex_unlock(&stack->mutex);
+
+    if (atomic_load(&is_halted)) {
       continue;
     }
 
-    if (!atomic_load(&stack->is_stopped)) {
+    if (!atomic_load(&is_stopped)) {
       return false;
     }
   }
@@ -80,11 +91,24 @@ bool are_all_threads_stopped(struct Module* vm) {
 }
 
 bool is_at_least_one_programs_running(struct Module* vm) {
-  for (int i = 0; i < vm->gc->stacks.stack_count - 1; i++) {
-    Stack* stack = vm->gc->stacks.stacks[i];
-    if (!stack || !stack->values) continue;
+  pthread_mutex_lock(&vm->gc->gc_mutex);
+  int stack_count = vm->gc->stacks.stack_count;
+  Stack** stacks = vm->gc->stacks.stacks;
+  pthread_mutex_unlock(&vm->gc->gc_mutex);
 
-    if (!atomic_load(&stack->is_halted)) {
+  for (int i = 0; i < stack_count; i++) {
+    pthread_mutex_lock(&vm->gc->gc_mutex);
+    Stack* stack = stacks[i];
+    Value* values = stack ? stack->values : NULL;
+    pthread_mutex_unlock(&vm->gc->gc_mutex);
+
+    if (!stack || !values) continue;
+
+    pthread_mutex_lock(&stack->mutex);
+    atomic_bool is_halted = stack->is_halted;
+    pthread_mutex_unlock(&stack->mutex);
+
+    if (!atomic_load(&is_halted)) {
       return true;
     }
   }
@@ -109,9 +133,6 @@ void mark_all(struct Module* vm) {
   for (int i = 0; i < vm->gc->stacks.stack_count; i++) {
     Stack* stack = vm->gc->stacks.stacks[i];
 
-    // printf("Marking stack %d (sp: %d)\n", i, stack->stack_pointer);
-
-    // DEBUG_STACK_FROM(stack, 0);
     if (!stack || !stack->values) continue;
     pthread_mutex_lock(&stack->mutex);
     Value* values = stack->values;
@@ -120,10 +141,7 @@ void mark_all(struct Module* vm) {
     for (int j = 0; j < stack->stack_pointer; j++) {
       Value value = values[j];
       if (value == kNull) continue;
-      // printf("%p: ", GET_PTR(value)); debug_value(value); printf("\n");
       mark_value(vm, value);
-
-      // stack->values[j] = kNull;
     }
   }
 
@@ -141,12 +159,9 @@ void gc_young(struct Module* mod);
 void gc_old(struct Module* mod);
 
 void gc(struct Module* mod) {
-  rearrange_stacks(mod);
-  // printf("Running GC\n");
-  // printf("  => SP: %d\n", mod->stack->stack_pointer);
   gc_t* gc_ = mod->gc;
 
-  int youngNumObjects = gc_->young.num_objects;
+  // int youngNumObjects = gc_->young.num_objects;
 
   mark_all(mod);
   gc_young(mod);
@@ -182,11 +197,9 @@ void gc(struct Module* mod) {
   // printf("Collected %d old objects, %d remaining.\n", oldNumObjects -
   // gc_->old.num_objects,
   //        gc_->old.num_objects);
-  
-  // printf("  => SP: %d\n", mod->stack->stack_pointer);
-  // printf("  => YGCC: %d\n", young_gc_count);
 
-  atomic_store(&gc_is_requested, false);
+  rearrange_stacks(mod);
+  atomic_store(&gc_->gc_is_requested, false);
 }
 
 void force_sweep(struct Module* mod) {
@@ -211,23 +224,20 @@ void force_sweep(struct Module* mod) {
 }
 
 void request_gc(struct Module* vm) {
-  if (vm->gc->gc_enabled) {
-    atomic_store(&gc_is_requested, true);
+  if (atomic_load(&vm->gc->gc_enabled)) {
+    atomic_store(&vm->gc->gc_is_requested, true);
   }
 }
 
 void* gc_thread(void* data) {
   struct Module* vm = (struct Module*)data;
   while (is_at_least_one_programs_running(vm)) {
-    if (atomic_load(&gc_is_requested) && are_all_threads_stopped(vm) &&
-        vm->gc->gc_enabled) {
+    if (atomic_load(&vm->gc->gc_is_requested) && are_all_threads_stopped(vm)) {
       gc(vm);
     } else {
       usleep(1000);
     }
   }
-
-  // printf("Stopping GC thread\n");
 
   return NULL;
 }
@@ -243,16 +253,16 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
   gc_t* gc_ = mod->gc;
 
   if (gc_->young.num_objects >= gc_->young.max_objects) {
-    if (gc_->gc_enabled && !atomic_load(&gc_is_requested)) {
-      atomic_store(&gc_is_requested, true);
+    if (atomic_load(&gc_->gc_enabled)) {
+      atomic_store(&gc_->gc_is_requested, true);
     } else {
       gc_->young.max_objects += 2;
     }
   }
   
   if (gc_->old.num_objects >= gc_->old.max_objects) {
-    if (gc_->gc_enabled && !atomic_load(&gc_is_requested)) {
-      atomic_store(&gc_is_requested, true);
+    if (atomic_load(&gc_->gc_enabled)) {
+      atomic_store(&gc_->gc_is_requested, true);
     } else {
       gc_->old.max_objects += 2;
     }
@@ -653,29 +663,13 @@ Value clone_value(Module* mod, Value value) {
   }
 }
 
-int find_stacks_current_sp(Module* mod, pthread_t thread) {
-  for (int i = 0; i < mod->gc->stacks.stack_count; i++) {
-    pthread_mutex_lock(&mod->gc->gc_mutex);
-    Stack* stack = mod->gc->stacks.stacks[i];
-    pthread_mutex_unlock(&mod->gc->gc_mutex);
-
-    // pthread_mutex_lock(&stack->mutex);
-    pthread_t stack_thread = stack ? stack->thread : 0;
-    Value* values = stack ? stack->values : NULL;
-    // pthread_mutex_unlock(&stack->mutex);
-
-    if (stack && values && pthread_equal(stack_thread, thread)) {
-      return i;
-    }
-  }
-  return -1; // Not found
-}
-
 void rearrange_stacks(Module* mod) {
   int new_size = 0;
 
+  pthread_mutex_lock(&mod->gc->gc_mutex);
   for (int i = 0; i < mod->gc->stacks.stack_count; i++) {
     if (mod->gc->stacks.stacks[i] == NULL) continue;
+    if (atomic_load(&mod->gc->stacks.stacks[i]->is_halted)) continue;
     new_size++;
   }
 
@@ -690,14 +684,21 @@ void rearrange_stacks(Module* mod) {
   int j = 0;
   for (int i = 0; i < mod->gc->stacks.stack_count; i++) {
     if (mod->gc->stacks.stacks[i] == NULL) continue;
-    new_stacks[j++] = mod->gc->stacks.stacks[i];
+    if (atomic_load(&mod->gc->stacks.stacks[i]->is_halted)) continue;
+
+    new_stacks[j] = mod->gc->stacks.stacks[i];
+    atomic_store(&new_stacks[j]->stack_id, j);
+    j++;
   }
-  
+  pthread_mutex_unlock(&mod->gc->gc_mutex);
+
   // Free the old stacks
   free(mod->gc->stacks.stacks);
+  pthread_mutex_lock(&mod->gc->gc_mutex);
   mod->gc->stacks.stacks = new_stacks;
-  mod->gc->stacks.stack_count = size;
+  mod->gc->stacks.stack_count = j;
   mod->gc->stacks.stack_capacity = size;
+  pthread_mutex_unlock(&mod->gc->gc_mutex);
 }
 
 // Young generation collection and promotion
@@ -792,4 +793,21 @@ __attribute__((__always_inline__)) inline Value stack_pop(Module* mod) {
   // pthread_mutex_unlock(&stack->mutex);
 
   return value;
+}
+
+void safe_point(Module* mod) {
+  if (atomic_load(&mod->gc->gc_is_requested)) {
+    atomic_store(&mod->stack->is_stopped, true);
+  }
+
+  while (atomic_load(&mod->gc->gc_is_requested)) {
+    if (atomic_load(&mod->stack->is_halted)) {
+      atomic_store(&mod->stack->is_stopped, false);
+      break;
+    } else {
+      usleep(1000); // Sleep for a short duration to avoid busy-waiting
+    }
+  }
+
+  atomic_store(&mod->stack->is_stopped, false);
 }

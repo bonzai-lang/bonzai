@@ -46,8 +46,6 @@ Value call_function(struct Module *m, Value closure, int32_t argc,
 
   m->base_pointer = old_sp2;
 
-  // printf("Calling function\n");
-
   Value ret = run_interpreter(m, ipc, true, 1);
 
   return ret;

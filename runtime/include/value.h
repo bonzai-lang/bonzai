@@ -14,7 +14,7 @@
 typedef uint64_t Value;
 
 #define INIT_POS 512
-#define INIT_OBJECTS 2048
+#define INIT_OBJECTS 32
 #define GLOBALS_SIZE 1024
 #define MAX_STACK_SIZE GLOBALS_SIZE * 32
 #define VALUE_STACK_SIZE MAX_STACK_SIZE - GLOBALS_SIZE
@@ -109,6 +109,7 @@ typedef struct Stack {
 
   atomic_bool is_stopped;
   atomic_bool is_halted;
+  atomic_int stack_id;
 
   pthread_t thread;
 } Stack;
@@ -192,11 +193,13 @@ typedef struct {
   Generation young;
   Generation old;
 
-  bool gc_enabled;
   stacks_t stacks;
   pthread_t gc_thread;
   pthread_cond_t gc_cond;
   pthread_mutex_t gc_mutex;
+  
+  atomic_bool gc_is_requested;
+  atomic_bool gc_enabled;
 
   HeapValue* remembered_set;
 } gc_t;
@@ -241,12 +244,8 @@ void free_value(struct Module* mod, HeapValue* unreached);
 void safe_point(struct Module* mod);
 pthread_t start_gc(struct Module* vm);
 void rearrange_stacks(struct Module* mod);
-int find_stacks_current_sp(struct Module* mod, pthread_t thread);
+// int find_stacks_current_sp(struct Module* mod, pthread_t thread);
 bool is_at_least_one_programs_running(struct Module* vm);
-
-static atomic_bool gc_is_requested;
-static atomic_int gc_type;
-static atomic_bool gc_is_running;
 
 #define MAKE_SPECIAL() kNull
 #define MAKE_ADDRESS(x) MAKE_INTEGER(x)
@@ -262,7 +261,6 @@ void debug_value(Value v);
 #define stack_push(module, value)                                        \
   do {                                                                   \
     if (module->stack->stack_pointer >= module->stack->stack_capacity) { \
-      printf("Reallocating stack");                                      \
       module->stack->stack_capacity *= 1.25;                             \
       module->stack->values =                                            \
           realloc(module->stack->values,                                 \
@@ -344,22 +342,7 @@ inline static char* type_to_str(ValueType t) {
   }
 }
 
-#define safe_point(mod) \
-  do { \
-    if (atomic_load(&gc_is_requested)) { \
-      atomic_store(&mod->stack->is_stopped, true); \
-    } \
-    while (atomic_load(&gc_is_requested)) { \
-      if (atomic_load(&mod->stack->is_halted)) { \
-        atomic_store(&mod->stack->is_stopped, false); \
-        break; \
-      } else {\
-        usleep(1000); \
-      } \
-    } \
-    atomic_store(&mod->stack->is_stopped, false); \
-  } while (0)
-
+void safe_point(struct Module* mod);
 void stop_the_world(struct Module* mod, bool stop);
 void writeBarrier(struct Module* mod, HeapValue* parent, Value child);
 

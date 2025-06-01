@@ -31,7 +31,6 @@ LibraryOption* get_libraries(int argc, char* argv[]) {
       LibraryOption* lib = malloc(sizeof(LibraryOption));
       lib->name = argv[i + 1];
       lib->library = load_library(lib->name);
-      // printf("Loaded library %s (%p)\n", lib->name, lib->library);
       lib->next = NULL;
       if (head == NULL) {
         head = lib;
@@ -89,6 +88,7 @@ int main(int argc, char* argv[]) {
   module.handles = libs;
   module.call_function = call_function;
   module.gc->stacks.stacks[module.gc->stacks.stack_count] = module.stack;
+  atomic_store(&module.stack->stack_id, module.gc->stacks.stack_count);
   module.gc->stacks.stack_count++;
   module.num_handles = num_libs;
   module.current_actor = NULL;

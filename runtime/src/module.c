@@ -60,7 +60,7 @@ void init_gc(gc_t* gc, Module* mod) {
   gc->young.max_objects = INIT_OBJECTS;  // Example default size
   gc->young.num_objects = 0;
 
-  gc->gc_enabled = true;
+  atomic_store(&gc->gc_enabled, true);
 
   pthread_cond_init(&gc->gc_cond, NULL);
   pthread_mutex_init(&gc->gc_mutex, NULL);
@@ -71,7 +71,7 @@ void init_gc(gc_t* gc, Module* mod) {
 
   gc->remembered_set = NULL;
 
-  atomic_store(&gc_is_requested, false);
+  atomic_store(&gc->gc_is_requested, false);
 
   mod->gc = gc;
 }
