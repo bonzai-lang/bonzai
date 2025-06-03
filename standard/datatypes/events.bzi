@@ -1,0 +1,44 @@
+require "std:datatypes/unit"
+require "std:datatypes/mutable"
+require "std:math"
+
+type EventLoop<A, B> {
+  Node(eventName: string, eventFunction: fn(A): B, next: EventLoop<A, B>),
+  Empty
+}
+
+pub fn Event::new<A, B>(): EventLoop<A, B> => EventLoop->Empty
+
+pub fn on<A, B>(
+  eventLoop: mut EventLoop<A, B>, 
+  eventName: string, 
+  eventFunction: fn(A): B
+): EventLoop<A, B> => {
+  eventLoop = EventLoop->Node(eventName, eventFunction, eventLoop.value)
+
+  return eventLoop.value
+}
+
+pub fn Event::emit<A, B>(
+  eventLoop: mut EventLoop<A, B>,
+  eventName: string,
+  data: A
+): list<B> => {
+  mut newEventLoop = EventLoop->Empty
+  mut results = []
+
+  match eventLoop.value {
+    case Node(name, func, next) => {
+      if name == eventName then {
+        results = [func(data)] + results.value
+        newEventLoop = next
+      }
+      results = results.value + Event::emit(mut next, eventName, data)
+    }
+    case Empty => unit
+  }
+
+  eventLoop = newEventLoop.value
+
+  return results.value
+}
