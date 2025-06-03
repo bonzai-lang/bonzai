@@ -1,81 +1,22 @@
 require "std:foundation"
+require "std:datatypes/events"
 
-extern fn queue_create<A>(): Queue<A>
-extern fn queue_enqueue<A>(q: Queue<A>, x: A): unit
-extern fn queue_dequeue<A>(q: Queue<A>, should_stop: mut bool): A
-extern fn queue_destroy<A>(q: Queue<A>): unit
-extern fn queue_show<A>(q: Queue<A>): unit
+mut eventLoop = Event::new()
 
-fn Actor::create<A>(events: list<(string, fn(A): bool)>): (Queue<(string, A)>, Thread<unit>) => {
-  let q = queue_create();
-  let thread = spawn {
-    mut running = true
-
-    while running.value {
-      let x = queue_dequeue(q, running)
-
-      match x {
-        case Some(Tuple(event, data)) => match List::lookup(event, events) {
-          case Some(fun) => {
-            running = fun(data)
-          }
-
-          case None => {
-            break
-          }
-        }
-
-        case None => unit
-      }
-    }
-
-    unit
-  };
-
-  (q, thread)
-}
-
-fn Actor::send<A>(
-    act: (Queue<(string, A)>, Thread<unit>),
-    event: string,
-    data: A
-): unit => {
-  let Tuple(q, _) = act
-  queue_enqueue(q, (event, data))
-}
-
-fn Actor::wait<A>(act: (Queue<(string, A)>, Thread<unit>)): unit => {
-  let Tuple(_, thread) = act
-  thread.wait()
-}
-
-type Message {
-  Say(msg: string),
-  Exit,
-  Welcome(user: string)
-}
-
-let act = Actor::create([
-  ("Say", fn(Say(msg)) => {
-    print("Message: $msg")
-    true
-  }),
-  ("Exit", fn(Exit) => {
-    print("Exiting...")
-    false
-  }),
-  ("Welcome", fn(Welcome(user)) => {
-    print("Welcome, $user!")
-    true
-  })
-])
-
-range(0, 1000).foreach(fn (i) => {
-  Actor::send(act, "Say", Say("Hello, world! $i"))
+eventLoop.on("test", fn(x: int): string => {
+  print("Event received with data: $x")
+  return "Processed: $x"
 })
 
-Actor::send(act, "Exit", Exit)
+eventLoop.on("test", fn(x: int): string => {
+  print("Another handler for event with data: $x")
+  return "Another processed: $x"
+})
 
-Actor::wait(act)
+let thread = spawn {
+  print("Emitting event 'test' with data 42")
+  let results = Event::emit(eventLoop, "test", 42)
+  return results
+}
 
-print("===================================")
+thread.wait()
