@@ -268,10 +268,6 @@ resolveImports m (HLIR.MkExprLambda args _ body) = do
   writeIORef moduleState old
 
   return m'
-resolveImports m (HLIR.MkExprLet _ (Left ann) e b) | isData e = do
-  let m' = m { types = Set.singleton ann.name <> types m }
-  m'' <- resolveImports m' e
-  resolveImports m'' b
 resolveImports m (HLIR.MkExprLet _ (Left name) expr b) = do
   let m' = m {variables = Set.singleton name.name <> variables m}
   void $ resolveImports m' expr
