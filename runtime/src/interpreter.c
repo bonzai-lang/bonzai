@@ -68,7 +68,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return,
   goto *jmp_table[op];
 
 case_load_local: {
-  // safe_point(module);
+  safe_point(module);
   int bp = module->base_pointer;
   Value value = module->stack->values[bp + i1];
   stack_push(module, value);
@@ -77,16 +77,19 @@ case_load_local: {
 }
 
 case_store_local: {
-  // safe_point(module);
+  safe_point(module);
   int bp = module->base_pointer;
-  module->stack->values[bp + i1] = stack_pop(module);
+  module->stack->values[bp + i1] = module->stack->values[module->stack->stack_pointer - 1];
+  module->stack->values[module->stack->stack_pointer - 1] = kNull;
+
+  module->stack->stack_pointer--;
 
   INCREASE_IP(module);
   goto *jmp_table[op];
 }
 
 case_load_constant: {
-  // safe_point(module);
+  safe_point(module);
   Value value = constants->values[i1];
   stack_push(module, value);
   INCREASE_IP(module);
@@ -94,7 +97,7 @@ case_load_constant: {
 }
 
 case_load_global: {
-  // safe_point(module);
+  safe_point(module);
   Value value = module->stack->values[i1];
   stack_push(module, value);
   INCREASE_IP(module);
@@ -102,7 +105,7 @@ case_load_global: {
 }
 
 case_store_global: {
-  // safe_point(module);
+  safe_point(module);
   Value value = module->stack->values[module->stack->stack_pointer - 1];
   module->stack->values[i1] = value;
 
@@ -115,7 +118,7 @@ case_store_global: {
 }
 
 case_return: {
-  // safe_point(module);
+  safe_point(module);
   struct Frame fr = pop_frame(module);
   Value ret = module->stack->values[module->stack->stack_pointer - 1];
 
@@ -139,7 +142,7 @@ case_return: {
 }
 
 case_compare: {
-  // safe_point(module);
+  safe_point(module);
   Value a = module->stack->values[module->stack->stack_pointer - 2];
   Value b = module->stack->values[module->stack->stack_pointer - 1];
 
@@ -153,7 +156,7 @@ case_compare: {
 }
 
 case_update: {
-  // safe_point(module);
+  safe_point(module);
   Value variable = module->stack->values[module->stack->stack_pointer - 1];
   Value value = module->stack->values[module->stack->stack_pointer - 2];
 
@@ -162,12 +165,12 @@ case_update: {
 
   ASSERT_TYPE(module, "update", variable, TYPE_MUTABLE);
 
-  // pthread_mutex_lock(&ptr->mutex);
+  pthread_mutex_lock(&GET_PTR(variable)->mutex);
 
   writeBarrier(module, GET_PTR(variable), value);
   GET_MUTABLE(variable) = value;
 
-  // pthread_mutex_unlock(&ptr->mutex);
+  pthread_mutex_unlock(&GET_PTR(variable)->mutex);
 
   module->stack->stack_pointer -= 2;
 
@@ -176,7 +179,7 @@ case_update: {
 }
 
 case_make_list: {
-  // safe_point(module);
+  safe_point(module);
   if (i1 == 0) {
     stack_push(module, EMPTY_LIST);
     INCREASE_IP(module);
@@ -202,7 +205,7 @@ case_make_list: {
 }
 
 case_list_get: {
-  // safe_point(module);
+  safe_point(module);
   Value list = module->stack->values[module->stack->stack_pointer - 1];
   uint32_t index = i1;
 
@@ -284,7 +287,7 @@ case_jump_rel: {
 }
 
 case_get_index: {
-  // safe_point(module);
+  safe_point(module);
   Value index = module->stack->values[module->stack->stack_pointer - 1];
   Value list = module->stack->values[module->stack->stack_pointer - 2];
 
@@ -309,7 +312,7 @@ case_get_index: {
 }
 
 case_special: {
-  // safe_point(module);
+  safe_point(module);
   stack_push(module, kNull);
   INCREASE_IP(module);
   goto *jmp_table[op];
@@ -325,7 +328,7 @@ case_halt: {
 }
 
 case_make_function_and_store: {
-  // safe_point(module);
+  safe_point(module);
   int32_t new_pc = module->pc + 5;
   Value lambda = MAKE_FUNCTION(module, new_pc, i3);
 
@@ -336,7 +339,7 @@ case_make_function_and_store: {
 }
 
 case_load_native: {
-  // safe_point(module);
+  safe_point(module);
   Value native = module->constants->values[i1];
 
   ASSERT_TYPE(module, "load_native", native, TYPE_STRING);
@@ -349,7 +352,7 @@ case_load_native: {
 }
 
 case_make_mutable: {
-  // safe_point(module);
+  safe_point(module);
   Value x = module->stack->values[module->stack->stack_pointer - 1];
   module->stack->values[module->stack->stack_pointer - 1] =
       MAKE_MUTABLE(module, x);
@@ -358,7 +361,7 @@ case_make_mutable: {
 }
 
 case_loc: {
-  // safe_point(module);
+  safe_point(module);
   module->latest_position[0] = i1;
   module->latest_position[1] = i2;
   module->file = GET_STRING(constants->values[i3]);
@@ -368,7 +371,7 @@ case_loc: {
 }
 
 case_add: {
-  // safe_point(module);
+  safe_point(module);
   Value b = module->stack->values[module->stack->stack_pointer - 1];
   Value a = module->stack->values[module->stack->stack_pointer - 2];
 
@@ -474,7 +477,7 @@ case_add: {
 }
 
 case_sub: {
-  // safe_point(module);
+  safe_point(module);
   Value a = stack_pop(module);
   Value b = stack_pop(module);
 
@@ -502,7 +505,7 @@ case_sub: {
 }
 
 case_mul: {
-  // safe_point(module);
+  safe_point(module);
   Value a = stack_pop(module);
   Value b = stack_pop(module);
 
@@ -530,7 +533,7 @@ case_mul: {
 }
 
 case_div: {
-  // safe_point(module);
+  safe_point(module);
   Value a = stack_pop(module);
   Value b = stack_pop(module);
 
@@ -558,7 +561,7 @@ case_div: {
 }
 
 case_mod: {
-  // safe_point(module);
+  safe_point(module);
   Value b = stack_pop(module);
   Value a = stack_pop(module);
 
@@ -595,7 +598,7 @@ case_call_native: {
 }
 
 case_get_value: {
-  // safe_point(module);
+  safe_point(module);
   Value value = module->stack->values[module->stack->stack_pointer - 1];
 
   ASSERT_TYPE(module, "get_value", value, TYPE_MUTABLE);
@@ -607,7 +610,7 @@ case_get_value: {
 }
 
 case_get_record_access: {
-  // safe_point(module);
+  safe_point(module);
   Value record = module->stack->values[module->stack->stack_pointer - 1];
   Value access = module->constants->values[i1];
 
@@ -658,7 +661,7 @@ case_get_record_access: {
 }
 
 case_make_record: {
-  // safe_point(module);
+  safe_point(module);
   if (i1 == 0) {
     stack_push(module, EMPTY_RECORD);
     INCREASE_IP(module);

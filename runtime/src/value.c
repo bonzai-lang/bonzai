@@ -18,13 +18,23 @@ void mark_value(Module* mod, Value value) {
 
   HeapValue* ptr = GET_PTR(value);
 
-  if (!ptr || ptr->is_marked) return;
+  if (!ptr) return;
+
+  if (ptr->is_marked) {
+    // printf("Value %p (%s) already marked, skipping.\n", (void*)ptr, type_to_str(ptr->type));
+    return;
+  }
 
   ptr->is_marked = true;
+
+  // printf("Marking value %p (%s): ", (void*)ptr, type_to_str(ptr->type));
+  // debug_value(value);
+  // printf("\n");
 
   switch (ptr->type) {
     case TYPE_LIST:
       for (uint32_t i = 0; i < ptr->length; i++) {
+        // printf("  => need to mark list[%d] \n", i);
         mark_value(mod, ptr->as_ptr[i]);
       }
       break;
@@ -38,7 +48,45 @@ void mark_value(Module* mod, Value value) {
       break;
     case TYPE_API:
       if (ptr->mark) {
-        ptr->mark(mod, ptr);
+        ptr->mark(mod, ptr, false);
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+void unmark_value(Module* mod, Value value) {
+  if (!IS_PTR(value)) return;
+
+  HeapValue* ptr = GET_PTR(value);
+
+  if (!ptr || !ptr->is_marked) {
+    // printf("Value %p (%s) is not marked, skipping.\n", (void*)ptr, type_to_str(ptr->type));
+    return;
+  }
+
+  ptr->is_marked = false;
+
+  // printf("Unmarking value %p (%s)\n", (void*)ptr, type_to_str(ptr->type));
+
+  switch (ptr->type) {
+    case TYPE_LIST:
+      for (uint32_t i = 0; i < ptr->length; i++) {
+        unmark_value(mod, ptr->as_ptr[i]);
+      }
+      break;
+    case TYPE_MUTABLE:
+      unmark_value(mod, *(ptr->as_ptr));
+      break;
+    case TYPE_RECORD:
+      for (uint32_t i = 0; i < ptr->length; i++) {
+        unmark_value(mod, ptr->as_record.values[i]);
+      }
+      break;
+    case TYPE_API:
+      if (ptr->mark) {
+        ptr->mark(mod, ptr, true);
       }
       break;
     default:
@@ -47,6 +95,8 @@ void mark_value(Module* mod, Value value) {
 }
 
 void free_value(struct Module* mod, HeapValue* unreached) {
+  if (!unreached) return;
+
   if (unreached->type == TYPE_LIST || unreached->type == TYPE_MUTABLE) {
     free(unreached->as_ptr);
   } else if (unreached->type == TYPE_STRING) {
@@ -59,6 +109,9 @@ void free_value(struct Module* mod, HeapValue* unreached) {
     free(unreached->as_record.keys);
     free(unreached->as_record.values);
   }
+  
+  if (unreached->is_constant) return;
+
   free(unreached);
 }
 
@@ -130,25 +183,28 @@ void mark_all(struct Module* vm) {
     mark_value(vm, vm->argv[i]);
   }
 
+  // Also mark any young objects reachable from the remembered set
+  for (HeapValue* obj = vm->gc->remembered_set; obj != NULL;
+       obj = obj->next_remembered) {
+    mark_value(vm, MAKE_PTR(obj));
+  }
+
   for (int i = 0; i < vm->gc->stacks.stack_count; i++) {
     Stack* stack = vm->gc->stacks.stacks[i];
 
     if (!stack || !stack->values) continue;
     pthread_mutex_lock(&stack->mutex);
     Value* values = stack->values;
+    int stack_pointer = stack->stack_pointer;
     pthread_mutex_unlock(&stack->mutex);
 
-    for (int j = 0; j < stack->stack_pointer; j++) {
+    // printf("Marking stack %d with %d values\n", i, stack_pointer);
+
+    for (int j = 0; j <= stack_pointer; j++) {
       Value value = values[j];
       if (value == kNull) continue;
       mark_value(vm, value);
     }
-  }
-
-  // Also mark any young objects reachable from the remembered set
-  for (HeapValue* obj = vm->gc->remembered_set; obj != NULL;
-       obj = obj->next_remembered) {
-    mark_value(vm, MAKE_PTR(obj));
   }
 }
 
@@ -159,6 +215,7 @@ void gc_young(struct Module* mod);
 void gc_old(struct Module* mod);
 
 void gc(struct Module* mod) {
+  // printf("Running garbage collector...\n");
   gc_t* gc_ = mod->gc;
 
   // int youngNumObjects = gc_->young.num_objects;
@@ -170,16 +227,23 @@ void gc(struct Module* mod) {
   young_gc_count++;
 
   if (gc_->old.num_objects >= gc_->old.max_objects || young_gc_count >= 3) {
+    // printf("Running old generation garbage collection...\n");
     gc_old(mod);
     young_gc_count = 0;
-  }
-
-  HeapValue* obj = gc_->old.first_object;
-  while (obj != NULL) {
-    if (obj->is_marked) {
+  } else {
+    HeapValue* obj = gc_->old.first_object;
+    while (obj != NULL) {
+      unmark_value(mod, MAKE_PTR(obj));
       obj->is_marked = false;
+      obj = obj->next;
     }
-    obj = obj->next;
+
+    obj = gc_->remembered_set;
+    while (obj != NULL) {
+      unmark_value(mod, MAKE_PTR(obj));
+      obj->is_marked = false;
+      obj = obj->next_remembered;
+    }
   }
 
   pthread_mutex_lock(&gc_->gc_mutex);
@@ -200,6 +264,7 @@ void gc(struct Module* mod) {
 
   rearrange_stacks(mod);
   atomic_store(&gc_->gc_is_requested, false);
+  // printf("Garbage collection completed.\n");
 }
 
 void force_sweep(struct Module* mod) {
@@ -232,7 +297,9 @@ void request_gc(struct Module* vm) {
 void* gc_thread(void* data) {
   struct Module* vm = (struct Module*)data;
   while (is_at_least_one_programs_running(vm)) {
-    if (atomic_load(&vm->gc->gc_is_requested) && are_all_threads_stopped(vm)) {
+    if (atomic_load(&vm->gc->gc_is_requested) &&
+        atomic_load(&vm->gc->gc_enabled) && 
+        are_all_threads_stopped(vm)) {
       gc(vm);
     } else {
       usleep(1000);
@@ -273,6 +340,7 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
   v->type = type;
   v->is_marked = false;
   v->is_constant = false;
+  v->in_remembered_set = false;
   v->survival_count = 0;
   v->generation = GEN_YOUNG;
   v->next_remembered = NULL;
@@ -343,7 +411,6 @@ Value MAKE_STRING_NON_GC(struct Module* mod, char* x) {
   v->as_string = x;
   v->length = strlen(x);
   v->is_constant = true;
-  v->is_marked = true;
 
   return MAKE_PTR(v);
 }
@@ -688,7 +755,7 @@ void rearrange_stacks(Module* mod) {
 
     new_stacks[j] = mod->gc->stacks.stacks[i];
     atomic_store(&new_stacks[j]->stack_id, j);
-    j++;
+    j += 1;
   }
   pthread_mutex_unlock(&mod->gc->gc_mutex);
 
@@ -720,13 +787,17 @@ void gc_young(Module* mod) {
           mod->gc->young.first_object = obj->next;
         obj = obj->next;
 
+        // printf("Promoting object %p to old generation\n", (void*)promoted);
+
         promoted->next = mod->gc->old.first_object;
         promoted->generation = GEN_OLD;
         promoted->survival_count = 0;
-        promoted->is_marked = true;
+        // promoted->is_marked = true;
         mod->gc->old.first_object = promoted;
         mod->gc->young.num_objects--;
         mod->gc->old.num_objects++;
+        // mark_value(mod, MAKE_PTR(promoted));
+        promoted->is_marked = true;
         continue;
       }
       prev = obj;
@@ -738,6 +809,7 @@ void gc_young(Module* mod) {
         prev->next = obj;
       else
         mod->gc->young.first_object = obj;
+      // printf("Freeing unreached object %p (young)\n", (void*)unreached);
       free_value(mod, unreached);
       mod->gc->young.num_objects--;
     }
@@ -759,6 +831,7 @@ void gc_old(Module* mod) {
         prev->next = obj;
       else
         mod->gc->old.first_object = obj;
+      // printf("Freeing unreached object %p (old)\n", (void*)unreached);
       free_value(mod, unreached);
       mod->gc->old.num_objects--;
     }
@@ -771,7 +844,12 @@ void writeBarrier(Module* mod, HeapValue* parent, Value child) {
   HeapValue* child_ptr = GET_PTR(child);
 
   // Old generation writes to young generation
-  if (parent->generation == GEN_OLD && child_ptr->generation == GEN_YOUNG && !child_ptr->is_constant && !parent->is_constant) {
+  if (parent->generation == GEN_OLD && child_ptr->generation == GEN_YOUNG) {
+    // printf("Write barrier %p: ", (void*)parent);
+    // debug_value(MAKE_PTR(parent));
+    // printf(" -> %p: ", (void*)child_ptr);
+    // debug_value(child);
+    // printf("\n");
     // child_ptr->is_marked = true;
 
     // If not already in remembered set, add it
@@ -796,12 +874,18 @@ __attribute__((__always_inline__)) inline Value stack_pop(Module* mod) {
 }
 
 void safe_point(Module* mod) {
+  // printf("==> Safe point requested in stack %d (pc: %d)\n",
+  //        atomic_load(&mod->stack->stack_id), mod->pc);
   if (atomic_load(&mod->gc->gc_is_requested)) {
     atomic_store(&mod->stack->is_stopped, true);
+  } else {
+    return;
   }
+  // printf("Safe point reached in stack %d (pc: %d)\n",
+  //        atomic_load(&mod->stack->stack_id), mod->pc);
 
   while (atomic_load(&mod->gc->gc_is_requested)) {
-    if (atomic_load(&mod->stack->is_halted)) {
+    if (atomic_load(&mod->stack->is_halted) || !atomic_load(&mod->stack->is_stopped)) {
       atomic_store(&mod->stack->is_stopped, false);
       break;
     } else {

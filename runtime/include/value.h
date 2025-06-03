@@ -160,7 +160,7 @@ typedef struct HeapValue {
   struct HeapValue* next_remembered;
   struct HeapValue* next;
   void (*destructor)(struct Module*, struct HeapValue*);
-  void (*mark)(struct Module*, struct HeapValue*);
+  void (*mark)(struct Module*, struct HeapValue*, bool should_unmark);
   pthread_mutex_t mutex;
   pthread_cond_t cond;
 
@@ -244,7 +244,7 @@ void free_value(struct Module* mod, HeapValue* unreached);
 void safe_point(struct Module* mod);
 pthread_t start_gc(struct Module* vm);
 void rearrange_stacks(struct Module* mod);
-// int find_stacks_current_sp(struct Module* mod, pthread_t thread);
+void unmark_value(struct Module* mod, Value value);
 bool is_at_least_one_programs_running(struct Module* vm);
 
 #define MAKE_SPECIAL() kNull

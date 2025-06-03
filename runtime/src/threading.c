@@ -46,7 +46,15 @@ Value call_function(struct Module *m, Value closure, int32_t argc,
 
   m->base_pointer = old_sp2;
 
+  // mark_value(m, closure);
+
+  bool old_gc_enabled = atomic_load(&m->gc->gc_enabled);
+
+  atomic_store(&m->gc->gc_enabled, true);
+
   Value ret = run_interpreter(m, ipc, true, 1);
+
+  atomic_store(&m->gc->gc_enabled, old_gc_enabled);
 
   return ret;
 }

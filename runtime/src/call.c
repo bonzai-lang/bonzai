@@ -55,6 +55,9 @@ void* find_function(Module* module, struct Native callee) {
 
 void op_native_call(Module* module, Value callee, int32_t argc) {
   ASSERT_TYPE(module, "op_native_call", callee, TYPE_NATIVE);
+
+  // bool gc_enabled = atomic_load(&module->gc->gc_enabled);
+
   atomic_store(&module->gc->gc_enabled, false);
   struct Native fun = GET_NATIVE(callee);
 
@@ -89,6 +92,8 @@ void op_native_call(Module* module, Value callee, int32_t argc) {
 
 void direct_native_call(Module* module, struct Native fun, int32_t argc) {
   Value* args = malloc(sizeof(Value) * argc);
+
+  // bool gc_enabled = atomic_load(&module->gc->gc_enabled);
 
   atomic_store(&module->gc->gc_enabled, false);
 
