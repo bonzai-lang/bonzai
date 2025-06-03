@@ -479,6 +479,10 @@ Value sliceFrom(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "sliceFrom", argc, 2);
   ASSERT_TYPE(mod, "sliceFrom", args[0], TYPE_LIST);
   ASSERT_TYPE(mod, "sliceFrom", args[1], TYPE_INTEGER);
+  
+  if (IS_EMPTY_LIST(args[0]) || GET_PTR(args[0])->length == 0) {
+    return EMPTY_LIST;
+  }
 
   HeapValue* list = GET_PTR(args[0]);
   int32_t start = GET_INT(args[1]);
@@ -516,106 +520,173 @@ Value isFunction(Module* mod, Value* args, int argc) {
   return MAKE_INTEGER(0);
 }
 
+int str_size(Value value) {
+  switch (get_type(value)) {
+    case TYPE_INTEGER: {
+      int int_size = snprintf(NULL, 0, "%d", (int)GET_INT(value));
+      return int_size;
+    }
+    case TYPE_CHAR: {
+      return 1; // Single character
+    }
+    case TYPE_FLOAT: {
+      int float_size = snprintf(NULL, 0, "%f", GET_FLOAT(value));
+      return float_size;
+    }
+    case TYPE_STRING: {
+      return strlen(GET_STRING(value)) + 2; // For the quotes
+    }
+    case TYPE_LIST: {
+      if (IS_EMPTY_LIST(value)) {
+        return 2; // "[]"
+      } 
+
+      HeapValue* list = GET_PTR(value);
+      int size = 2; // For the brackets
+      for (uint32_t i = 0; i < list->length; i++) {
+        size += str_size(list->as_ptr[i]);
+        if (i < list->length - 1) {
+          size += 2; // For ", "
+        }
+      }
+      return size;
+    }
+
+    case TYPE_RECORD: {
+      if (IS_EMPTY_RECORD(value)) {
+        return 2; // "{}"
+      }
+
+      HeapValue* record = GET_PTR(value);
+      int size = 2; // For the brackets
+      for (uint32_t i = 0; i < record->length; i++) {
+        size += strlen(record->as_record.keys[i]) + str_size(record->as_record.values[i]) + 2; // For ": "
+        if (i < record->length - 1) {
+          size += 2; // For ", "
+        }
+      }
+      return size;
+    }
+    case TYPE_SPECIAL: {
+      return 10; // "<special>"
+    }
+    case TYPE_MUTABLE: {
+      HeapValue* mut = GET_PTR(value);
+      return str_size(*(mut->as_ptr)) + 10; // "<mutable ...>"
+    }
+    case TYPE_UNKNOWN: {
+      return 10; // "<unknown>"
+    }
+    default: {
+      return 10; // Fallback for unknown types
+    }
+  }
+}
+
 Value toString(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "toString", argc, 1);
 
   ValueType ty = get_type(args[0]);
 
+  char* str = malloc(str_size(args[0]) + 1);
+  int offset = 0;
+
   switch (ty) {
     case TYPE_INTEGER: {
-      char* str = malloc(12);
-      sprintf(str, "%d", (int)GET_INT(args[0]));
-      return MAKE_STRING(mod, str);
+      offset += snprintf(str + offset, str_size(args[0]) + 1, "%d", (int)GET_INT(args[0]));
+      break;
     }
     case TYPE_CHAR: {
-      char* str = malloc(2);
-      str[0] = GET_CHAR(args[0]);
-      str[1] = '\0';
-      return MAKE_STRING(mod, str);
+      str[offset++] = GET_CHAR(args[0]);
+      str[offset] = '\0';
+      break;
     }
     case TYPE_FLOAT: {
-      char* str = malloc(32);
-      sprintf(str, "%f", GET_FLOAT(args[0]));
-      return MAKE_STRING(mod, str);
+      offset += snprintf(str + offset, str_size(args[0]) + 1, "%f", GET_FLOAT(args[0]));
+      break;
     }
     case TYPE_STRING: {
-      return args[0];
+      str[offset++] = '"';
+      
+      char* string = GET_STRING(args[0]);
+      strcpy(str + offset, string);
+      offset += strlen(string);
+      str[offset++] = '"';
+      str[offset] = '\0';
+      break;
     }
     case TYPE_LIST: {
-      if (IS_EMPTY_LIST(args[0])) {
-        return MAKE_STRING_NON_GC(mod, "[]");
-      }
-
       HeapValue* list = GET_PTR(args[0]);
-      char* str = malloc(1);
-      str[0] = '[';
+      if (IS_EMPTY_LIST(args[0])) {
+        strcpy(str, "[]");
+        break;
+      }
 
+      str[offset++] = '[';
       for (uint32_t i = 0; i < list->length; i++) {
-        char* item = GET_STRING(toString(mod, (Value[]){list->as_ptr[i], EMPTY_RECORD}, 2));
+        Value value_str = toString(mod,
+          (Value[]){
+              list->as_ptr[i],
+              EMPTY_RECORD,
+          },
+          2);
 
-        str = realloc(str, strlen(str) + strlen(item) + 3);
-
-        strcat(str, item);
+        offset += snprintf(str + offset, str_size(value_str) + 1, "%s", GET_STRING(value_str));
         if (i < list->length - 1) {
-          strcat(str, ", ");
+          str[offset++] = ',';
+          str[offset++] = ' ';
         }
       }
-
-      str = realloc(str, strlen(str) + 2);
-
-      strcat(str, "]");
-      return MAKE_STRING(mod, str);
+      str[offset++] = ']';
+      str[offset] = '\0';
+      break;
     }
-
     case TYPE_RECORD: {
+      HeapValue* record = GET_PTR(args[0]);
       if (IS_EMPTY_RECORD(args[0])) {
-        return MAKE_STRING_NON_GC(mod, "{}");
+        strcpy(str, "{}");
+        break;
       }
 
-      HeapValue* record = GET_PTR(args[0]);
-      char* str = malloc(1);
-      str[0] = '{';
-
+      str[offset++] = '{';
       for (uint32_t i = 0; i < record->length; i++) {
-        char* key_name = record->as_record.keys[i];
-        Value key_value = record->as_record.values[i];
+        offset += snprintf(str + offset, strlen(record->as_record.keys[i]) + 1, "%s: ", record->as_record.keys[i]);
 
-        char* item = GET_STRING(toString(mod, (Value[]){key_value, EMPTY_RECORD}, 2));
+        Value value_str = toString(mod, (Value[]) {
+          record->as_record.values[i],
+          EMPTY_RECORD,
+        }, 2);
 
-        str = realloc(str, strlen(str) + strlen(key_name) + strlen(item) + 5);
-
-        strcat(str, key_name);
-        strcat(str, ": ");
-        strcat(str, item);
+        offset += snprintf(str + offset, str_size(record->as_record.values[i]) + 1, "%s", GET_STRING(value_str));
         if (i < record->length - 1) {
-          strcat(str, ", ");
+          str[offset++] = ',';
+          str[offset++] = ' ';
         }
       }
-
-      str = realloc(str, strlen(str) + 2);
-
-      strcat(str, "}");
-      return MAKE_STRING(mod, str);
+      str[offset++] = '}';
+      str[offset] = '\0';
+      break;
     }
-
     case TYPE_SPECIAL: {
-      char* str = malloc(10);
-      sprintf(str, "<special>");
-
-      return MAKE_STRING(mod, str);
+      strcpy(str, "<special>");
+      break;
     }
     case TYPE_MUTABLE: {
       HeapValue* mut = GET_PTR(args[0]);
-      return toString(mod, (Value[2]){*(mut->as_ptr), EMPTY_RECORD}, 2);
+      offset += snprintf(str + offset, str_size(*(mut->as_ptr)) + 1, "<mutable %s>", GET_STRING(*(mut->as_ptr)));
+      break;
     }
-    case TYPE_UNKNOWN:
+    case TYPE_UNKNOWN: {
+      strcpy(str, "<unknown>");
+      break;
+    }
     default: {
-      char* str = malloc(10);
-      sprintf(str, "<unknown>");
-
-      return MAKE_STRING(mod, str);
+      strcpy(str, "<unknown>");
+      break;
     }
   }
+
+  return MAKE_STRING(mod, str);
 }
 
 Value is_whitespace(Module* mod, Value* args, int argc) {
@@ -732,7 +803,7 @@ Value wait_time(Module* mod, Value* args, int argc) {
   ASSERT_TYPE(mod, "wait", args[0], TYPE_INTEGER);
 
   int ms = GET_INT(args[0]);
-  usleep(ms * 1000);
+  usleep(ms);
 
   return MAKE_INTEGER(0);
 }

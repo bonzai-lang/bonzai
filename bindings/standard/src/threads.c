@@ -17,7 +17,6 @@ void* value_to_function(void* value) {
   pthread_mutex_lock(&module->module_mutex);
   new_module->stack = stack_new();
   new_module->gc = module->gc;
-  mark_value(new_module, function);
 
   pthread_mutex_lock(&new_module->gc->gc_mutex);
   int sc = new_module->gc->stacks.stack_count;
@@ -58,13 +57,7 @@ void* value_to_function(void* value) {
   new_module->callstack = 1;
   pthread_mutex_init(&new_module->module_mutex, NULL);
 
-  bool old_gc_enabled = atomic_load(&new_module->gc->gc_enabled);
-
-  atomic_store(&new_module->gc->gc_enabled, true);
-
   Value ret = new_module->call_function(new_module, function, 0, NULL);
-  
-  atomic_store(&new_module->gc->gc_enabled, old_gc_enabled);
 
   // sc = find_stacks_current_sp(new_module, pthread_self());
 
@@ -99,7 +92,7 @@ Value create_thread(Module* mod, Value* args, int argc) {
   pthread_t thread;
   struct thread_data_t* data = malloc(sizeof(struct thread_data_t));
   data->function = args[0];
-  mark_value(mod, args[0]);
+  // mark_value(mod, args[0]);
   data->mod = mod;
   pthread_create(&thread, NULL, value_to_function, data);
 
@@ -117,7 +110,7 @@ Value create_detached_thread(Module* mod, Value* args, int argc) {
   pthread_t thread;
   struct thread_data_t* data = malloc(sizeof(struct thread_data_t));
   data->function = args[0];
-  mark_value(mod, args[0]);
+  // mark_value(mod, args[0]);
   data->mod = mod;
   pthread_create(&thread, NULL, value_to_function, data);
   pthread_detach(thread);
@@ -154,19 +147,51 @@ Value wait_thread(Module* mod, Value* args, int argc) {
 Value lock(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "lock_mutex", argc, 1);
 
+  if (IS_EMPTY_LIST(args[0]) || IS_EMPTY_RECORD(args[0])) {
+    return MAKE_INTEGER(1);
+  } 
+
   if (!IS_PTR(args[0])) {
     THROW(mod, "Argument to lock_mutex must be a pointer");
   }
 
   HeapValue* mutex = GET_PTR(args[0]);
 
-  pthread_mutex_lock(&mutex->mutex);
+  if (pthread_mutex_trylock(&mutex->mutex) != 0) {
+    // If the mutex is already locked, we can either wait or return an error.
+    // Here we choose to return an error.
+    THROW(mod, "Mutex is already locked");
+  }
 
-  return MAKE_INTEGER(0);
+  return MAKE_INTEGER(1);
+}
+
+Value trylock(Module* mod, Value* args, int argc) {
+  ASSERT_ARGC(mod, "trylock_mutex", argc, 1);
+
+  if (IS_EMPTY_LIST(args[0]) || IS_EMPTY_RECORD(args[0])) {
+    return MAKE_INTEGER(1);
+  }
+
+  if (!IS_PTR(args[0])) {
+    THROW(mod, "Argument to trylock_mutex must be a pointer");
+  }
+
+  HeapValue* mutex = GET_PTR(args[0]);
+
+  if (pthread_mutex_trylock(&mutex->mutex) == 0) {
+    return MAKE_INTEGER(1); // Successfully locked
+  } else {
+    return MAKE_INTEGER(0); // Mutex is already locked
+  }
 }
 
 Value unlock(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "lock_mutex", argc, 1);
+
+  if (IS_EMPTY_LIST(args[0]) || IS_EMPTY_RECORD(args[0])) {
+    return MAKE_INTEGER(0);
+  }
 
   if (!IS_PTR(args[0])) {
     THROW(mod, "Argument to lock_mutex must be a pointer");
@@ -175,6 +200,7 @@ Value unlock(Module* mod, Value* args, int argc) {
   HeapValue* mutex = GET_PTR(args[0]);
 
   pthread_mutex_unlock(&mutex->mutex);
+
 
   return MAKE_INTEGER(0);
 }
