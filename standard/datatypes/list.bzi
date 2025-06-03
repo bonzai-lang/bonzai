@@ -109,6 +109,34 @@ pub fn List::tail<A>(xs: list<A>): list<A> =>
     case [] => []
   }
 
+pub fn List::head<A>(xs: list<A>): Optional<A> =>
+  match xs {
+    case [x .. xs] => Some(x)
+    case [] => None
+  }
+
+pub fn List::init<A>(xs: list<A>): list<A> =>
+  match xs {
+    case [] => []
+    case [x] => []
+    case [y .. ys] => [y] + List::init(ys)
+  }
+
+pub fn List::uncons<A>(xs: list<A>): (Optional<A>, list<A>) =>
+  match xs {
+    case [] => (None, [])
+    case [x .. xs] => (Some(x), xs)
+  }
+
+pub fn List::unsnoc<A>(xs: list<A>): (list<A>, Optional<A>) =>
+  match xs {
+    case [] => ([], None)
+    case [x] => ([], Some(x))
+    case [y .. ys] => match List::unsnoc(ys) {
+      case Tuple(zs, z) => (zs + [y], z)
+    }
+  }
+
 pub fn range(start: int, end: int): list<int> =>
   if start > end then [] else [start] + range(start + 1, end)
 
