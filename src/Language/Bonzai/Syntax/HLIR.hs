@@ -76,6 +76,7 @@ data Expression f t
   | MkExprBreak
   | MkExprContinue
   | MkExprReturn (Expression f t)
+  | MkExprSpawn (Expression f t)
   deriving (Generic)
 
 -- | DATA CONSTRUCTOR TYPE
@@ -169,6 +170,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText MkExprBreak = "break"
   toText MkExprContinue = "continue"
   toText (MkExprReturn e) = T.concat ["return ", toText e]
+  toText (MkExprSpawn e) = T.concat ["spawn ", toText e]
 
 instance (ToText t) => ToText (DataConstructor t) where
   toText (MkDataVariable v) = v
@@ -235,6 +237,7 @@ instance (Eq (f t), Eq t) => Eq (Expression f t) where
   MkExprBreak == MkExprBreak = True
   MkExprContinue == MkExprContinue = True
   MkExprReturn e == MkExprReturn e' = e == e'
+  MkExprSpawn e == MkExprSpawn e' = e == e'
   _ == _ = False
 
 instance (Eq t) => Eq (DataConstructor t) where

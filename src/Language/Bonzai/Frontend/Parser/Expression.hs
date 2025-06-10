@@ -887,11 +887,7 @@ parseSpawn = do
 
   pure
     ( (start, end),
-      HLIR.MkExprApplication
-        (HLIR.MkExprVariable (HLIR.MkAnnotation "Thread::new" Nothing))
-        [ HLIR.MkExprLambda [] Nothing expr,
-          HLIR.MkExprRecordEmpty
-        ]
+      HLIR.MkExprSpawn (HLIR.MkExprLambda [] Nothing expr)
     )
 
 -- | PARSE ANONYMOUS TYPE

@@ -191,6 +191,10 @@ solveExpression (HLIR.MkExprReturn e) = do
   e' <- solveExpression e
 
   pure $ HLIR.MkExprReturn e'
+solveExpression (HLIR.MkExprSpawn e) = do
+  e' <- solveExpression e
+
+  pure $ HLIR.MkExprSpawn e'
 
 -- | SOLVE UPDATE
 -- | Solve an update by renaming all the variables in the update with unique names.

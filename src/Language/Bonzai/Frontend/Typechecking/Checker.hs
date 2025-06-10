@@ -383,6 +383,10 @@ synthesize (HLIR.MkExprReturn e) = do
   retTy <- M.fresh
 
   pure (HLIR.MkExprReturn e', retTy)
+synthesize (HLIR.MkExprSpawn e) = do
+  (e', ty) <- synthesize e
+
+  pure (HLIR.MkExprSpawn e', ty)
 
 check :: (M.MonadChecker m) => HLIR.HLIR "expression" -> HLIR.Type -> m (HLIR.TLIR "expression")
 check (HLIR.MkExprLambda args ret body) (argsTys HLIR.:->: retTy) = do

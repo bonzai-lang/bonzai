@@ -348,6 +348,7 @@ resolveImports m HLIR.MkExprContinue = pure m
 resolveImports m (HLIR.MkExprReturn e) = do
   void $ resolveImports m e
   pure m
+resolveImports m (HLIR.MkExprSpawn e) = resolveImports m e
 
 resolveImportsPattern :: (MonadConversion m) => ModuleUnit -> HLIR.HLIR "pattern" -> m ModuleUnit
 resolveImportsPattern m (HLIR.MkPatVariable n _) = pure m {variables = Set.insert n m.variables}

@@ -61,6 +61,7 @@ data Expression
   | MkExprReturn Expression
   | MkExprBreak
   | MkExprContinue
+  | MkExprSpawn Expression
 
 pattern MkExprFunction :: Text -> [Text] -> Expression -> Expression
 pattern MkExprFunction f args b = MkExprLet f (MkExprLambda args b)
@@ -130,6 +131,7 @@ instance ToText Expression where
   toText (MkExprRecord m) = T.concat ["{", T.intercalate ", " (map (\(k, v) -> k <> ": " <> toText v) (Map.toList m)), "}"]
   toText MkExprBreak = "break"
   toText MkExprContinue = "continue"
+  toText (MkExprSpawn e) = T.concat ["spawn ", toText e]
 
 instance ToText [Expression] where
   toText = T.intercalate "\n" . map toText
