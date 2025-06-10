@@ -35,7 +35,8 @@ pub fn HTTP::create(callback: fn({
   sendWith: fn(string): unit,
   get: fn(): string,
   getPath: fn(): string,
-  redirect: fn(string): unit
+  redirect: fn(string): unit,
+  stop: fn(): unit
 }): bool, port: int) => {
   let server = start_http_server(port)
 
@@ -46,7 +47,10 @@ pub fn HTTP::create(callback: fn({
     sendWith: fn(buffer: string) => send_buffer_with(req, buffer),
     get: fn() => get_buffer(req),
     getPath: fn() => get_path(req),
-    redirect: fn(url: string) => redirect_to(req, url)
+    redirect: fn(url: string) => redirect_to(req, url),
+    stop: fn() => {
+      running = false
+    }
   }
 
   while running.value {
