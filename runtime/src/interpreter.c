@@ -648,11 +648,11 @@ case_mod: {
 
   switch (ty) {
     case TYPE_INTEGER:
-      stack_push(module, MAKE_INTEGER(GET_INT(b) % GET_INT(a)));
+      stack_push(module, MAKE_INTEGER(GET_INT(a) % GET_INT(b)));
       break;
 
     case TYPE_FLOAT: {
-      float f = fmod(GET_FLOAT(b), GET_FLOAT(a));
+      float f = fmod(GET_FLOAT(a), GET_FLOAT(b));
       stack_push(module, MAKE_FLOAT(f));
       break;
     }

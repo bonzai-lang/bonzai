@@ -9,9 +9,11 @@ Value wait_thread(Module* mod, Value* args, int argc) {
   HeapValue* thread_value = GET_PTR(args[0]);
   pthread_t thread = thread_value->as_event.thread;
   atomic_store(&mod->stack->is_stopped, true);
+  atomic_fetch_add(&mod->gc->thread_stopped, 1);
   Value* thread_returned;
   int join_result = pthread_join(thread, (void**)&thread_returned);
   atomic_store(&mod->stack->is_stopped, false);
+  atomic_fetch_sub(&mod->gc->thread_stopped, 1);
 
   if (join_result != 0 || thread_returned == NULL) {
     THROW(mod, "Thread join failed or returned NULL");
