@@ -234,8 +234,8 @@ void print_with_level(Value value, int level) {
       break;
     }
 
-    case TYPE_EVENT: {
-      printf("<event>");
+    case TYPE_THREAD: {
+      printf("<thread>");
       break;
     }
 
@@ -527,7 +527,7 @@ int str_size(Value value) {
       return int_size;
     }
     case TYPE_CHAR: {
-      return 1; // Single character
+      return 3; // Single character
     }
     case TYPE_FLOAT: {
       int float_size = snprintf(NULL, 0, "%f", GET_FLOAT(value));
@@ -583,110 +583,108 @@ int str_size(Value value) {
   }
 }
 
+char* to_string(Value val) {
+  switch (get_type(val)) {
+    case TYPE_INTEGER: {
+      char* str = malloc(20);
+      snprintf(str, 20, "%d", (int)GET_INT(val));
+      return str;
+    }
+    case TYPE_CHAR: {
+      char* str = malloc(3);
+      snprintf(str, 3, "'%c'", GET_CHAR(val));
+      return str;
+    }
+    case TYPE_FLOAT: {
+      char* str = malloc(32);
+      snprintf(str, 32, "%f", GET_FLOAT(val));
+      return str;
+    }
+    case TYPE_STRING: {
+      return strdup(GET_STRING(val));
+    }
+    case TYPE_LIST: {
+      if (IS_EMPTY_LIST(val)) return strdup("[]");
+
+      HeapValue* list = GET_PTR(val);
+      char* str = malloc(str_size(val) + 1);
+      char* ptr = str;
+      *ptr++ = '[';
+
+      for (uint32_t i = 0; i < list->length; i++) {
+        char* item_value = to_string(list->as_ptr[i]);
+        ptr += snprintf(ptr, str_size(list->as_ptr[i]) + 1, "%s", item_value);
+        free(item_value);
+
+        if (i < list->length - 1) {
+          ptr += snprintf(ptr, 3, ", ");
+        }
+      }
+
+      *ptr++ = ']';
+      *ptr = '\0';
+      return str;
+    }
+    case TYPE_RECORD: {
+      if (IS_EMPTY_RECORD(val)) return strdup("{}");
+
+      HeapValue* record = GET_PTR(val);
+      char* str = malloc(str_size(val) + 1);
+      char* ptr = str;
+      *ptr++ = '{';
+
+      for (uint32_t i = 0; i < record->length; i++) {
+        char* key_name = record->as_record.keys[i];
+        Value key_value = record->as_record.values[i];
+
+        ptr += snprintf(ptr, strlen(key_name) + 3, "%s: ", key_name);
+        char* value_str = to_string(key_value);
+        ptr += snprintf(ptr, str_size(key_value) + 1, "%s", value_str);
+        free(value_str);
+
+        if (i < record->length - 1) {
+          ptr += snprintf(ptr, 3, ", ");
+        }
+      }
+
+      *ptr++ = '}';
+      *ptr = '\0';
+      return str;
+    }
+
+    case TYPE_SPECIAL: {
+      return strdup("<special>");
+    }
+    case TYPE_MUTABLE: {
+      HeapValue* mut = GET_PTR(val);
+      char* mut_value = to_string(*(mut->as_ptr));
+      char* str = malloc(strlen(mut_value) + 11);
+      snprintf(str, strlen(mut_value) + 11, "<mutable %s>", mut_value);
+      free(mut_value);
+      return str;
+    }
+
+    case TYPE_THREAD: {
+      char* str = malloc(20);
+      snprintf(str, 20, "<thread %p>", GET_PTR(val)->as_event.thread);
+      return str;
+    }
+
+    case TYPE_UNKNOWN: {
+      return strdup("<unknown>");
+    }
+    default: {
+      return strdup("<unknown>");
+    }
+  }
+}
+
 Value toString(Module* mod, Value* args, int argc) {
   ASSERT_ARGC(mod, "toString", argc, 1);
 
   ValueType ty = get_type(args[0]);
 
-  char* str = malloc(str_size(args[0]) + 1);
-  int offset = 0;
-
-  switch (ty) {
-    case TYPE_INTEGER: {
-      offset += snprintf(str + offset, str_size(args[0]) + 1, "%d", (int)GET_INT(args[0]));
-      break;
-    }
-    case TYPE_CHAR: {
-      str[offset++] = GET_CHAR(args[0]);
-      str[offset] = '\0';
-      break;
-    }
-    case TYPE_FLOAT: {
-      offset += snprintf(str + offset, str_size(args[0]) + 1, "%f", GET_FLOAT(args[0]));
-      break;
-    }
-    case TYPE_STRING: {
-      str[offset++] = '"';
-      
-      char* string = GET_STRING(args[0]);
-      strcpy(str + offset, string);
-      offset += strlen(string);
-      str[offset++] = '"';
-      str[offset] = '\0';
-      break;
-    }
-    case TYPE_LIST: {
-      HeapValue* list = GET_PTR(args[0]);
-      if (IS_EMPTY_LIST(args[0])) {
-        strcpy(str, "[]");
-        break;
-      }
-
-      str[offset++] = '[';
-      for (uint32_t i = 0; i < list->length; i++) {
-        Value value_str = toString(mod,
-          (Value[]){
-              list->as_ptr[i],
-              EMPTY_RECORD,
-          },
-          2);
-
-        offset += snprintf(str + offset, str_size(value_str) + 1, "%s", GET_STRING(value_str));
-        if (i < list->length - 1) {
-          str[offset++] = ',';
-          str[offset++] = ' ';
-        }
-      }
-      str[offset++] = ']';
-      str[offset] = '\0';
-      break;
-    }
-    case TYPE_RECORD: {
-      HeapValue* record = GET_PTR(args[0]);
-      if (IS_EMPTY_RECORD(args[0])) {
-        strcpy(str, "{}");
-        break;
-      }
-
-      str[offset++] = '{';
-      for (uint32_t i = 0; i < record->length; i++) {
-        offset += snprintf(str + offset, strlen(record->as_record.keys[i]) + 1, "%s: ", record->as_record.keys[i]);
-
-        Value value_str = toString(mod, (Value[]) {
-          record->as_record.values[i],
-          EMPTY_RECORD,
-        }, 2);
-
-        offset += snprintf(str + offset, str_size(record->as_record.values[i]) + 1, "%s", GET_STRING(value_str));
-        if (i < record->length - 1) {
-          str[offset++] = ',';
-          str[offset++] = ' ';
-        }
-      }
-      str[offset++] = '}';
-      str[offset] = '\0';
-      break;
-    }
-    case TYPE_SPECIAL: {
-      strcpy(str, "<special>");
-      break;
-    }
-    case TYPE_MUTABLE: {
-      HeapValue* mut = GET_PTR(args[0]);
-      offset += snprintf(str + offset, str_size(*(mut->as_ptr)) + 1, "<mutable %s>", GET_STRING(*(mut->as_ptr)));
-      break;
-    }
-    case TYPE_UNKNOWN: {
-      strcpy(str, "<unknown>");
-      break;
-    }
-    default: {
-      strcpy(str, "<unknown>");
-      break;
-    }
-  }
-
-  return MAKE_STRING(mod, str);
+  return MAKE_STRING(mod, to_string(args[0]));
 }
 
 Value is_whitespace(Module* mod, Value* args, int argc) {
