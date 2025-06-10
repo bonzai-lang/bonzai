@@ -422,6 +422,10 @@ instance Assemble MLIR.Expression where
   assemble MLIR.MkExprContinue = do
     pure $ LLIR.instr (LLIR.Continue Nothing)
 
+  assemble (MLIR.MkExprSpawn e) = do
+    e' <- assemble e
+    pure $ e' <> LLIR.instr LLIR.Spawn
+
 instance Assemble MLIR.Update where
   assemble :: MonadIO m => MLIR.Update -> m [LLIR.Segment]
   assemble (MLIR.MkUpdtVariable n) = do
@@ -541,6 +545,10 @@ assembleToplevel (MLIR.MkExprUnpack n e e') = do
   e'' <- assembleToplevel e
   e''' <- assembleToplevel e'
   pure $ e'' <> LLIR.instr (LLIR.StoreGlobal n) <> e'''
+assembleToplevel (MLIR.MkExprSingleIf c e) = do
+  c' <- assembleToplevel c
+  e' <- assembleToplevel e
+  pure $ c' <> LLIR.instr (LLIR.JumpIfFalse (computeLen e' + 1)) <> e'
 assembleToplevel e = assemble e
 
 invertList :: [(b, a)] -> [(a, b)]
@@ -573,6 +581,7 @@ getGlobals (MLIR.MkExprList es : xs) = getGlobals (es ++ xs)
 getGlobals (MLIR.MkExprIndex e i : xs) = getGlobals (e : i : xs)
 getGlobals (MLIR.MkExprUnpack _ e e' : xs) = getGlobals (e : e' : xs)
 getGlobals (MLIR.MkExprWhile c e : xs) = getGlobals (c : e : xs)
+getGlobals (MLIR.MkExprSingleIf c e : xs) = getGlobals (c : e : xs)
 getGlobals (_ : xs) = getGlobals xs
 getGlobals [] = mempty
 

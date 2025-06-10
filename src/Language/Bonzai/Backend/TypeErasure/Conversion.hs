@@ -127,6 +127,7 @@ convert (HLIR.MkExprReturn e) = MLIR.MkExprReturn (convert e)
 convert (HLIR.MkExprData cs) = do
   let funs = map (createFunction' Nothing) cs
   MLIR.MkExprRecord (Map.fromList funs)
+convert (HLIR.MkExprSpawn e) = MLIR.MkExprSpawn (convert e)
 
 unit :: MLIR.Expression 
 unit = MLIR.MkExprVariable "unit"

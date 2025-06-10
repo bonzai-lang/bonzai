@@ -45,6 +45,7 @@ instance Free MLIR.Expression where
   free res (MLIR.MkExprRecord m) = foldMap (free res) m
   free _ MLIR.MkExprBreak = Set.empty
   free _ MLIR.MkExprContinue = Set.empty
+  free res (MLIR.MkExprSpawn e) = free res e
  
 instance Free MLIR.Update where
   free res (MLIR.MkUpdtVariable a) = Set.singleton a Set.\\ res

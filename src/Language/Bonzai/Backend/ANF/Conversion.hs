@@ -2,6 +2,7 @@ module Language.Bonzai.Backend.ANF.Conversion where
 
 import qualified Language.Bonzai.Syntax.MLIR as MLIR
 import qualified GHC.IO as IO
+import Language.Bonzai.Backend.Closure.Conversion (getVariable, isVariable)
 
 -- | ANF CONVERSION
 -- |
@@ -38,11 +39,20 @@ convert
   => MLIR.MLIR "expression" 
   -> m (MLIR.MLIR "expression", [(Text, MLIR.MLIR "expression")])
 convert (MLIR.MkExprVariable a) = pure (MLIR.MkExprVariable a, [])
+convert (MLIR.MkExprApplication f args) | isVariable f, name <- getVariable f = do
+  (args', stmts) <- mapAndUnzipM convert args
+  
+  pure (MLIR.MkExprApplication (MLIR.MkExprVariable name) args', concat stmts)
 convert (MLIR.MkExprApplication f args) = do
   (f', stmts1) <- convert f
   (args', stmts2) <- mapAndUnzipM convert args
   
-  pure (MLIR.MkExprApplication f' args', stmts1 <> concat stmts2)
+  name <- freshSymbol "anf"
+
+  let funCall = MLIR.MkExprApplication f' args'
+      funVar  = MLIR.MkExprVariable name
+
+  pure (funVar, stmts1 <> concat stmts2 <> [(name, funCall)])
 convert (MLIR.MkExprLambda args body) = do
   (body', stmts) <- convert body
   
@@ -81,7 +91,11 @@ convert (MLIR.MkExprBlock es) = do
 convert (MLIR.MkExprList es) = do
   (es', stmts) <- mapAndUnzipM convert es
   
-  pure (MLIR.MkExprList es', concat stmts)
+  name <- freshSymbol "anf"
+  let list = MLIR.MkExprList es'
+      letVar = MLIR.MkExprVariable name
+
+  pure (letVar, concat stmts <> [(name, list)])
 convert (MLIR.MkExprNative n ty) = pure (MLIR.MkExprNative n ty, [])
 convert (MLIR.MkExprIndex e i) = do
   (e', stmts1) <- convert e
@@ -136,6 +150,14 @@ convert (MLIR.MkExprRecord m) = do
   pure (MLIR.MkExprRecord m', stmts)
 convert MLIR.MkExprBreak = pure (MLIR.MkExprBreak, [])
 convert MLIR.MkExprContinue = pure (MLIR.MkExprContinue, [])
+convert (MLIR.MkExprSpawn e) = do
+  (e', stmts) <- convert e
+
+  name <- freshSymbol "anf"
+  let spawnVar = MLIR.MkExprVariable name
+      spawnExpr = MLIR.MkExprSpawn e'
+
+  pure (spawnVar, stmts <> [(name, spawnExpr)])
 
 convertUpdate :: MonadIO m => MLIR.MLIR "update" -> m (MLIR.MLIR "update", [(Text, MLIR.MLIR "expression")])
 convertUpdate (MLIR.MkUpdtVariable a) = pure (MLIR.MkUpdtVariable a, [])

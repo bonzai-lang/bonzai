@@ -179,6 +179,10 @@ convert (MLIR.MkExprRecord m) = do
   pure $ MLIR.MkExprRecord m'
 convert MLIR.MkExprBreak = pure MLIR.MkExprBreak
 convert MLIR.MkExprContinue = pure MLIR.MkExprContinue
+convert (MLIR.MkExprSpawn e) = do
+  e' <- convert e
+
+  pure $ MLIR.MkExprSpawn e'
 
 convertLambda :: MonadIO m => Set Text -> MLIR.Expression -> m MLIR.Expression
 convertLambda reserved (MLIR.MkExprLambda args body) = do

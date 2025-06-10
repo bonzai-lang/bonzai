@@ -127,6 +127,10 @@ hoist (MLIR.MkExprRecord m) = do
   pure (MLIR.MkExprRecord m', hoisted)
 hoist MLIR.MkExprBreak = pure (MLIR.MkExprBreak, [])
 hoist MLIR.MkExprContinue = pure (MLIR.MkExprContinue, [])
+hoist (MLIR.MkExprSpawn e) = do
+  (e', hoisted) <- hoist e
+
+  pure (MLIR.MkExprSpawn e', hoisted)
 
 hoistToplevel :: MonadIO m => MLIR.MLIR "expression" -> m [MLIR.MLIR "expression"]
 hoistToplevel (MLIR.MkExprLoc p e) = do
