@@ -43,7 +43,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return,
                        &&case_get_index,
                        &&case_special,
                        &&case_halt,
-                       UNKNOWN,
+                       &&case_spawn,
                        UNKNOWN,
                        UNKNOWN,
                        &&case_make_function_and_store,
@@ -165,12 +165,12 @@ case_update: {
 
   ASSERT_TYPE(module, "update", variable, TYPE_MUTABLE);
 
-  pthread_mutex_lock(&GET_PTR(variable)->mutex);
+  // trylock(&module->gc->gc_mutex);
 
   writeBarrier(module, GET_PTR(variable), value);
   GET_MUTABLE(variable) = value;
 
-  pthread_mutex_unlock(&GET_PTR(variable)->mutex);
+  // pthread_mutex_unlock(&module->gc->gc_mutex);
 
   module->stack->stack_pointer -= 2;
 
@@ -208,8 +208,6 @@ case_list_get: {
   safe_point(module);
   Value list = module->stack->values[module->stack->stack_pointer - 1];
   uint32_t index = i1;
-
-  // debug_value(list); printf("\n");
 
   ASSERT_TYPE(module, "list_get", list, TYPE_LIST);
 
@@ -320,11 +318,90 @@ case_special: {
 
 case_halt: {
   atomic_store(&module->stack->is_halted, true);
+  atomic_store(&module->stack->is_stopped, true);
+  atomic_fetch_sub(&module->gc->thread_quantity, 1);
   module->gc->stacks.stacks[0] = NULL;
   pthread_join(module->gc->gc_thread, NULL);
   module->is_terminated = true;
   
   return kNull;
+}
+
+case_spawn: {
+  safe_point(module);
+  Value function = module->stack->values[module->stack->stack_pointer - 1];
+
+  ASSERT_TYPE(module, "spawn", function, TYPE_LIST);
+
+  ASSERT_FMT(module, GET_PTR(function)->length >= 1,
+             "Spawn function must have at least one argument");
+  ASSERT_TYPE(module, "spawn", GET_PTR(function)->as_ptr[0], TYPE_FUNCTION);
+  ASSERT_FMT(module, GET_PTR(function)->length <= 2,
+             "Spawn function must have at most two arguments");
+
+  Module *new_module = malloc(sizeof(Module));
+  new_module->stack = stack_new();
+  new_module->gc = module->gc;
+
+  memcpy(new_module->stack->values, module->stack->values,
+         GLOBALS_SIZE * sizeof(Value));
+
+  // for (int i = 0; i < GLOBALS_SIZE; i++) {
+  //   new_module->stack->values[i] =
+  //       clone_value(new_module, module->stack->values[i]);
+  // }
+
+  trylock(&new_module->gc->gc_mutex);
+  int sc = new_module->gc->stacks.stack_count;
+  if (sc >= module->gc->stacks.stack_capacity) {
+    module->gc->stacks.stack_capacity *= 1.5;
+    module->gc->stacks.stacks =
+        realloc(module->gc->stacks.stacks,
+                module->gc->stacks.stack_capacity * sizeof(Stack *));
+
+    if (module->gc->stacks.stacks == NULL) {
+      pthread_mutex_unlock(&module->module_mutex);
+      THROW(new_module, "Failed to allocate memory for stacks");
+    }
+  }
+
+  new_module->gc->stacks.stacks[sc] = new_module->stack;
+  atomic_store(&new_module->stack->stack_id, sc);
+  atomic_fetch_add(&new_module->gc->thread_quantity, 1);
+  new_module->gc->stacks.stack_count++;
+  pthread_mutex_unlock(&new_module->gc->gc_mutex);
+
+  new_module->instr_count = module->instr_count;
+  new_module->instrs = module->instrs;
+  new_module->constants = module->constants;
+  new_module->argc = module->argc;
+  new_module->argv = module->argv;
+  new_module->handles = module->handles;
+  new_module->num_handles = module->num_handles;
+  new_module->native_handles = module->native_handles;
+  new_module->is_terminated = 0;
+  new_module->pc = module->pc;
+  new_module->call_function = module->call_function;
+  new_module->file = module->file;
+
+  new_module->callstack = 1;
+  pthread_mutex_init(&new_module->module_mutex, NULL);
+
+  pthread_t thread;
+
+  struct thread_data_t *data = malloc(sizeof(struct thread_data_t));
+  data->function = function;
+  data->mod = new_module;
+
+  pthread_create(&thread, NULL, value_to_function, data);
+
+  Value thread_value = MAKE_THREAD(module, thread, function);
+  writeBarrier(module, GET_PTR(thread_value), function);
+
+  module->stack->values[module->stack->stack_pointer - 1] = thread_value;
+
+  INCREASE_IP(module);
+  goto *jmp_table[op];
 }
 
 case_make_function_and_store: {

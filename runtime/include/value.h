@@ -11,6 +11,9 @@
 #include <string.h>
 #include <unistd.h>
 
+// Forward declarations
+struct Module;
+
 typedef uint64_t Value;
 
 #define INIT_POS 512
@@ -71,7 +74,7 @@ typedef enum {
   TYPE_FUNCENV,
   TYPE_UNKNOWN,
   TYPE_API,
-  TYPE_EVENT,
+  TYPE_THREAD,
   TYPE_FRAME,
   TYPE_EVENT_ON,
   TYPE_NATIVE,
@@ -92,13 +95,8 @@ typedef enum {
 #define GET_NTH_ELEMENT(x, n) ((x >> (n * 16)) & MASK_PAYLOAD_INT)
 
 struct Event {
-  int ons_count;
-  Value ons[256];
-
-  int ipc;
-
-  struct Module* mod;
-  struct Actor* actor;
+  pthread_t thread;
+  Value function;
 };
 
 typedef struct Stack {
@@ -126,8 +124,7 @@ struct Frame {
 };
 
 struct EventOn {
-  int id;
-  Value func;
+  pthread_t thread;
 };
 
 struct Native {
@@ -155,12 +152,18 @@ typedef struct HeapValue {
   ValueType type;
   uint32_t length;
   bool is_marked, is_constant, in_remembered_set;
+
+  struct HeapValue* forwarding_ptr;
+
   int survival_count;
   enum GenerationTag generation;
+
   struct HeapValue* next_remembered;
   struct HeapValue* next;
+
   void (*destructor)(struct Module*, struct HeapValue*);
   void (*mark)(struct Module*, struct HeapValue*, bool should_unmark);
+
   pthread_mutex_t mutex;
   pthread_cond_t cond;
 
@@ -181,12 +184,22 @@ typedef struct {
   Stack** stacks;
   int stack_count;
   int stack_capacity;
-} stacks_t;;
+} stacks_t;
 
 typedef struct {
+  // For young generation (copying GC)
+  char* from_space;
+  char* to_space;
+  char* allocation_ptr;
+  char* space_end;
+  size_t space_size;
+
+  // For old generation (mark-sweep)
   HeapValue* first_object;
+
   int num_objects;
   int max_objects;
+  bool is_copying;  // true for young gen, false for old gen
 } Generation;
 
 typedef struct {
@@ -200,6 +213,9 @@ typedef struct {
   
   atomic_bool gc_is_requested;
   atomic_bool gc_enabled;
+
+  atomic_int thread_quantity;
+  atomic_int thread_stopped;
 
   HeapValue* remembered_set;
 } gc_t;
@@ -224,7 +240,7 @@ Value MAKE_MUTABLE(struct Module* mod, Value x);
 Value MAKE_STRING(struct Module* mod, char* string);
 Value MAKE_STRING_MULTIPLE(struct Module* mod, ...);
 Value MAKE_LIST(struct Module* mod, Value* x, uint32_t len);
-Value MAKE_EVENT(struct Module* mod, uint32_t ons_count, uint32_t ipc);
+Value MAKE_THREAD(struct Module* mod, pthread_t thread, Value function);
 Value MAKE_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp);
 Value MAKE_EVENT_FRAME(struct Module* mod, int32_t ip, int32_t sp, int32_t bp,
                        int32_t ons_count, int function_ipc);
@@ -327,8 +343,8 @@ inline static char* type_to_str(ValueType t) {
       return "unknown";
     case TYPE_API:
       return "api";
-    case TYPE_EVENT:
-      return "event";
+    case TYPE_THREAD:
+      return "thread";
     case TYPE_FRAME:
       return "frame";
     case TYPE_EVENT_ON:
@@ -342,8 +358,10 @@ inline static char* type_to_str(ValueType t) {
   }
 }
 
-void safe_point(struct Module* mod);
 void stop_the_world(struct Module* mod, bool stop);
 void writeBarrier(struct Module* mod, HeapValue* parent, Value child);
+void trylock_(pthread_mutex_t* mutex);
+
+#define trylock(mutex) trylock_(mutex)
 
 #endif  // VALUE_H

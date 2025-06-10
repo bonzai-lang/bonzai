@@ -24,41 +24,41 @@ __attribute__((always_inline)) inline struct Frame pop_frame(Module* mod) {
   return frame;
 }
 
-__attribute__((always_inline)) inline struct Frame pop_event_frame(
-    Module* mod) {
-  Value ev = mod->stack->values[mod->base_pointer];
-  Value pc = mod->stack->values[mod->base_pointer + 1];
-  Value sp = mod->stack->values[mod->base_pointer + 2];
-  Value bp = mod->stack->values[mod->base_pointer + 3];
+void init_copying_generation(Generation* gen, size_t space_size) {
+  gen->space_size = space_size;
+  gen->from_space = malloc(space_size);
+  gen->to_space = malloc(space_size);
+  gen->allocation_ptr = gen->from_space;
+  gen->space_end = gen->from_space + space_size;
+  gen->first_object = NULL;
+  gen->num_objects = 0;
+  gen->max_objects = INIT_OBJECTS;
+  gen->is_copying = true;
 
-  ASSERT_TYPE(mod, "pop_event_frame", ev, TYPE_EVENT);
-  ASSERT_TYPE(mod, "pop_event_frame", pc, TYPE_INTEGER);
-  ASSERT_TYPE(mod, "pop_event_frame", sp, TYPE_INTEGER);
-  ASSERT_TYPE(mod, "pop_event_frame", bp, TYPE_INTEGER);
+  if (!gen->from_space || !gen->to_space) {
+    fprintf(stderr, "Failed to allocate copying GC spaces\n");
+    exit(1);
+  }
+}
 
-  struct Frame frame = {
-      .instruction_pointer = GET_INT(pc),
-      .stack_pointer = GET_INT(sp),
-      .base_ptr = GET_INT(bp),
-      .ons_count = GET_PTR(ev)->as_event.ons_count,
-      .function_ipc = GET_PTR(ev)->as_event.ipc,
-  };
-
-  mod->callstack--;
-
-  return frame;
+// Initialize mark-sweep generation for old generation
+void init_marksweep_generation(Generation* gen) {
+  gen->from_space = NULL;
+  gen->to_space = NULL;
+  gen->allocation_ptr = NULL;
+  gen->space_end = NULL;
+  gen->space_size = 0;
+  gen->first_object = NULL;
+  gen->num_objects = 0;
+  gen->max_objects = INIT_OBJECTS;
+  gen->is_copying = false;
 }
 
 // Initialize the GC system and its worker thread
 void init_gc(gc_t* gc, Module* mod) {
   // Initialize GC state
-  gc->old.first_object = NULL;
-  gc->old.max_objects = INIT_OBJECTS;  // Example default size
-  gc->old.num_objects = 0;
-
-  gc->young.first_object = NULL;
-  gc->young.max_objects = INIT_OBJECTS;  // Example default size
-  gc->young.num_objects = 0;
+  init_copying_generation(&gc->young, 1024 * 1024);
+  init_marksweep_generation(&gc->old);
 
   atomic_store(&gc->gc_enabled, true);
 
@@ -72,6 +72,9 @@ void init_gc(gc_t* gc, Module* mod) {
   gc->remembered_set = NULL;
 
   atomic_store(&gc->gc_is_requested, false);
+
+  atomic_store(&gc->thread_quantity, 1); // Count the main thread
+  atomic_store(&gc->thread_stopped, 0);
 
   mod->gc = gc;
 }

@@ -58,3 +58,21 @@ Value call_function(struct Module *m, Value closure, int32_t argc,
 
   return ret;
 }
+
+
+void* value_to_function(void* value) {
+  struct thread_data_t* data = (struct thread_data_t*)value;
+
+  Module* module = data->mod;
+  Value function = data->function;
+
+  Value ret = module->call_function(module, function, 0, NULL);
+  
+  Value* object_as_ptr = malloc(sizeof(Value));
+
+  *object_as_ptr = ret;
+
+  atomic_fetch_sub(&module->gc->thread_quantity, 1);
+
+  return object_as_ptr;
+}
