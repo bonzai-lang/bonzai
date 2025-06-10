@@ -1,15 +1,26 @@
 require "std:foundation"
 
 mut i = 0
+mut threads = []
 
 while true {
   print("Iteration: $i")
   i += 1
 
-  let thread = Thread::newDetached(fn() => {
-    print("Thread iteration: $i")
-  })
+  threads += [spawn {
+    print("Thread started $i")
+  }]
   
-  print("Thread started: $thread")
-  print(i)
+  if (i.value % 100) == 0 then {
+    print("Waiting for threads to finish...")
+    for thread in threads.value {
+      print("Waiting for thread $thread")
+      thread.wait()
+    }
+    threads = []  // Clear the list of threads after waiting
+  }
 }
+
+// for thread in threads.value {
+//   thread.wait()
+// }
