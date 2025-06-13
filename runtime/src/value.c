@@ -8,6 +8,7 @@
 #include <threading.h>
 #include <unistd.h>
 #include <value.h>
+#include <hashtable.h>
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -15,6 +16,20 @@
 void mark_all(struct Module* vm);
 
 static int young_gc_count = 0;
+
+void mark_record(struct Module* mod, struct HashTable ht, bool should_mark) {
+  void (*mark_fn)(struct Module*, Value) = should_mark ? mark_value : unmark_value;
+  for (uint32_t i = 0; i < HASHTABLE_SIZE; i++) {
+    struct HashNode* node = ht.nodes[i];
+
+    if (!node) continue;
+
+    while (node != NULL) {
+      mark_fn(mod, node->value);
+      node = node->next;
+    }
+  }
+}
 
 void mark_value(struct Module* mod, Value value) {
   if (!IS_PTR(value)) return;
@@ -45,9 +60,7 @@ void mark_value(struct Module* mod, Value value) {
       break;
     }
     case TYPE_RECORD: {
-      for (uint32_t i = 0; i < ptr->length; i++) {
-        mark_value(mod, ptr->as_record.values[i]);
-      }
+      mark_record(mod, ptr->as_record, true);
       break;
     }
     case TYPE_API: {
@@ -86,9 +99,7 @@ void unmark_value(Module* mod, Value value) {
       unmark_value(mod, *(ptr->as_ptr));
       break;
     case TYPE_RECORD:
-      for (uint32_t i = 0; i < ptr->length; i++) {
-        unmark_value(mod, ptr->as_record.values[i]);
-      }
+      mark_record(mod, ptr->as_record, false);
       break;
     case TYPE_THREAD: {
       unmark_value(mod, ptr->as_event.function);
@@ -116,11 +127,15 @@ void free_value(struct Module* mod, HeapValue* unreached) {
   } else if (unreached->type == TYPE_API && unreached->destructor) {
     unreached->destructor(mod, unreached);
   } else if (unreached->type == TYPE_RECORD) {
-    free(unreached->as_record.keys);
-    free(unreached->as_record.values);
+    for (uint32_t i = 0; i < HASHTABLE_SIZE; i++) {
+      struct HashNode* node = unreached->as_record.nodes[i];
+      while (node != NULL) {
+        struct HashNode* next = node->next;
+        free(node);
+        node = next;
+      }
+    }
   }
-
-  if (unreached->is_constant) return;
 
   free(unreached);
 }
@@ -272,14 +287,6 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
     }
   }
 
-  if (gc_->old.num_objects >= gc_->old.max_objects) {
-    if (atomic_load(&gc_->gc_enabled)) {
-      atomic_store(&gc_->gc_is_requested, true);
-    } else {
-      gc_->old.max_objects += 2;
-    }
-  }
-
   safe_point(mod);
 
   HeapValue* v = malloc(sizeof(HeapValue));
@@ -349,11 +356,22 @@ Value MAKE_STRING(struct Module* mod, char* x) {
   return MAKE_PTR(v);
 }
 
-Value MAKE_RECORD(struct Module* mod, char** keys, Value* values, int size) {
+Value MAKE_RECORD(struct Module* mod, Value* keys, Value* values, int size) {
   HeapValue* v = allocate(mod, TYPE_RECORD);
-  v->as_record.keys = keys;
-  v->as_record.values = values;
-  v->length = size;
+  v->as_record = hash_init();
+  for (int i = 0; i < size; i++) {
+    if (keys[i] == kNull) {
+      THROW_FMT(mod, "Record keys cannot be null");
+    }
+
+    char* key = GET_STRING(keys[i]);
+    size_t key_length = GET_PTR(keys[i])->length;
+    if (key_length == 0) {
+      THROW_FMT(mod, "Record keys cannot be empty");
+    }
+
+    hash_set(&v->as_record, key, values[i], key_length);
+  }
 
   return MAKE_PTR(v);
 }
@@ -527,6 +545,41 @@ int value_eq(Module* mod, Value a, Value b) {
   }
 }
 
+struct RecordAsArray record_to_array(Value record) {
+  struct RecordAsArray result;
+  if (IS_EMPTY_RECORD(record)) {
+    result.keys = NULL;
+    result.values = NULL;
+    result.length = 0;
+    return result;
+  }
+
+  HeapValue* rec_ptr = GET_PTR(record);
+  result.length = rec_ptr->length;
+  result.keys = malloc(result.length * sizeof(char*));
+  result.values = malloc(result.length * sizeof(Value));
+
+  uint32_t i = 0;
+  // loop through the record nodes
+  for (i = 0; i < rec_ptr->length; i++) {
+    struct HashNode* node = rec_ptr->as_record.nodes[i];
+    
+    while (node) {
+      if (i >= result.length) {
+        result.keys = realloc(result.keys, (i * 1.5) * sizeof(char*));
+        result.values = realloc(result.values, (i * 1.5) * sizeof(Value));
+        result.length = (int)(i * 1.5);
+      }
+      result.keys[i] = node->key;
+      result.values[i] = node->value;
+      node = node->next;
+      i++;
+    }
+  }
+
+  return result;
+}
+
 void debug_value(Value v) {
   switch (get_type(v)) {
     case TYPE_INTEGER:
@@ -596,11 +649,7 @@ void debug_value(Value v) {
       HeapValue* record = GET_PTR(v);
       printf("{ ");
       for (int i = 0; i < record->length; i++) {
-        printf("%s: ", record->as_record.keys[i]);
-        debug_value(record->as_record.values[i]);
-        if (i < record->length - 1) {
-          printf(", ");
-        }
+        
       }
       printf(" }");
       break;
@@ -643,11 +692,16 @@ Value clone_value(Module* mod, Value value) {
       }
 
       HeapValue* record = GET_PTR(value);
-      char** keys = malloc(record->length * sizeof(char*));
+      Value* keys = malloc(record->length * sizeof(char*));
       Value* values = malloc(record->length * sizeof(Value));
       for (uint32_t i = 0; i < record->length; i++) {
-        keys[i] = record->as_record.keys[i];
-        values[i] = clone_value(mod, record->as_record.values[i]);
+        struct HashNode* node = record->as_record.nodes[i];
+        
+        while (node) {
+          keys[i] = MAKE_STRING_NON_GC(mod, node->key);
+          values[i] = clone_value(mod, node->value);
+          node = node->next;
+        }
       }
       return MAKE_RECORD(mod, keys, values, record->length);
     }

@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <threading.h>
 #include <value.h>
+#include <hashtable.h>
 
 #define INCREASE_IP_BY(mod, x) (mod->pc += ((x) * 5));
 #define INCREASE_IP(mod) INCREASE_IP_BY(mod, 1);
@@ -48,7 +49,7 @@ Value run_interpreter(Module *module, int32_t ipc, bool does_return,
                        UNKNOWN,
                        &&case_make_function_and_store,
                        &&case_load_native,
-                       UNKNOWN,
+                       &&case_unloc,
                        UNKNOWN,
                        &&case_make_mutable,
                        &&case_loc,
@@ -428,6 +429,18 @@ case_load_native: {
   goto *jmp_table[op];
 }
 
+case_unloc: {
+  safe_point(module);
+  // printf("Unloc instruction at %d\n", module->pc);
+  module->latest_position_index--;
+  if (module->latest_position_index < 0) {
+    THROW(module, "Unmatched unloc instruction");
+  }
+
+  INCREASE_IP(module);
+  goto *jmp_table[op];
+}
+
 case_make_mutable: {
   safe_point(module);
   Value x = module->stack->values[module->stack->stack_pointer - 1];
@@ -439,9 +452,24 @@ case_make_mutable: {
 
 case_loc: {
   safe_point(module);
-  module->latest_position[0] = i1;
-  module->latest_position[1] = i2;
-  module->file = GET_STRING(constants->values[i3]);
+
+  if (module->latest_position_index >= module->latest_position_capacity) {
+    module->latest_position_capacity *= 1.5;
+    module->latest_position = realloc(
+        module->latest_position,
+        module->latest_position_capacity * sizeof(Position));
+    module->file = realloc(module->file,
+                           module->latest_position_capacity * sizeof(char *));
+    if (module->latest_position == NULL || module->file == NULL) {
+      THROW(module, "Failed to allocate memory for latest positions");
+    }
+  }
+
+  module->latest_position[module->latest_position_index][0] = i1;
+  module->latest_position[module->latest_position_index][1] = i2;
+  module->file[module->latest_position_index] = GET_STRING(constants->values[i3]);
+
+  module->latest_position_index++;
 
   INCREASE_IP(module);
   goto *jmp_table[op];
@@ -497,24 +525,9 @@ case_add: {
         module->stack->stack_pointer--;
         break;
       }
-
-      HeapValue *r1 = GET_PTR(a);
-      HeapValue *r2 = GET_PTR(b);
-
-      char **keys = malloc((r1->length + r2->length) * sizeof(char *));
-      Value *values = malloc((r1->length + r2->length) * sizeof(Value));
-
-      for (uint32_t i = 0; i < r1->length; i++) {
-        keys[i] = r1->as_record.keys[i];
-        values[i] = r1->as_record.values[i + 1];
-      }
-      for (uint32_t i = 0; i < r2->length; i++) {
-        keys[r1->length + i] = r2->as_record.keys[i];
-        values[r1->length + i] = r2->as_record.values[i + 1];
-      }
-
+      
       module->stack->values[module->stack->stack_pointer - 2] =
-          MAKE_RECORD(module, keys, values, r1->length + r2->length);
+          hash_concat(module, a, b);
 
       module->stack->stack_pointer--;
       break;
@@ -714,24 +727,9 @@ case_get_record_access: {
   // [null, Map, Map, [name1, value1, name2, value2, ...]]
   // We need to find the index of the name in the list
   // and return the corresponding value
-  bool found = false;
-  for (int i = 0; i < ptr->length; i++) {
-    if (strcmp(ptr->as_record.keys[i], name) == 0) {
-      module->stack->values[module->stack->stack_pointer - 1] =
-          ptr->as_record.values[i];
-      found = true;
-      break;
-    }
-  }
 
-  if (!found) {
-    Value* none = malloc(3 * sizeof(Value));
-    none[0] = kNull;
-    none[1] = MAKE_STRING_NON_GC(module, "Optional");
-    none[2] = MAKE_STRING_NON_GC(module, "None");
-
-    module->stack->values[module->stack->stack_pointer - 1] = MAKE_LIST(module, none, 3);
-  }
+  module->stack->values[module->stack->stack_pointer - 1] =
+      hash_get(module, &ptr->as_record, name, GET_PTR(access)->length);
 
   INCREASE_IP(module);
   goto *jmp_table[op];
@@ -744,7 +742,7 @@ case_make_record: {
     INCREASE_IP(module);
     goto *jmp_table[op];
   }
-  char** keys = malloc(i1 * sizeof(char*));
+  Value* keys = malloc(i1 * sizeof(char*));
   Value *values = malloc(i1 * sizeof(Value));
 
   // Records are in the following format:
@@ -756,8 +754,7 @@ case_make_record: {
     int idx = (i - 1) / 2;
     values[idx] =
         module->stack->values[module->stack->stack_pointer - i1 * 2 + i];
-    keys[idx] = GET_STRING(
-        module->stack->values[module->stack->stack_pointer - i1 * 2 + i - 1]);
+    keys[idx] = module->stack->values[module->stack->stack_pointer - i1 * 2 + i - 1];
     
     module->stack->values[module->stack->stack_pointer - i1 * 2 + i] = kNull;
     module->stack->values[module->stack->stack_pointer - i1 * 2 + i - 1] = kNull;
@@ -767,6 +764,9 @@ case_make_record: {
 
   module->stack->values[sp] =
       MAKE_RECORD(module, keys, values, i1);
+
+  free(keys);
+  free(values);
 
   module->stack->stack_pointer = sp + 1;
 

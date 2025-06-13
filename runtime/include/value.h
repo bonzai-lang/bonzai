@@ -10,6 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <hashtable.h>
+
+#define HASHTABLE_SIZE 32
 
 // Forward declarations
 struct Module;
@@ -17,7 +20,7 @@ struct Module;
 typedef uint64_t Value;
 
 #define INIT_POS 512
-#define INIT_OBJECTS 32
+#define INIT_OBJECTS 2048
 #define GLOBALS_SIZE 1024
 #define MAX_STACK_SIZE GLOBALS_SIZE * 32
 #define VALUE_STACK_SIZE MAX_STACK_SIZE - GLOBALS_SIZE
@@ -137,11 +140,6 @@ struct Function {
   int local_space;
 };
 
-struct Record {
-  char** keys;
-  Value* values;
-};
-
 enum GenerationTag {
   GEN_YOUNG,
   GEN_OLD
@@ -171,7 +169,7 @@ typedef struct HeapValue {
     char* as_string;
     Value* as_ptr;
     void* as_any;
-    struct Record as_record;
+    struct HashTable as_record;
     struct Event as_event;
     struct EventOn as_event_on;
     struct Frame as_frame;
@@ -187,13 +185,6 @@ typedef struct {
 } stacks_t;
 
 typedef struct {
-  // For young generation (copying GC)
-  char* from_space;
-  char* to_space;
-  char* allocation_ptr;
-  char* space_end;
-  size_t space_size;
-
   // For old generation (mark-sweep)
   HeapValue* first_object;
 
@@ -248,9 +239,9 @@ Value MAKE_NATIVE(struct Module* mod, char* name, int addr);
 Value MAKE_EVENT_ON(struct Module* mod, int id, Value func);
 Value MAKE_STRING_NON_GC(struct Module* mod, char* x);
 Value MAKE_FUNCTION(struct Module* mod, int32_t ip, uint16_t local_space);
-Value MAKE_RECORD(struct Module* mod, char** keys, Value* values,
-                  int size);
+Value MAKE_RECORD(struct Module* mod, Value* keys, Value* values, int size);
 // void gc(struct Module* vm);
+    
 void force_sweep(struct Module* vm);
 HeapValue* allocate(struct Module* mod, ValueType type);
 void mark_value(struct Module* mod, Value value);
@@ -361,6 +352,14 @@ inline static char* type_to_str(ValueType t) {
 void stop_the_world(struct Module* mod, bool stop);
 void writeBarrier(struct Module* mod, HeapValue* parent, Value child);
 void trylock_(pthread_mutex_t* mutex);
+
+struct RecordAsArray {
+  char** keys;
+  Value* values;
+  int length;
+};
+
+struct RecordAsArray record_to_array(Value record);
 
 #define trylock(mutex) trylock_(mutex)
 
