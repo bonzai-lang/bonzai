@@ -9,6 +9,7 @@ require "std:datatypes/map"
 require "std:datatypes/unit"
 require "std:datatypes/optional"
 require "std:datatypes/threads"
+pub require "std:web/html"
 
 extern fn start_http_server(port: int): HTTP
 extern fn accept_request(server: HTTP): Request
@@ -30,72 +31,9 @@ fn containsContentLength(headers: list<string>): bool => {
   )
 }
 
-pub fn HTTP::create(callback: fn({
-  send: fn(string): unit,
-  sendWith: fn(string): unit,
-  get: fn(): string,
-  getPath: fn(): string,
-  redirect: fn(string): unit,
-  stop: fn(): unit
-}): bool, port: int) => {
-  let server = start_http_server(port)
-
-  mut running = true
-
-  fn generateRequest(req: Request) => {
-    send: fn(buffer: string) => send_buffer(req, buffer),
-    sendWith: fn(buffer: string) => send_buffer_with(req, buffer),
-    get: fn() => get_buffer(req),
-    getPath: fn() => get_path(req),
-    redirect: fn(url: string) => redirect_to(req, url),
-    stop: fn() => {
-      running = false
-    }
-  }
-
-  while running.value {
-    let req = accept_request(server)
-    running = callback(generateRequest(req))
-    close_client(req)
-  }
-
-  close_server(server)
-}
-
-pub fn Request::getPath(req: Request): string => get_path(req)
-pub fn Request::getBuffer(req: Request): string => get_buffer(req)
-pub fn Request::send(req: Request, buffer: string): unit => send_buffer(req, buffer)
-pub fn Request::redirect(req: Request, url: string): unit => redirect_to(req, url)
-
-extern fn fetch_helper(url: string, method: string, headers: string): Throwable<(string, string)>
-
-pub fn fetch(
-  url: string,
-  method _?: string,
-  body _?: string,
-  headers _?: list<string>
-): Throwable<(string, string)> => {
-  let method = kwargs->method
-  let body = kwargs->body
-  let headers = kwargs->headers
-
-  let methodString = Optional::unwrap_or(method, "GET")
-  let bodyString = Optional::unwrap_or(body, "")
-
-  match headers {
-    case Some(headers) => {
-      mut newHeaders = headers
-      if !containsContentLength(headers) then {
-        let len = String::length(bodyString)
-        newHeaders += ["Content-Length: $len"]
-      }
-
-      let headersString = String::join(newHeaders.value, "\r\n") + "\r\n\r\n" + bodyString
-
-      fetch_helper(url, methodString, headersString)
-    }
-    case None => fetch_helper(url, methodString, bodyString)
-  }
+fn headersContains(headers: list<string>, key: string): bool => {
+  let keyWithColon = "$key: "
+  List::any(headers, fn(header) => String::startsWith(header, keyWithColon))
 }
 
 type Header {
@@ -140,4 +78,118 @@ pub fn Header::show(Header(toplevel, rules, content)): string => {
   let headerString = "$toplevel\r\n$rulesJoined\r\n\r\n$content"
 
   headerString
+}
+
+pub fn HTTP::create(callback: fn(Request): bool, port: int) => {
+  let server = start_http_server(port)
+
+  mut running = true
+
+  while running.value {
+    let req = accept_request(server)
+    running = callback(req)
+    close_client(req)
+  }
+
+  close_server(server)
+}
+
+pub fn Request::getPath(req: Request): string => get_path(req)
+pub fn Request::getBuffer(req: Request): string => get_buffer(req)
+pub fn Request::send(req: Request, buffer: string, headers _?: list<string>): unit => {
+  let headers = Optional::map(kwargs->headers, fn(x) => mut x)
+
+  match headers {
+    case Some(headers) => {
+      if !containsContentLength(headers.value) then {
+        let len = String::length(buffer)
+        headers += ["Content-Length: $len"]
+      }
+
+      let headersString = String::join(headers.value, "\r\n") + "\r\n\r\n" + buffer
+      send_buffer_with(req, headersString)
+    }
+    case None => send_buffer(req, buffer)
+  }
+}
+pub fn Request::sendHTML(req: Request, html: HTML, headers _?: list<string>): unit => {
+  let headers = Optional::map(kwargs->headers, fn(x) => mut x)
+
+  match headers {
+    case Some(headers) => {
+      let renderedHTML = HTML::render(html)
+
+      headers = ["HTTP/1.1 200 OK"] + headers.value
+
+      if !containsContentLength(headers.value) then {
+        let len = renderedHTML.length
+        headers += ["Content-Length: $len"]
+      }
+      
+      if !headersContains(headers.value, "Content-Type") then {
+        headers += ["Content-Type: text/html; charset=UTF-8"]
+      }
+
+      let headersString = String::join(headers.value, "\r\n") + "\r\n\r\n" + renderedHTML
+      send_buffer_with(req, headersString)
+    }
+    case None => {
+      let renderedHTML = HTML::render(html)
+      let contentLength = renderedHTML.length
+
+      let headers = [
+        "HTTP/1.1 200 OK",
+        "Content-Length: $contentLength",
+        "Content-Type: text/html; charset=UTF-8"
+      ]
+
+      let headersString = String::join(headers, "\r\n") + "\r\n\r\n" + renderedHTML
+
+      send_buffer_with(req, headersString)
+    }
+  }
+}
+pub fn Request::redirect(req: Request, url: string): unit => redirect_to(req, url)
+pub fn Request::headers(req: Request): Optional<Header> => Header::from(Request::getBuffer(req))
+pub fn Request::information(req: Request): list<string> => {
+  let headers = Optional::unwrapOr(
+    Optional::map(
+      Request::headers(req), 
+      fn(Header(top, _, _)) => top
+    ), 
+    "GET /404 HTTP/1.1"
+  )
+
+  String::split(headers, " ")
+}
+
+extern fn fetch_helper(url: string, method: string, headers: string): Throwable<(string, string)>
+
+pub fn fetch(
+  url: string,
+  method _?: string,
+  body _?: string,
+  headers _?: list<string>
+): Throwable<(string, string)> => {
+  let method = kwargs->method
+  let body = kwargs->body
+  let headers = kwargs->headers
+
+  let methodString = Optional::unwrapOr(method, "GET")
+  let bodyString = Optional::unwrapOr(body, "")
+
+  match headers {
+    case Some(headers) => {
+      mut newHeaders = headers
+      if !containsContentLength(headers) then {
+        let len = String::length(bodyString)
+        newHeaders += ["Content-Length: $len"]
+      }
+
+      let headersString = String::join(newHeaders.value, "\r\n") + "\r\n\r\n" + bodyString
+
+      fetch_helper(url, methodString, headersString)
+    }
+    case None => fetch_helper(url, methodString, bodyString)
+  }
 }
