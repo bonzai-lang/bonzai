@@ -251,7 +251,7 @@ pub fn getKeys(json: JSON, keys: list<string>): Optional<JSON> =>
   )
 
 pub fn JSON::prettify(json: JSON, tabs _?: int): string => {
-  let i = Optional::unwrap_or(kwargs->tabs, 0)  
+  let i = Optional::unwrapOr(kwargs->tabs, 0)  
 
   match json {
     case Object(fields) => {

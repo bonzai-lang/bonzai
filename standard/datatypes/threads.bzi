@@ -16,7 +16,7 @@ extern fn trylock<A>(x: A): bool
 
 pub fn Mutex::lock<A>(x: A): unit => {
   while !x.trylock(){
-    wait_time(1)
+    sleep(1)
   }
 
   return unit

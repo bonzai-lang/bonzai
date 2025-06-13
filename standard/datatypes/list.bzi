@@ -17,8 +17,8 @@ pub fn List::any<A>(xs: list<A>, f: fn(A): bool): bool =>
   }
 
 pub fn List::slice<A>(xs: list<A>, start _?: int, end _?: int): list<A> => {
-  let start = Optional::unwrap_or(kwargs->start, 0)
-  let end = Optional::unwrap_or(kwargs->end, List::length(xs))
+  let start = Optional::unwrapOr(kwargs->start, 0)
+  let end = Optional::unwrapOr(kwargs->end, List::length(xs))
 
   slice(xs, start, end)
 }

@@ -3,18 +3,23 @@ require "std:datatypes/unit"
 extern fn exit_with<A>(code: int): A
 pub extern fn print<A>(x: A): unit
 extern fn panic_<A>(msg: string): A
-pub extern fn wait_time(time: int): unit
+extern fn wait_time(time: int): unit
 
 pub fn exit<A>(): A => exit_with(0)
 pub fn panic<A>(msg: string): A => panic_(msg)
 
-pub extern fn read_file(path: string): string
-pub extern fn write_file(path: string, content: string): unit
+extern fn read_file(path: string): string
+extern fn write_file(path: string, content: string): unit
+
+pub fn File::read(path: string): string => read_file(path)
+pub fn File::write(path: string, content: string): unit => write_file(path, content)
+
+pub fn sleep(time: int): unit => wait_time(time)  
 
 pub fn every<A>(time: int, f: fn(): A): unit => {
   while true {
     f()
-    wait_time(time)
+    sleep(time)
   }
 
   unit

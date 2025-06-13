@@ -38,8 +38,8 @@ pub fn String::map(s: string, f: fn(char): char): string => {
 }
 
 pub fn String::slice(s: string, start _?: int, end _?: int): string => {
-  let start = Optional::unwrap_or(kwargs->start, 0)
-  let end = Optional::unwrap_or(kwargs->end, String::length(s))
+  let start = Optional::unwrapOr(kwargs->start, 0)
+  let end = Optional::unwrapOr(kwargs->end, String::length(s))
 
   slice_string(s, start, end)
 }
