@@ -2,6 +2,7 @@
 #include <compare.h>
 #include <error.h>
 #include <module.h>
+#include <hashtable.h>
 
 Value compare_eq(Module *mod, Value a, Value b) {
   ValueType a_type = get_type(a);
@@ -31,17 +32,9 @@ Value compare_eq(Module *mod, Value a, Value b) {
       if (IS_EMPTY_RECORD(a) && IS_EMPTY_RECORD(b)) return MAKE_INTEGER(1);
       if (IS_EMPTY_RECORD(a) || IS_EMPTY_RECORD(b)) return MAKE_INTEGER(0);
 
-      HeapValue* a_ptr = GET_PTR(a);
-      HeapValue* b_ptr = GET_PTR(b);
+      bool res = hash_eq(mod, a, b);
 
-      if (a_ptr->length != b_ptr->length) return MAKE_INTEGER(0);
-
-      for (uint32_t i = 0; i < a_ptr->length; i++) {
-        if (strcmp(a_ptr->as_record.keys[i], b_ptr->as_record.keys[i]) != 0) return MAKE_INTEGER(0);
-        if (!compare_eq(mod, a_ptr->as_record.values[i + 1], b_ptr->as_record.values[i + 1])) return MAKE_INTEGER(0);
-      }
-
-      return MAKE_INTEGER(1);
+      return MAKE_INTEGER(res);
     }
 
     case TYPE_LIST: {
