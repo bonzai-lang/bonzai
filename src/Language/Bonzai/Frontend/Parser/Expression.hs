@@ -305,7 +305,7 @@ parseDatatype = do
 
   ((_, end), constructors) <- Lex.braces (P.sepBy1 parseDataConstructor Lex.comma)
 
-  pure ((start, end), 
+  pure ((start, end),
     HLIR.MkExprLet
       (fromList gens)
       (Left (HLIR.MkAnnotation name Nothing))
@@ -436,7 +436,7 @@ parsePatternTerm =
         ((_, end), _) <- Lex.symbol "}"
 
         pure $ HLIR.MkPatLocated (HLIR.MkPatRecord (Map.fromList pats)) (start, end),
-        
+
       P.try $ do
         ((start, _), _) <- Lex.symbol "("
         pats <- P.sepBy parsePattern Lex.comma
@@ -590,7 +590,7 @@ parseModule = do
   ((_, end), _) <- Lex.symbol "}"
 
   let names = getNames body
-  let record = foldl' 
+  let record = foldl'
         (\acc n -> HLIR.MkExprRecordExtension acc n False (HLIR.MkExprVariable (HLIR.MkAnnotation n Nothing)))
         HLIR.MkExprRecordEmpty
         names
@@ -598,10 +598,10 @@ parseModule = do
 
   pure (
       (start, end),
-      HLIR.MkExprLet 
+      HLIR.MkExprLet
         (Set.fromList gens)
-        (Left (HLIR.MkAnnotation name Nothing)) 
-        expr 
+        (Left (HLIR.MkAnnotation name Nothing))
+        expr
         (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
     )
 
@@ -614,7 +614,7 @@ parseModule = do
     getNames (HLIR.MkExprLoc expr _ : xs) = getNames (expr : xs)
     getNames (_:xs) = getNames xs
     getNames [] = []
-    
+
     getNamesInPattern :: HLIR.HLIR "pattern" -> [Text]
     getNamesInPattern (HLIR.MkPatVariable name' _) = [name']
     getNamesInPattern (HLIR.MkPatLocated p _) = getNamesInPattern p
@@ -784,6 +784,93 @@ parseFunction = do
 
   pure ((start, end), HLIR.MkExprLet (fromList generics) (Left (HLIR.MkAnnotation name funTy)) (HLIR.MkExprLambda (args'' ++ [HLIR.MkAnnotation "kwargs" (Just (HLIR.MkTyRecord ty))]) ret body') (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing)))
 
+-- | PARSE HTML EXPRESSION
+-- | Parse an HTML expression. An HTML expression is an expression that consists of
+-- | an HTML element. It is used to define an HTML element in Bonzai.
+parseHtml :: (MonadIO m) => P.Parser m (HLIR.Position, HLIR.HLIR "expression")
+parseHtml = parseHTMLElement
+  where
+    parseHTMLElement :: (MonadIO m) => P.Parser m (HLIR.Position, HLIR.HLIR "expression")
+    parseHTMLElement = do
+      ((start, _), _) <- Lex.symbol "<"
+      (name, attrs) <- parseHTMLTag
+      void $ Lex.symbol ">"
+
+      let mkText x = HLIR.MkExprApplication 
+            (HLIR.MkExprVariable (HLIR.MkAnnotation "text" Nothing)) [
+              x,
+              HLIR.MkExprRecordEmpty
+            ]
+
+      body <- P.some (P.choice [
+          P.try parseHTMLElement,
+          (mkText <$>) <$> (P.some parseHTMLText <&> buildStringConcatenation (start, start))
+        ])
+
+      void $ Lex.symbol "</"
+      void $ P.string name
+      ((_, end), _) <- Lex.symbol ">"
+
+      pure ((start, end), HLIR.MkExprApplication
+        (HLIR.MkExprVariable (HLIR.MkAnnotation "h" Nothing)) [
+          HLIR.MkExprLiteral (HLIR.MkLitString name),
+          attrs,
+          HLIR.MkExprList (map snd body),
+          HLIR.MkExprRecordEmpty
+        ])
+
+    buildStringConcatenation :: HLIR.Position -> [(HLIR.Position, HLIR.HLIR "expression")] -> (HLIR.Position, HLIR.HLIR "expression")
+    buildStringConcatenation st [] = (st, HLIR.MkExprLiteral (HLIR.MkLitString ""))
+    buildStringConcatenation _ [x@(_, HLIR.MkExprLiteral (HLIR.MkLitString _))] = x
+    buildStringConcatenation _ [x] = toString' <$> x
+    buildStringConcatenation (st, _) ((start, expr@(HLIR.MkExprLiteral (HLIR.MkLitString _))) : xs) =
+      let ((_, end), acc) = buildStringConcatenation start xs
+      in ((st, end), HLIR.MkExprBinary "+" expr acc)
+    buildStringConcatenation (st, _) ((start, expr) : xs) =
+      let ((_, end), acc) = buildStringConcatenation start xs
+      in ((st, end), HLIR.MkExprBinary "+" (toString' expr) acc)
+
+    toString' :: HLIR.HLIR "expression" -> HLIR.HLIR "expression"
+    toString' x = HLIR.MkExprApplication
+      (HLIR.MkExprVariable (HLIR.MkAnnotation "toString" Nothing))
+      [x, HLIR.MkExprRecordEmpty]
+
+    parseHTMLText :: (MonadIO m) => P.Parser m (HLIR.Position, HLIR.HLIR "expression")
+    parseHTMLText = P.choice [
+        P.try $ do
+          ((start, _), text) <- Lex.lexeme $ P.takeWhile1P (Just "HTML text") (\c -> c /= '<' && c /= '{')
+
+          pure ((start, start), HLIR.MkExprLiteral (HLIR.MkLitString text)),
+        P.try $ do
+          ((start, _), _) <- Lex.symbol "{"
+          (_, expr') <- parseExpression
+
+          ((_, end), _) <- Lex.symbol "}"
+          pure ((start, end), expr')
+      ]
+
+    parseHTMLTag :: (MonadIO m) => P.Parser m (Text, HLIR.HLIR "expression")
+    parseHTMLTag = do
+      (_, tag) <- Lex.nonLexedID <* Lex.scn
+
+      attrs <- P.option [] . P.many $ do
+        (_, attrName) <- Lex.identifier
+        void $ Lex.symbol "="
+        attrValue <- P.choice [
+            Lit.parseString <&> HLIR.MkExprLiteral . HLIR.MkLitString,
+            Lex.symbol "{" *> (snd <$> parseExpression) <* Lex.symbol "}"
+          ]
+        pure (attrName, attrValue)
+
+
+      pure (tag, mapify attrs)
+
+    mapify :: [(Text, HLIR.HLIR "expression")] -> HLIR.HLIR "expression"
+    mapify xs = HLIR.MkExprApplication (HLIR.MkExprVariable (HLIR.MkAnnotation "Map::fromList" Nothing)) [HLIR.MkExprList (tupleify xs), HLIR.MkExprRecordEmpty]
+
+    tupleify :: [(Text, HLIR.HLIR "expression")] -> [HLIR.HLIR "expression"]
+    tupleify = map (\(k, v) -> HLIR.MkExprTuple (HLIR.MkExprLiteral (HLIR.MkLitString k)) v)
+
 -- | PARSE LAMBDA EXPRESSION
 -- | Parse a lambda expression. A lambda expression is an expression that consists
 -- | of a lambda function definition. It is used to define an anonymous function in
@@ -937,6 +1024,7 @@ parseTerm =
     <$> P.choice
       [ parseLambda,
         parseLet,
+        parseHtml,
         parseType,
         P.try parseModule,
         parseSpawn,
