@@ -40,7 +40,7 @@ isUnit _ = False
 getVar :: HLIR.TLIR "expression" -> (Position, Uri) -> Maybe (Text, HLIR.Type)
 getVar (HLIR.MkExprLiteral _) _ = Nothing
 getVar (HLIR.MkExprInterface _ _) _ = Nothing
-getVar (HLIR.MkExprData _ _) _ = Nothing
+getVar (HLIR.MkExprData _) _ = Nothing
 getVar (HLIR.MkExprPublic _) _ = Nothing
 getVar (HLIR.MkExprRecordExtension e _ _ v) pos = do
   let vars = getVar e pos
@@ -122,6 +122,10 @@ getVar (HLIR.MkExprUpdate up val) pos = do
 getVar (HLIR.MkExprMut e) pos = getVar e pos
 getVar (HLIR.MkExprIndex e i) pos = getVar i pos <|> getVar e pos
 getVar (HLIR.MkExprRequire {}) _ = Nothing
+getVar (HLIR.MkExprReturn e) pos = getVar e pos
+getVar (HLIR.MkExprSpawn e) pos = getVar e pos
+getVar HLIR.MkExprBreak _ = Nothing
+getVar HLIR.MkExprContinue _ = Nothing
 
 getVarInPattern :: HLIR.TLIR "pattern" -> (Position, Uri) -> Maybe (Text, HLIR.Type)
 getVarInPattern (HLIR.MkPatVariable name ty) _ = Just (name, runIdentity ty)
@@ -163,7 +167,7 @@ findLets (HLIR.MkExprVariable _) _ _ = mempty
 findLets (HLIR.MkExprRequire _ _) _ _ = mempty
 findLets (HLIR.MkExprLiteral _) _ _ = mempty
 findLets (HLIR.MkExprInterface _ _) _ _ = mempty
-findLets (HLIR.MkExprData _ _) _ _ = mempty
+findLets (HLIR.MkExprData _) _ _ = mempty
 findLets (HLIR.MkExprRecordExtension e _ _ v) pos p = do
   let vars = findLets e pos p
   let vars' = findLets v pos p
