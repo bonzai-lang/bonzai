@@ -162,17 +162,22 @@ void print_with_level(Value value, int level) {
         break;
       }
 
-      printf("{ ");
-      for (uint32_t i = 0; i < record->length; i++) {
-        char* key_name = record->as_record.keys[i];
-        Value key_value = record->as_record.values[i];
+      struct RecordAsArray rec_array = record_to_array(value);
 
+      printf("{ ");
+      for (uint32_t i = 0; i < rec_array.length; i++) {
+        char* key_name = rec_array.keys[i];
         printf("%s: ", key_name);
-        print_with_level(key_value, level + 1);
-        if (i < record->length - 1) {
+        print_with_level(rec_array.values[i], level + 1);
+        
+        if (i < rec_array.length - 1) {
           printf(", ");
         }
       }
+
+      free(rec_array.keys);
+      free(rec_array.values);
+
       printf(" }");
       break;
     }
@@ -559,9 +564,11 @@ int str_size(Value value) {
 
       HeapValue* record = GET_PTR(value);
       int size = 2; // For the brackets
-      for (uint32_t i = 0; i < record->length; i++) {
-        size += strlen(record->as_record.keys[i]) + str_size(record->as_record.values[i]) + 2; // For ": "
-        if (i < record->length - 1) {
+      
+      struct RecordAsArray rec_array = record_to_array(value);
+      for (uint32_t i = 0; i < rec_array.length; i++) {
+        size += strlen(rec_array.keys[i]) + str_size(rec_array.values[i]) + 2; // For ": "
+        if (i < rec_array.length - 1) {
           size += 2; // For ", "
         }
       }
@@ -633,19 +640,20 @@ char* to_string(Value val) {
       char* ptr = str;
       *ptr++ = '{';
 
-      for (uint32_t i = 0; i < record->length; i++) {
-        char* key_name = record->as_record.keys[i];
-        Value key_value = record->as_record.values[i];
+      struct RecordAsArray rec_array = record_to_array(val);
 
-        ptr += snprintf(ptr, strlen(key_name) + 3, "%s: ", key_name);
-        char* value_str = to_string(key_value);
-        ptr += snprintf(ptr, str_size(key_value) + 1, "%s", value_str);
+      for (uint32_t i = 0; i < rec_array.length; i++) {
+        char* key_name = rec_array.keys[i];
+        char* value_str = to_string(rec_array.values[i]);
+        ptr += snprintf(ptr, str_size(rec_array.values[i]) + strlen(key_name) + 3, "%s: %s", key_name, value_str);
         free(value_str);
 
-        if (i < record->length - 1) {
+        if (i < rec_array.length - 1) {
           ptr += snprintf(ptr, 3, ", ");
         }
       }
+      free(rec_array.keys);
+      free(rec_array.values);
 
       *ptr++ = '}';
       *ptr = '\0';
