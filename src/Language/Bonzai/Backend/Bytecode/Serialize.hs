@@ -6,6 +6,7 @@ import Data.Binary
 import Data.Binary.Put
 import Data.ByteString qualified as BS
 import qualified Data.ByteString.Lazy as BSL
+import Control.Monad.Result (compilerError)
 
 -- | BYTECODE SERIALIZATION
 -- | Bytecode serialization is the process of transforming the bytecode AST into
@@ -101,8 +102,8 @@ encodeInstruction (MakeFunctionAndStore i j k) =
   encodeInstr 21 >> encodeInteger i >> encodeInteger j >> encodeInteger k >> replicateNull 1
 encodeInstruction (LoadNative i) =
   encodeInstr 22 >> encodeInteger i >> replicateNull 3
-encodeInstruction (MakeEvent i j) = 
-  encodeInstr 23 >> encodeInteger i >> encodeInteger j >> replicateNull 2
+encodeInstruction UnLoc =
+  encodeInstr 23 >> replicateNull 4
 encodeInstruction ReturnEvent =
   encodeInstr 24 >> replicateNull 4
 encodeInstruction MakeMutable =
@@ -131,6 +132,7 @@ encodeInstruction (MakeRecord i) =
   encodeInstr 36 >> encodeInteger i >> replicateNull 3
 encodeInstruction (Jump i) =
   encodeInstr 37 >> encodeInteger i >> replicateNull 3
+encodeInstruction (MakeEvent {}) = compilerError "Anonymous events should not appear in the bytecode"
 
 encodeText :: Text -> Put
 encodeText w = do

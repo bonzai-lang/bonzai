@@ -188,6 +188,9 @@ instance Assemble LLIR.Instruction where
     case mbContinue of
       Just addr -> increase $ pure [BC.Jump addr]
       Nothing -> compilerError "Continue statement outside of loop"
+    
+  assemble LLIR.UnLoc = increase $ do
+    pure [BC.UnLoc]
 
 computeLen :: [LLIR.Instruction] -> Int
 computeLen =

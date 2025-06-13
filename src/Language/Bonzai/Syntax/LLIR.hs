@@ -50,7 +50,7 @@ data Instruction
   | Spawn
   | Send Int Int
   | MakeMutable
-  | Loc Int Int Int
+  | Loc Int Int Int | UnLoc
   | Add | Sub | Mul | Div | Mod
   | TryCatch Int
   | GetValue
@@ -123,6 +123,7 @@ instance ToText Instruction where
   toText (Continue Nothing) = "continue"
   toText (Continue (Just n)) = T.concat ["continue ", T.pack (show n)]
   toText (While cond body) = T.concat ["while { ", T.intercalate "; " (map toText cond), " } { ", T.intercalate "; " (map toText body), " }"]
+  toText UnLoc = "unloc"
 
 instance ToText Segment where
   toText (Function n as _ _ is) = T.concat ["function ", n, "(", T.intercalate ", " as, ") { ", T.intercalate "; " (map toText is), " }"]
