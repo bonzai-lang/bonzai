@@ -2,40 +2,34 @@ require "std:http"
 require "std:foundation"
 require "std:datatypes/json"
 
+mut i = 0
+
+let { Object, String, Integer } = JSON
+
 let thread = spawn HTTP::create(
   fn(req) => {
-    // let headers = req->get()
+    let [method, path, version] = Request::information(req)
+    print("[$method] Received request for $path")
 
-    req->send("Hello, world!")
+    Request::sendHTML(
+      req,
+      <html>
+        <head>
+          <title>Simple HTTP Server</title>
+        </head>
+        <body>
+          <h1>Hello, World!</h1>
+          <p>This is a simple HTTP server.</p>
+          <p>Current iteration: {i.value}</p>
+        </body>
+      </html>
+    )
     
+    i += 1
+
     true
-
-    // match Header::from(headers) {
-    //   case Some(Header(top, _, content)) => {
-    //     let json = JSON::parse(content)
-    //     let [method, path .. _] = String::split(top, " ")
-
-    //     print("[$method] Received request on $path")
-
-    //     req->send(JSON::stringify(json))
-
-    //     true
-    //   }
-
-    //   case None => {
-    //     print("Invalid JSON")
-    //     req->send(JSON::stringify(
-    //       JSON->Object([
-    //         ("error", JSON->String("Invalid JSON")),
-    //         ("status", JSON->String("400 Bad Request"))
-    //       ])
-    //     ))
-
-    //     false
-    //   }
-    // }
   },
-  8000
+  8080
 )
 
 print("Server started on port 8000")
