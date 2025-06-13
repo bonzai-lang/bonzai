@@ -48,13 +48,12 @@ typedef struct Module {
 
   pthread_mutex_t module_mutex;
 
-  Position latest_position;
-  const char* file;
+  Position* latest_position;
+  char** file;
+  int latest_position_index, 
+      latest_position_capacity;
 
   void** native_handles;
-
-  int latest_try_catch[2][1024];
-  int latest_try_catch_count;
 
   gc_t* gc;
 } Module;

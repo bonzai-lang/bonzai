@@ -6,50 +6,40 @@
 
 #define ENABLE_ASSERTIONS 1
 
-// THROW should jump to catch body if there is
-// a try-catch block, otherwise it should print
-#define THROW(module, message)                  \
-  if (module->latest_try_catch_count > 0) {     \
-    module->stack->values[module->stack->stack_pointer++] = MAKE_STRING_MULTIPLE(module, message); \
-    jump_try_catch(module);                     \
-  } else {                                      \
-    printf("%s[error]: %s", BRED, COLOR_RESET); \
-    printf(message);                            \
-    printf("\n");                               \
-    if (module->file && module->latest_position[0] != 0 && module->latest_position[1] != 0) { \
-      printf("   %sat %s:%d:%d\n",              \
-        BLK,                                    \
-        module->file,                           \
-        module->latest_position[0],             \
-        module->latest_position[1]);            \
-    } \
-    printf("   %sin %s:%d\n", BLK, __func__, __LINE__); \
-    printf("   %sat IPC %d", BLK, module->pc / 5);  \
-    printf("\n");                               \
-    exit(EXIT_FAILURE);                         \
-  }
+#define THROW(module, message)                                      \
+  printf("%s[error]: %s", BRED, COLOR_RESET);                       \
+  printf(message);                                                  \
+  printf("\n");                                                     \
+  if (module->file && module->latest_position[0] != 0 &&            \
+      module->latest_position[1] != 0) {                            \
+    for (int i = module->latest_position_index - 1; i >= module->latest_position_index - 5; i--) {        \
+      if (i >= module->latest_position_index) break;                \
+      printf("   %s- at %s:%d:%d\n", BLK, module->file[i],              \
+             module->latest_position[i][0], module->latest_position[i][1]); \
+    }                                                               \
+  }                                                                 \
+  printf("   %sin %s:%d\n", BLK, __func__, __LINE__);               \
+  printf("   %sat IPC %d", BLK, module->pc / 5);                    \
+  printf("\n");                                                     \
+  exit(EXIT_FAILURE);
 
-#define THROW_FMT(module, ...)   \
-  if (module->latest_try_catch_count > 0) { \
-    module->stack->values[module->stack->stack_pointer++] = MAKE_STRING_MULTIPLE(module, __VA_ARGS__); \
-    jump_try_catch(module); \
-  } else {                    \
-    printf("%s[error]: %s", BRED, COLOR_RESET); \
-    printf(__VA_ARGS__); \
-    printf("\n"); \
-    if (module->file && module->latest_position[0] != 0 && module->latest_position[1] != 0) { \
-      printf("  %s- at %s:%d:%d\n",         \
-        BLK, \
-        module->file,                \
-        module->latest_position[0],  \
-        module->latest_position[1]); \
-    } \
-    printf("  %s- in %s:%d\n", BLK, __func__, __LINE__); \
-    printf("  %s- at IPC %d", BLK, module->pc / 5); \
-    printf("\n");        \
-    exit(EXIT_FAILURE);  \
-  }
-  
+#define THROW_FMT(module, ...)                                              \
+  printf("%s[error]: %s", BRED, COLOR_RESET);                               \
+  printf(__VA_ARGS__);                                                      \
+  printf("\n");                                                             \
+  if (module->file && module->latest_position[0] != 0 &&                    \
+      module->latest_position[1] != 0) {                                    \
+    for (int i = module->latest_position_index - 1;                             \
+         i >= module->latest_position_index - 5; i--) {                          \
+      if (i >= module->latest_position_index) break;                        \
+      printf("  %s- at %s:%d:%d\n", BLK, module->file[i],                   \
+             module->latest_position[i][0], module->latest_position[i][1]); \
+    }                                                                       \
+  }                                                                         \
+  printf("  %s- in %s:%d\n", BLK, __func__, __LINE__);                      \
+  printf("  %s- at IPC %d", BLK, module->pc / 5);                           \
+  printf("\n");                                                             \
+  exit(EXIT_FAILURE);
 
 #if ENABLE_ASSERTIONS
 

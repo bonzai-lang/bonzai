@@ -24,30 +24,8 @@ __attribute__((always_inline)) inline struct Frame pop_frame(Module* mod) {
   return frame;
 }
 
-void init_copying_generation(Generation* gen, size_t space_size) {
-  gen->space_size = space_size;
-  gen->from_space = malloc(space_size);
-  gen->to_space = malloc(space_size);
-  gen->allocation_ptr = gen->from_space;
-  gen->space_end = gen->from_space + space_size;
-  gen->first_object = NULL;
-  gen->num_objects = 0;
-  gen->max_objects = INIT_OBJECTS;
-  gen->is_copying = true;
-
-  if (!gen->from_space || !gen->to_space) {
-    fprintf(stderr, "Failed to allocate copying GC spaces\n");
-    exit(1);
-  }
-}
-
 // Initialize mark-sweep generation for old generation
 void init_marksweep_generation(Generation* gen) {
-  gen->from_space = NULL;
-  gen->to_space = NULL;
-  gen->allocation_ptr = NULL;
-  gen->space_end = NULL;
-  gen->space_size = 0;
   gen->first_object = NULL;
   gen->num_objects = 0;
   gen->max_objects = INIT_OBJECTS;
@@ -57,7 +35,7 @@ void init_marksweep_generation(Generation* gen) {
 // Initialize the GC system and its worker thread
 void init_gc(gc_t* gc, Module* mod) {
   // Initialize GC state
-  init_copying_generation(&gc->young, 1024 * 1024);
+  init_marksweep_generation(&gc->young);
   init_marksweep_generation(&gc->old);
 
   atomic_store(&gc->gc_enabled, true);
@@ -77,11 +55,4 @@ void init_gc(gc_t* gc, Module* mod) {
   atomic_store(&gc->thread_stopped, 0);
 
   mod->gc = gc;
-}
-
-void jump_try_catch(struct Module* module) {
-  int jmp = module->latest_try_catch[0][module->latest_try_catch_count - 1];
-  int offset = module->latest_try_catch[1][module->latest_try_catch_count - 1];
-  module->latest_try_catch_count--;
-  module->pc += (jmp - offset) * 5;
 }

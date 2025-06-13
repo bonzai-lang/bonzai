@@ -56,9 +56,11 @@ void free_libraries(LibraryOption* head) {
 
 int main(int argc, char* argv[]) {
   Module module;
-  module.file = NULL;
-  module.latest_position[0] = 0;
-  module.latest_position[1] = 0;
+  module.latest_position_index = 0;
+  module.latest_position_capacity = 10;
+  module.latest_position =
+      malloc(sizeof(Position) * module.latest_position_capacity);
+  module.file = malloc(sizeof(char*) * module.latest_position_capacity);
 
   gc_t* gc = malloc(sizeof(gc_t));
   init_gc(gc, &module);
@@ -92,7 +94,6 @@ int main(int argc, char* argv[]) {
   module.gc->stacks.stack_count++;
   module.num_handles = num_libs;
   module.current_actor = NULL;
-  module.latest_try_catch_count = 0;
   module.events = malloc(sizeof(struct Actor*) * 1024);
   module.event_capacity = 1024;
 
@@ -117,6 +118,8 @@ int main(int argc, char* argv[]) {
   // Closing and freeing resources
   fclose(file);
 
+  force_sweep(&module);
+
   for (int i = 0; i < module.constants->size; i++) {
     free_constant(module.constants->values[i]);
   }
@@ -126,11 +129,15 @@ int main(int argc, char* argv[]) {
   free(module.constants->values);
   free(module.native_handles);
   free(module.events);
+  free(gc->stacks.stacks);
   free(gc);
+  free(module.latest_position);
+  free(module.file);
 
   free(args);
   free_libraries(libraries);
   free(libs);
+  free(module.constants);
 
   return 0;
 }
