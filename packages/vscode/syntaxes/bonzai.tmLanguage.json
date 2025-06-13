@@ -40,6 +40,9 @@
     },
     {
       "include": "#comments"
+    },
+    {
+      "include": "text.html.basic"
     }
 	],
 	"repository": {
@@ -47,7 +50,7 @@
 			"patterns": [
         {
           "name": "keyword.control.bonzai",
-          "match": "\\b(interface|let|mut|extern|require|fn|spawn|if|then|else|on|while|case|match|pub|for|in|return|break|continue|type)\\b"
+          "match": "\\b(let|mut|extern|require|fn|spawn|if|then|else|on|while|case|match|pub|for|in|return|break|continue|type|mod)\\b"
         },
         {
           "name": "keyword.operator.bonzai",
