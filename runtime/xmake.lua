@@ -18,7 +18,7 @@ target("bonzai-runtime")
   -- Setting up the target
   set_kind("binary") 
   set_targetdir("bin")
-  set_optimize("fast")
+  set_optimize("fastest")
 
 target("bonzai-runtime-test")
   add_rules("mode.debug", "mode.profile")
@@ -26,7 +26,8 @@ target("bonzai-runtime-test")
   -- Adding the runtime source files
   add_files("src/**.c")
   add_includedirs("include")
-  
+  set_policy("build.sanitizer.address", true)
+
   -- Setting up the target
   set_targetdir("bin")
   set_kind("binary")

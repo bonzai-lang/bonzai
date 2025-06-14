@@ -1,10 +1,10 @@
-[![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/thomasvergne/bonzai?style=for-the-badge)](https://github.com/thomasvergne/bonzai/issues)
-![GitHub License](https://img.shields.io/github/license/thomasvergne/bonzai?style=for-the-badge)
+[![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/bonzai-lang/bonzai?style=for-the-badge)](https://github.com/bonzai-lang/bonzai/issues)
+![GitHub License](https://img.shields.io/github/license/bonzai-lang/bonzai?style=for-the-badge)
 ![Bonzai](assets/banner.png)
 
 ## Introduction
 
-Bonzai is a programming language that relies on [Actor model](https://en.wikipedia.org/wiki/Actor_model), [Reactive programming](https://en.wikipedia.org/wiki/Reactive_programming) and on a strong and non-taulerant typechecker to guarantee types and computations in your code. It compiles down to a custom bytecode with relatively good performance.
+Bonzai is a generic purpose programming language that relies on a strong and non-taulerant typechecker to guarantee types and computations in your code. It compiles down to a custom bytecode with relatively good performance.
 
 ## Table of Contents
 
@@ -19,25 +19,54 @@ Bonzai is a programming language that relies on [Actor model](https://en.wikiped
 ## Features
 
 - **Strong typechecker**: Throw errors for incompatible types, to ensure security when running your code.
-- **Actors as expressions**: Make use of first-class actors to express every code you want to.
-- **Reactive variables**: described as *live* variables, they are updated in real-time.
+- **Datatypes as expressions**: All datatypes are expressions, allowing for more flexibility in your code.
+- **Row polymorphism**: Allows for dictionary-like structures with flexible keys.
 - **Bytecode compilation**: Suitable for Unix-like systems, enabling almost multi-platform code running.
 
 ## Example Code
 
 A parallel HTTP server dispatcher example :
 
-```v
+```rs
 require "std:http"
-require "std:natives"
-require "std:tuple"
+require "std:foundation"
+require "std:datatypes/json"
 
-createParallelHTTP(10, fn(req, id) => {
-  print("Received request on $id")
-  req.respondText("text/html", "<h1>Hello, world!</h1>")
-})
+let thread = spawn HTTP::create(
+  fn(req) => {
+    let headers = req->get()
 
-print("Server running on port http://localhost:8000")
+    match Header::from(headers) {
+      case Some(Header(top, _, content)) => {
+        let json = JSON::parse(content)
+        let [method, path .. _] = String::split(top, " ")
+
+        print("[$method] Received request on $path")
+
+        req->send(JSON::stringify(json))
+
+        true
+      }
+
+      case None => {
+        print("Invalid JSON")
+        req->send(JSON::stringify(
+          JSON->Object([
+            ("error", JSON->String("Invalid JSON")),
+            ("status", JSON->String("400 Bad Request"))
+          ])
+        ))
+
+        false
+      }
+    }
+  },
+  8000
+)
+
+print("Server started on port 8000")
+
+thread.wait()
 ```
 
 ## Building Bonzai
@@ -49,7 +78,7 @@ print("Server running on port http://localhost:8000")
 
 1. **Clone the Repository**: 
   ```sh
-  git clone https://github.com/thomasvergne/bonzai.git
+  git clone https://github.com/bonzai-lang/bonzai.git
   cd bonzai
   ```
 2. **Build the project**:
@@ -64,4 +93,4 @@ print("Server running on port http://localhost:8000")
 
 ### Reporting Issues
 
-If you find any issues or have suggestions, please use the [Issues page](https://github.com/thomasvergne/bonzai/issues). We appreciate your feedback and contributions!
+If you find any issues or have suggestions, please use the [Issues page](https://github.com/bonzai-lang/bonzai/issues). We appreciate your feedback and contributions!

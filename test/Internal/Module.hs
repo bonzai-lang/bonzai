@@ -2,7 +2,7 @@
 module Internal.Module where
 
 import Internal.Utils
-import Test.Hspec (Spec, describe, it, shouldSatisfy)
+import Test.Hspec (Spec, describe, it, shouldSatisfy, expectationFailure)
 import qualified Data.List as List
 import System.FilePath
 import qualified Language.Bonzai.Syntax.HLIR as HLIR
@@ -15,23 +15,25 @@ testModuleImport = do
 
       a_plus_b <- fromFile "test/data/module/a-plus-b.bzi"
 
-      a' `shouldBeRight` a_plus_b
+      (fmap removeLocation <$> a') `shouldBeRight` (removeLocation <$> a_plus_b)
 
     it "resolve standard path" $ do
       std <- runModuleConversion "test/data/module/std"
 
       std_result <- fromFile "test/data/module/std-result.bzi"
 
-      std `shouldBeRight` List.nub std_result
+      (fmap removeLocation <$> std) `shouldBeRight` (removeLocation <$> List.nub std_result)
     
     it "resolve standard path with environment variable" $ do
       std <- runModuleConversion "std:math"
 
       stdPath <- fromMaybe "" <$> lookupEnv "BONZAI_PATH"
 
-      std_result <- fromFile $ stdPath </> "standard" </> "math.bzi"
+      std_result <- runModuleConversion (stdPath </> "standard" </> "math")
 
-      std `shouldBeRight` List.nub std_result
+      if (fmap removeLocation <$> std) == (fmap removeLocation <$> std_result)
+        then pure ()
+        else expectationFailure $ "Expected " <> show (fmap removeLocation <$> std_result) <> ",\nbut got  " <> show (fmap removeLocation <$> std)
 
     it "detects cyclic module dependency" $ do
       cyclic <- runModuleConversion "test/data/module/cyclic"

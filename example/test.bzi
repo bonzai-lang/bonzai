@@ -1,0 +1,8 @@
+require "std:foundation"
+require "std:datatypes/json"
+ 
+let json = File::read("example/data/large-file.json")
+
+range(0, 35).foreach(fn(i) => {
+  print(JSON::parse(json))
+})

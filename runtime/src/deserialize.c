@@ -1,6 +1,6 @@
 #include <assert.h>
-#include <error.h>
 #include <deserialize.h>
+#include <error.h>
 #include <module.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,19 +31,24 @@ Value deserialize_value(Module* mod, FILE* file) {
       int32_t length;
       fread(&length, sizeof(int32_t), 1, file);
 
-      char* string_value = /*test*/malloc(length + 1);
+      char* string_value = /*test*/ malloc(length + 1);
       fread(string_value, sizeof(char), length, file);
       string_value[length] = '\0';
 
-      HeapValue* hp = /*test*/malloc(sizeof(HeapValue));
+      HeapValue* hp = /*test*/ malloc(sizeof(HeapValue));
       hp->type = TYPE_STRING;
       hp->as_string = string_value;
       hp->length = length;
       hp->is_constant = true;
-      hp->is_marked = true;
-
 
       value = MAKE_PTR(hp);
+      break;
+    }
+
+    case 3: /* Type Char */ {
+      int32_t int_value;
+      fread(&int_value, sizeof(int32_t), 1, file);
+      value = MAKE_CHAR(int_value);
       break;
     }
 
@@ -69,7 +74,7 @@ void free_constant(Value v) {
   free(hp);
 }
 
-Constants deserialize_constants(Module *mod, FILE* file) {
+Constants deserialize_constants(Module* mod, FILE* file) {
   Constants constants;
 
   int32_t constant_count;
@@ -86,7 +91,7 @@ Constants deserialize_constants(Module *mod, FILE* file) {
   return constants;
 }
 
-void deserialize(Module *mod, FILE* file) {
+void deserialize(Module* mod, FILE* file) {
   mod->callstack = 0;
   mod->is_terminated = false;
   mod->base_pointer = BASE_POINTER;
@@ -95,13 +100,15 @@ void deserialize(Module *mod, FILE* file) {
 
   int32_t instr_count;
   fread(&instr_count, sizeof(int32_t), 1, file);
-  
+
   int32_t* instrs = malloc(instr_count * 5 * sizeof(int32_t));
   fread(instrs, sizeof(int32_t), instr_count * 5, file);
 
   mod->instr_count = instr_count;
   mod->instrs = instrs;
-  mod->constants = constants_;
+  mod->constants = malloc(sizeof(Constants));
+  mod->constants->size = constants_.size;
+  mod->constants->values = constants_.values;
 
   mod->native_handles = calloc(constants_.size, sizeof(void*));
 }

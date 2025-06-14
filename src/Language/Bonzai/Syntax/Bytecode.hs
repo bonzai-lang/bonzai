@@ -29,10 +29,13 @@ data Instruction
   | MakeFunctionAndStore LLIR.NameAddress LLIR.InstructionLength LLIR.NeededLocalSpace
   | ReturnEvent
   | MakeMutable
-  | Loc Int Int Int
+  | Loc Int Int Int | UnLoc
   | Add | Sub | Mul | Div | Mod
   | TryCatch Int
   | GetValue
+  | GetRecordAccess Int
+  | MakeRecord Int
+  | Jump Int
   deriving (Eq)
 
 instance ToText Int where
@@ -74,6 +77,10 @@ instance ToText Instruction where
   toText Mod = "Mod"
   toText (TryCatch a) = "TryCatch " <> toText a
   toText GetValue = "GetValue"
+  toText (GetRecordAccess a) = "GetRecordAccess " <> toText a
+  toText (MakeRecord a) = "MakeRecord " <> toText a
+  toText (Jump a) = "Jump " <> toText a
+  toText UnLoc = "UnLoc"
 
 instance ToText [Instruction] where
   toText xs = T.intercalate "\n" . map format $ couple

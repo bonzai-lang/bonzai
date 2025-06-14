@@ -30,19 +30,22 @@ instance Free MLIR.Expression where
       freeBlock r (MLIR.MkExprMut e:es') = free r e <> freeBlock r es'
       freeBlock r (MLIR.MkExprLoc _ e:es') = free r e <> freeBlock r es'
       freeBlock r (e:es') = free r e <> freeBlock r es'
-  free res (MLIR.MkExprEvent es) = free res es
-  free res (MLIR.MkExprOn _ as e) = free res e <> Set.fromList as
-  free res (MLIR.MkExprSend e _ es) = free res e <> free res es
-  free res (MLIR.MkExprSpawn e) = free res e
   free res (MLIR.MkExprList es) = free res es
-  free _ (MLIR.MkExprNative _ _) = mempty
+  free _ (MLIR.MkExprNative {}) = mempty
   free res (MLIR.MkExprIndex e i) = free res e <> free res i
   free _ (MLIR.MkExprLiteral _) = Set.empty
   free res (MLIR.MkExprUnpack n e e') = free res e <> free res e' <> Set.singleton n
   free res (MLIR.MkExprLoc _ e) = free res e
   free res (MLIR.MkExprWhile c e) = free res c <> free res e
   free _ MLIR.MkExprSpecial = Set.empty
-  free res (MLIR.MkExprTryCatch t n c) = free res t <> free res c <> Set.singleton n
+  free res (MLIR.MkExprBinary _ e1 e2) = free res e1 <> free res e2
+  free res (MLIR.MkExprRecordAccess e _) = free res e
+  free res (MLIR.MkExprSingleIf c e) = free res c <> free res e
+  free res (MLIR.MkExprReturn e) = free res e
+  free res (MLIR.MkExprRecord m) = foldMap (free res) m
+  free _ MLIR.MkExprBreak = Set.empty
+  free _ MLIR.MkExprContinue = Set.empty
+  free res (MLIR.MkExprSpawn e) = free res e
  
 instance Free MLIR.Update where
   free res (MLIR.MkUpdtVariable a) = Set.singleton a Set.\\ res

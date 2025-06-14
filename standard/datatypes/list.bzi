@@ -1,8 +1,36 @@
 require "std:math"
 require "std:datatypes/optional"
+require "std:datatypes/unit"
+require "std:datatypes/tuple"
+require "std:io"
 
-pub extern fn length<A>(xs: list<A>): int
-pub extern fn sliceFrom<A>(xs: list<A>, i: int): list<A>
+pub extern fn sliceFrom<A>(xs: list<A>, start: int): list<A>
+pub extern fn length<A>(xs: A): int
+pub extern fn slice<A>(xs: list<A>, start: int, end: int): list<A>
+
+pub let List::length = length
+
+pub fn List::any<A>(xs: list<A>, f: fn(A): bool): bool =>
+  match xs {
+    case [] => false
+    case [x .. xs] => if f(x) then true else List::any(xs, f)
+  }
+
+pub fn List::slice<A>(xs: list<A>, start _?: int, end _?: int): list<A> => {
+  let start = Optional::unwrapOr(kwargs->start, 0)
+  let end = Optional::unwrapOr(kwargs->end, List::length(xs))
+
+  slice(xs, start, end)
+}
+
+pub fn foreach<A>(xs: list<A>, f: fn(A): unit): unit =>
+  match xs {
+    case [] => unit
+    case [x .. xs] => {
+      f(x)
+      foreach(xs, f)
+    }
+  }
 
 pub fn List::elem<A>(x: A, xs: list<A>): bool =>
   match xs {
@@ -14,6 +42,12 @@ pub fn List::map<A, B>(xs: list<A>, f: fn(A): B): list<B> =>
   match xs {
     case [] => []
     case [y .. ys] => [f(y)] + List::map(ys, f)
+  }
+
+pub fn List::concat<A>(xs: list<list<A>>): list<A> =>
+  match xs {
+    case [] => []
+    case [y .. ys] => y + List::concat(ys)
   }
 
 pub let map = List::map
@@ -30,10 +64,10 @@ pub fn List::foldr<A, B>(f: fn(A, B): B, acc: B, xs: list<A>): B =>
     case [y .. ys] => f(y, List::foldr(f, acc, ys))
   }
 
-pub fn List::length<A>(xs: list<A>): int =>
+pub fn List::filter<A>(f: fn(A): bool, xs: list<A>): list<A> =>
   match xs {
-    case [] => 0
-    case [x .. xs] => 1 + List::length(xs)
+    case [] => []
+    case [y .. ys] => if f(y) then [y] + List::filter(f, ys) else List::filter(f, ys)
   }
 
 pub fn List::join<A>(xs: list<A>, sep: A): list<A> =>
@@ -47,4 +81,80 @@ pub fn List::find<A>(f: fn(A): bool, xs: list<A>): Optional<A> =>
   match xs {
     case [] => None
     case [x .. xs] => if f(x) then Some(x) else List::find(f, xs)
+  }
+
+
+pub fn List::pop<A>(xs: list<A>): Optional<A> =>
+  match xs {
+    case [x] => Some(x)
+    case [y .. ys] => List::pop(ys)
+    case [] => None
+  }
+
+pub fn List::push<A>(xs: list<A>, x: A): list<A> =>
+  xs + [x]
+
+pub fn List::shift<A>(xs: list<A>): Optional<A> =>
+  match xs {
+    case [x .. xs] => Some(x)
+    case [] => None
+  }
+
+pub fn List::unshift<A>(xs: list<A>, x: A): list<A> =>
+  [x] + xs
+
+pub fn List::tail<A>(xs: list<A>): list<A> =>
+  match xs {
+    case [x .. xs] => xs
+    case [] => []
+  }
+
+pub fn List::head<A>(xs: list<A>): Optional<A> =>
+  match xs {
+    case [x .. xs] => Some(x)
+    case [] => None
+  }
+
+pub fn List::init<A>(xs: list<A>): list<A> =>
+  match xs {
+    case [] => []
+    case [x] => []
+    case [y .. ys] => [y] + List::init(ys)
+  }
+
+pub fn List::uncons<A>(xs: list<A>): (Optional<A>, list<A>) =>
+  match xs {
+    case [] => (None, [])
+    case [x .. xs] => (Some(x), xs)
+  }
+
+pub fn List::unsnoc<A>(xs: list<A>): (list<A>, Optional<A>) =>
+  match xs {
+    case [] => ([], None)
+    case [x] => ([], Some(x))
+    case [y .. ys] => match List::unsnoc(ys) {
+      case Tuple(zs, z) => (zs + [y], z)
+    }
+  }
+
+pub fn range(start: int, end: int): list<int> =>
+  if start > end then [] else [start] + range(start + 1, end)
+
+pub fn List::reverse<A>(xs: list<A>): list<A> =>
+  List::foldl(fn(x, acc) => [x] + acc, [], xs)
+
+pub fn List::splitAt<A>(xs: list<A>, n: int): (list<A>, list<A>) =>
+  if n <= 0 then ([], xs)
+  else match xs {
+    case [] => ([], [])
+    case [x .. xs] => {
+      let Tuple(ys, zs) = List::splitAt(xs, n - 1);
+      ([x] + ys, zs)
+    }
+  }
+
+pub fn List::lookup<A, B>(key: A, xs: list<(A, B)>): Optional<B> =>
+  match xs {
+    case [] => None
+    case [Tuple(k, v) .. xs] => if key == k then Some(v) else List::lookup(key, xs)
   }

@@ -1,29 +1,18 @@
 ---
-title: Welcome to Bonzai
-description: Get started building your next level scripts with Bonzai.
+title: Bonzai Reference
+description: Get started building your docs site with Starlight.
 template: splash
 hero:
-  title: |
-    Welcome to
-    <span
-      class="font-black text-transparent
-        bg-clip-text bg-gradient-to-b
-        from-accent-700 to-accent-400
-        dark:from-accent-500 dark:to-accent-200"
-    >
-      Bonzai
-    </span> documentation
-  tagline: Get started building your next level scripts with Bonzai.
+  tagline: Bonzai is a general purpose programming language. It compiles down to a custom bytecode.
   image:
     file: ../../assets/transparent-logo.svg
   actions:
-    - text: Get started
-      link: /guides/installation
+    - text: Start building
+      link: /guides/installation/
       icon: right-arrow
-
-    - text: Star on GitHub
-      link: https://github.com/thomasvergne/bonzai
-      icon: github
+    - text: Inspect the compiler
+      link: /reference/compiler/
+      icon: external
       variant: minimal
 ---
 
@@ -32,18 +21,16 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 ## Next steps
 
 <CardGrid>
-  <Card title="Install Bonzai" icon="rocket" >
-    Build locally Bonzai and start beginning your first project with it.
-
-    [Check it out](/guides/installation/)
-  </Card>
-	<Card title="Write your first code" icon="pencil">
-		Start writing your first concurrent code with Bonzai, introducing the basic syntax and features.
+	<Card title="Install Bonzai on your computer" icon="download">
+		[Read the manual](/guides/installation) for instructions on how to install Bonzai on your computer.
 	</Card>
-	<Card title="Discover the language reference" icon="setting">
-		Discover the syntax and the features of Bonzai, and more generally, how it works internally.
+	<Card title="Write your first program" icon="add-document">
+		Follow the [Getting Started guide](/guides/getting-started) to write your first Bonzai program.
 	</Card>
-	<Card title="Discover the standard library" icon="open-book">
-    Discover every functions and modules of Bonzai, included in the standard library by default.
+	<Card title="Dive into the compiler" icon="setting">
+		Inspect the [Bonzai compiler](/reference/compiler/) to see how it works and how you can extend it.
+	</Card>
+	<Card title="Contribute to Bonzai" icon="open-book">
+		Join the [Bonzai community](https://github.com/bonzai-lang/bonzai) on GitHub, and contribute to the project. We welcome contributions of all kinds, from code to documentation and beyond.
 	</Card>
 </CardGrid>

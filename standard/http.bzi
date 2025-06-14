@@ -6,115 +6,190 @@ require "std:datatypes/mutable"
 require "std:datatypes/list"
 require "std:io"
 require "std:datatypes/map"
+require "std:datatypes/unit"
+require "std:datatypes/optional"
+require "std:datatypes/threads"
+pub require "std:web/html"
 
 extern fn start_http_server(port: int): HTTP
 extern fn accept_request(server: HTTP): Request
-extern fn close_client(req: Request)
+extern fn close_client(req: Request): unit
 extern fn get_buffer(req: Request): string
-pub extern fn send_buffer(req: Request, buffer: string)
-pub extern fn send_buffer_with(req: Request, buffer: string)
-extern fn close_server(server: HTTP)
-pub extern fn fetch(url: string): Throwable<(string, string)>
-extern fn fetch_with(url: string, headers: string): Throwable<(string, string)>
+pub extern fn send_buffer(req: Request, buffer: string): unit
+pub extern fn send_buffer_with(req: Request, buffer: string): unit
+extern fn close_server(server: HTTP): unit
 extern fn redirect_to(req: Request, url: string): unit
 extern fn get_path(req: Request): string
-extern fn make_unit(): unit
+pub extern fn make_unit(): unit
+
+fn containsContentLength(headers: list<string>): bool => {
+  let contentLengthHeader = "Content-Length: "
+
+  List::any(
+    headers,
+    fn(header) => String::startsWith(header, contentLengthHeader)
+  )
+}
+
+fn headersContains(headers: list<string>, key: string): bool => {
+  let keyWithColon = "$key: "
+  List::any(headers, fn(header) => String::startsWith(header, keyWithColon))
+}
 
 type Header {
-  Header(code: int, reason: string)
+  Header(toplevel: string, rules: list<(string, string)>, content: string)
 }
 
-fn Header::show(header: Header): string => match header {
-  case Header(code, reason) => "HTTP/1.1 $code $reason"
-}
+let { Header } = Header
 
-fn Map::mapToHeaders(headers: Map<string>): string => {
-  mut headersString = ""
-  mut i = 0
-  
-  match headers {
-    case Map(entries) => {
-      while i.value < entries.length {
-        match entries[i.value] {
-          case Tuple(key, val) => {
-            headersString = headersString.value + "$key: $val\r\n"
-            i = i.value + 1
-          }
+pub fn Header::from(headers: string): Optional<Header> => {
+  let result = String::split(headers, "\r\n\r\n")
+
+  match result {
+    case [headers, content .. _] => {
+      let headerLines = String::split(headers, "\r\n")
+      match headerLines {
+        case [toplevel .. headerLines] => {
+          let rules = List::map(headerLines, fn(line) => {
+            let parts = String::split(line, ": ");
+
+            match parts {
+              case [key, value] => (key, value)
+              case _ => ("", "")
+            }
+          })
+
+          Some(Header(toplevel, rules, content))
         }
+
+        case [] => None
       }
     }
-  }
 
-  headersString.value
-}
-
-fn respondHeaders(req: Request, buffer: Map<string>, header_line: Header, content: string) => {
-  let headers = Map::mapToHeaders(buffer)
-
-  req.send_buffer_with(Header::show(header_line) + "\r\n" + headers + "\r\n" + content)
-}
-
-fn respondOk(req: Request, buffer: Map<string>, content: string) => {
-  respondHeaders(req, buffer, Header(200, "OK"), content)
-}
-
-fn respondText(req: Request, ty: string, content: string) =>
-  req.respondOk({
-    "Content-Type": ty,
-    "Content-Length": String::length(content).toString,
-    "Connection": "close"
-  }, content)
-
-fn fetchWithHeaders(url: string, headers: Map<string>): Throwable<(string, string)> => {
-  match fetch_with(url, Map::mapToHeaders(headers)) {
-    case Ok(Tuple(buffer, content)) => Ok(Tuple(buffer, content))
-    case Error(e) => Error(e)
+    case _ => None
   }
 }
 
-interface HTTPWrapper {
-  fn listen(handler: fn(Request): unit)
-  fn close()
+pub fn Header::show(Header(toplevel, rules, content)): string => {
+  let rulesString = List::map(rules, fn(Tuple(key, value)) => "$key: $value")
+
+  let rulesJoined = String::join(rulesString, "\r\n")
+
+  let headerString = "$toplevel\r\n$rulesJoined\r\n\r\n$content"
+
+  headerString
 }
 
-interface RequestIntercept {
-  fn intercept(server: HTTP, handler: fn(Request): unit, isClosed: mut bool)
-  fn close()
+pub fn HTTP::create(callback: fn(Request): bool, port: int) => {
+  let server = start_http_server(port)
+
+  mut running = true
+
+  while running.value {
+    let req = accept_request(server)
+    running = callback(req)
+    close_client(req)
+  }
+
+  close_server(server)
 }
 
-fn Request() => {
-  actor < RequestIntercept {
-    on intercept(server: HTTP, handler, isClosed) => {
-      while !isClosed.value {
-        let req = accept_request(server)
+pub fn Request::getPath(req: Request): string => get_path(req)
+pub fn Request::getBuffer(req: Request): string => get_buffer(req)
+pub fn Request::send(req: Request, buffer: string, headers _?: list<string>): unit => {
+  let headers = Optional::map(kwargs->headers, fn(x) => mut x)
 
-        handler(req)
-
-        close_client(req)
+  match headers {
+    case Some(headers) => {
+      if !containsContentLength(headers.value) then {
+        let len = String::length(buffer)
+        headers += ["Content-Length: $len"]
       }
 
-      exit()
+      let headersString = String::join(headers.value, "\r\n") + "\r\n\r\n" + buffer
+      send_buffer_with(req, headersString)
     }
-
-    on close() => exit()
+    case None => send_buffer(req, buffer)
   }
 }
+pub fn Request::sendHTML(req: Request, html: HTML, headers _?: list<string>): unit => {
+  let headers = Optional::map(kwargs->headers, fn(x) => mut x)
 
-pub fn HTTPServer(port: int) => {
-  let http = start_http_server(port)
-  mut isClosed = false
+  match headers {
+    case Some(headers) => {
+      let renderedHTML = HTML::render(html)
 
-  actor < HTTPWrapper {
-    on listen(handler) => {
-      let i1 = spawn Request()
-      i1->intercept(http, handler, isClosed)
+      headers = ["HTTP/1.1 200 OK"] + headers.value
+
+      if !containsContentLength(headers.value) then {
+        let len = renderedHTML.length
+        headers += ["Content-Length: $len"]
+      }
+      
+      if !headersContains(headers.value, "Content-Type") then {
+        headers += ["Content-Type: text/html; charset=UTF-8"]
+      }
+
+      let headersString = String::join(headers.value, "\r\n") + "\r\n\r\n" + renderedHTML
+      send_buffer_with(req, headersString)
     }
-    
-    on close() => {
-      isClosed = true
-      close_server(http)
+    case None => {
+      let renderedHTML = HTML::render(html)
+      let contentLength = renderedHTML.length
 
-      exit()
+      let headers = [
+        "HTTP/1.1 200 OK",
+        "Content-Length: $contentLength",
+        "Content-Type: text/html; charset=UTF-8"
+      ]
+
+      let headersString = String::join(headers, "\r\n") + "\r\n\r\n" + renderedHTML
+
+      send_buffer_with(req, headersString)
     }
+  }
+}
+pub fn Request::redirect(req: Request, url: string): unit => redirect_to(req, url)
+pub fn Request::headers(req: Request): Optional<Header> => Header::from(Request::getBuffer(req))
+pub fn Request::information(req: Request): list<string> => {
+  let headers = Optional::unwrapOr(
+    Optional::map(
+      Request::headers(req), 
+      fn(Header(top, _, _)) => top
+    ), 
+    "GET /404 HTTP/1.1"
+  )
+
+  String::split(headers, " ")
+}
+
+extern fn fetch_helper(url: string, method: string, headers: string): Throwable<(string, string)>
+
+pub fn fetch(
+  url: string,
+  method _?: string,
+  body _?: string,
+  headers _?: list<string>
+): Throwable<(string, string)> => {
+  let method = kwargs->method
+  let body = kwargs->body
+  let headers = kwargs->headers
+
+  let methodString = Optional::unwrapOr(method, "GET")
+  let bodyString = Optional::unwrapOr(body, "")
+
+  match headers {
+    case Some(headers) => {
+      mut newHeaders = headers
+      if !containsContentLength(headers) then {
+        let len = String::length(bodyString)
+        newHeaders += ["Content-Length: $len"]
+      }
+
+      let headersString = String::join(newHeaders.value, "\r\n") + "\r\n\r\n" + bodyString
+
+      fetch_helper(url, methodString, headersString)
+    }
+    case None => fetch_helper(url, methodString, bodyString)
   }
 }

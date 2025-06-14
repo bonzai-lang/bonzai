@@ -3,36 +3,38 @@ require "std:datatypes/tuple"
 require "std:datatypes/error"
 require "std:datatypes/list"
 require "std:datatypes/optional"
+require "std:datatypes/unit"
+require "std:datatypes/string"
 
-pub type Map<V> {
-  Map(entries: list<Tuple<string, V>>)
+pub type Map<K, V> {
+  Map(entries: list<Tuple<K, V>>)
 }
 
-pub fn Map::empty<V>(): Map<V> =>
-  Map([])
+pub fn Map::empty<K, V>(): Map<K, V> =>
+  Map->Map([])
 
-pub fn Map::insert<V>(self: Map<V>, key: string, value: V): Map<V> =>
+pub fn Map::insert<K, V>(self: Map<K, V>, key: K, value: V): Map<K, V> =>
   match self {
-    case Map(entries) => Map(entries + [Tuple(key, value)])
+    case Map(entries) => Map->Map(entries + [(key, value)])
   }
 
-pub fn Map::lookup<V>(self: Map<V>, key: string): Optional<V> =>
+pub fn Map::lookup<K, V>(self: Map<K, V>, key: K): Optional<V> =>
   match self {
-    case Map(entries) => 
+    case Map(entries) =>
       match entries {
         case [] => None
-        case [Tuple(k, v) .. rest] => if k == key then Some(v) else Map::lookup(Map(rest), key)
+        case [Tuple(k, v) .. rest] => if k == key then Some(v) else Map::lookup(Map->Map(rest), key)
       }
   }
-  
-pub fn Map::map<V, W>(self: Map<V>, f: fn(V): W): Map<W> =>
+
+pub fn Map::map<K, V, W>(self: Map<K, V>, f: fn(V): W): Map<K, W> =>
   match self {
-    case Map(entries) => Map(List::map(entries, fn (entry) => Tuple::mapSecond(entry, fn (v) => f(v))))
+    case Map(entries) => Map->Map(List::map(entries, fn (entry) => Tuple::mapSecond(entry, fn (v) => f(v))))
   }
 
-pub fn Map::foldl<V, A>(self: Map<V>, f: fn(string, V, A): A, acc: A): A =>
+pub fn Map::foldl<K, V, A>(self: Map<K, V>, f: fn(K, V, A): A, acc: A): A =>
   match self {
-    case Map(entries) => List::foldl(fn (entry, acc) => 
+    case Map(entries) => List::foldl(fn (entry, acc) =>
       match entry {
         case Tuple(k, v) => f(k, v, acc)
       },
@@ -41,7 +43,7 @@ pub fn Map::foldl<V, A>(self: Map<V>, f: fn(string, V, A): A, acc: A): A =>
     )
   }
 
-pub fn Map::foldr<V, A>(self: Map<V>, f: fn(string, V, A): A, acc: A): A =>
+pub fn Map::foldr<K, V, A>(self: Map<K, V>, f: fn(K, V, A): A, acc: A): A =>
   match self {
     case Map(entries) => List::foldr(fn (entry, acc) => 
       match entry {
@@ -52,26 +54,71 @@ pub fn Map::foldr<V, A>(self: Map<V>, f: fn(string, V, A): A, acc: A): A =>
     )
   }
 
-pub fn Map::keys<V>(self: Map<V>): list<string> =>
+pub fn Map::keys<K, V>(self: Map<K, V>): list<K> =>
   match self {
     case Map(entries) => List::map(entries, fn (entry) => Tuple::first(entry))
   }
 
-pub fn Map::values<V>(self: Map<V>): list<V> =>
+pub fn Map::values<K, V>(self: Map<K, V>): list<V> =>
   match self {
     case Map(entries) => List::map(entries, fn (entry) => Tuple::second(entry))
   }
 
-pub fn Map::fromList<V>(entries: list<Tuple<string, V>>): Map<V> =>
-  Map(entries)
+pub fn Map::fromList<K, V>(entries: list<Tuple<K, V>>): Map<K, V> =>
+  Map->Map(entries)
 
-pub fn Map::toList<V>(self: Map<V>): list<Tuple<string, V>> =>
+pub fn Map::toString<K, V>(self: Map<K, V>): string =>
+  match self {
+    case Map(entries) => {
+      let entriesString = List::foldl(
+        fn (entry, acc) => 
+          match entry {
+            case Tuple(k, v) => acc + "$k: $v, "
+          },
+        "",
+        entries
+      )
+      "{ $entriesString }"
+    }
+  }
+
+pub fn Map::toList<K, V>(self: Map<K, V>): list<Tuple<K, V>> =>
   match self {
     case Map(entries) => entries
   }
 
-pub fn Map::size<V>(self: Map<V>): int =>
+pub fn Map::size<K, V>(self: Map<K, V>): int =>
   match self {
     case Map(entries) => List::length(entries)
   }
-  
+
+pub type Dynamic {
+  Dyn::Integer(x: int),
+  Dyn::Float(x: float),
+  Dyn::String(x: string),
+  Dyn::Bool(x: bool),
+  Dyn::Map(x: Map<string, Dynamic>),
+  Dyn::List(x: list<Dynamic>),
+  Dyn::Unit
+}
+
+pub fn Dynamic::get(self: Dynamic, key: string): Optional<Dynamic> =>
+  match self {
+    case Dyn::Map(x) => Map::lookup(x, key)
+    case _ => None
+  }
+
+pub fn Dynamic::toString(self: Dynamic): string =>
+  match self {
+    case Dyn::Integer(x) => x.toString()
+    case Dyn::Float(x) => x.toString()
+    case Dyn::String(x) => x
+    case Dyn::Bool(x) => x.toString()
+    case Dyn::Map(x) => Map::toString(x)
+    case Dyn::List(x) => List::foldl(
+      fn (elem, acc) => acc + elem.toString() + ", ",
+      "",
+      x
+    )
+    case Dyn::Unit => "null"
+  }

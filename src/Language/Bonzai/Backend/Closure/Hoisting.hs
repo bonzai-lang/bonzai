@@ -4,6 +4,7 @@ import qualified Language.Bonzai.Backend.Closure.Conversion as CC
 import qualified Language.Bonzai.Syntax.MLIR as MLIR
 import Control.Monad.Result (compilerError)
 import qualified Language.Bonzai.Backend.Closure.Free as CC
+import qualified Data.Map as Map
 
 isClosure :: MLIR.MLIR "expression" -> Bool
 isClosure (MLIR.MkExprList [lam, _]) = CC.isLambda lam
@@ -14,11 +15,6 @@ hoist
   :: MonadIO m 
   => MLIR.MLIR "expression" 
   -> m (MLIR.MLIR "expression", [MLIR.MLIR "expression"])
-hoist (MLIR.MkExprEvent es) = do
-  name <- CC.freshLambda "hoist"
-  (es', hoisted) <- mapAndUnzipM hoist es
-
-  pure (MLIR.MkExprVariable name, MLIR.MkExprLet name (MLIR.MkExprEvent es') : concat hoisted)
 hoist (MLIR.MkExprLambda args e) = do
   name <- CC.freshLambda "hoist"
   (e', es) <- hoist e
@@ -28,6 +24,9 @@ hoist (MLIR.MkExprLet name e) | isClosure e =
   case CC.removeLoc e of
     MLIR.MkExprList [MLIR.MkExprLambda args body, dict] -> do
       newName <- CC.freshLambda "hoist"
+
+      modifyIORef' CC.globals (Map.insert newName (length args))
+
       (dict', hoisted') <- hoist dict
       (body', hoisted) <- hoist body
       let newExpr = MLIR.MkExprList [MLIR.MkExprVariable newName, dict']
@@ -42,19 +41,6 @@ hoist (MLIR.MkExprBlock es) = do
   (es', hoisted) <- mapAndUnzipM hoist es
 
   pure (MLIR.MkExprBlock es', concat hoisted)
-hoist (MLIR.MkExprOn ev args e) = do
-  (e', hoisted) <- hoist e
-
-  pure (MLIR.MkExprOn ev args e', hoisted)
-hoist (MLIR.MkExprSend e ev es) = do
-  (e', hoisted) <- hoist e
-  (es', hoisted') <- mapAndUnzipM hoist es
-
-  pure (MLIR.MkExprSend e' ev es', hoisted <> concat hoisted')
-hoist (MLIR.MkExprSpawn e) = do
-  (e', hoisted) <- hoist e
-
-  pure (MLIR.MkExprSpawn e', hoisted)
 hoist (MLIR.MkExprList es) = do
   (es', hoisted) <- mapAndUnzipM hoist es
 
@@ -117,11 +103,34 @@ hoist (MLIR.MkExprWhile c e) = do
 
   pure (MLIR.MkExprWhile c' e', hoisted <> hoisted')
 hoist MLIR.MkExprSpecial = pure (MLIR.MkExprSpecial, [])
-hoist (MLIR.MkExprTryCatch e n e') = do
-  (e'', hoisted) <- hoist e
-  (e''', hoisted') <- hoist e'
+hoist (MLIR.MkExprBinary op e1 e2) = do
+  (e1', hoisted) <- hoist e1
+  (e2', hoisted') <- hoist e2
 
-  pure (MLIR.MkExprTryCatch e'' n e''', hoisted <> hoisted')
+  pure (MLIR.MkExprBinary op e1' e2', hoisted <> hoisted')
+hoist (MLIR.MkExprRecordAccess e f) = do
+  (e', hoisted) <- hoist e
+
+  pure (MLIR.MkExprRecordAccess e' f, hoisted)
+hoist (MLIR.MkExprSingleIf c e) = do
+  (c', hoisted) <- hoist c
+  (e', hoisted') <- hoist e
+
+  pure (MLIR.MkExprSingleIf c' e', hoisted <> hoisted')
+hoist (MLIR.MkExprReturn e) = do
+  (e', hoisted) <- hoist e
+
+  pure (MLIR.MkExprReturn e', hoisted)
+hoist (MLIR.MkExprRecord m) = do
+  (hoisted, m') <- mapM swap <$> mapM hoist m
+
+  pure (MLIR.MkExprRecord m', hoisted)
+hoist MLIR.MkExprBreak = pure (MLIR.MkExprBreak, [])
+hoist MLIR.MkExprContinue = pure (MLIR.MkExprContinue, [])
+hoist (MLIR.MkExprSpawn e) = do
+  (e', hoisted) <- hoist e
+
+  pure (MLIR.MkExprSpawn e', hoisted)
 
 hoistToplevel :: MonadIO m => MLIR.MLIR "expression" -> m [MLIR.MLIR "expression"]
 hoistToplevel (MLIR.MkExprLoc p e) = do
@@ -132,6 +141,8 @@ hoistToplevel (MLIR.MkExprLet n e) | CC.isLambda e =
   case CC.getLambda e of
     MLIR.MkExprLambda args b -> do
       (b', hoisted) <- hoist b
+
+      modifyIORef' CC.globals (Map.insert n (length args))
 
       pure $ hoisted <> [MLIR.MkExprLet n (MLIR.MkExprLambda args b')]
     _ -> compilerError "impossible"

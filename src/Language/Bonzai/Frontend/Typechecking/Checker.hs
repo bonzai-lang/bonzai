@@ -1,93 +1,122 @@
 {-# LANGUAGE LambdaCase #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use lambda-case" #-}
+
 module Language.Bonzai.Frontend.Typechecking.Checker where
 
-import qualified Language.Bonzai.Syntax.HLIR as HLIR
-import qualified Language.Bonzai.Frontend.Typechecking.Monad as M
 import Control.Monad.Result
-import qualified Data.Map as Map
-import qualified Language.Bonzai.Frontend.Typechecking.Unification as U
-import qualified Data.List as List
-import qualified Data.Foldable as Foldable
-import qualified Data.Set as Set
+import Data.Foldable qualified as Foldable
+import Data.List qualified as List
+import Data.Map qualified as Map
+import Data.Set qualified as Set
+import Language.Bonzai.Frontend.Typechecking.Monad qualified as M
+import Language.Bonzai.Frontend.Typechecking.Unification qualified as U
+import Language.Bonzai.Syntax.HLIR qualified as HLIR
+
+mapWithAcc :: (a -> b -> (a, c)) -> a -> [b] -> (a, [c])
+mapWithAcc _ acc [] = (acc, [])
+mapWithAcc f acc (x : xs) =
+  let (acc', x') = f acc x
+      (acc'', xs') = mapWithAcc f acc' xs
+   in (acc'', x' : xs')
+
+mapMWithAcc :: (Monad m) => (a -> b -> m (a, c)) -> a -> [b] -> m (a, [c])
+mapMWithAcc _ acc [] = pure (acc, [])
+mapMWithAcc f acc (x : xs) = do
+  (acc', x') <- f acc x
+  (acc'', xs') <- mapMWithAcc f acc' xs
+  pure (acc'', x' : xs')
 
 -- | Typecheck an expression : misworded, should be infer the type of an expression
 -- | as bi-directional typechecking is not supported.
-typecheck :: M.MonadChecker m => HLIR.HLIR "expression" -> m (HLIR.TLIR "expression", HLIR.Type)
-typecheck (HLIR.MkExprVariable ann) = do
+synthesize :: (M.MonadChecker m) => HLIR.HLIR "expression" -> m (HLIR.TLIR "expression", HLIR.Type)
+synthesize (HLIR.MkExprVariable ann) = do
   st <- readIORef M.checkerState
   case Map.lookup ann.name st.variables of
     Just s -> do
       ty <- M.instantiate s
-
-      case ty of 
-        -- If the type is a live type, we need to wrap it in a lambda 
-        -- to make sure that the type is not evaluated before it is used.
-        -- The lambda will be introduced during type erasure pass.
-        HLIR.MkTyLive _ -> 
-          pure (
-            HLIR.MkExprUnwrapLive (HLIR.MkExprVariable ann { HLIR.value = Identity ty }) (Identity ty),
-            ty
-          )
-          
-        _ -> 
-          pure (
-            HLIR.MkExprVariable ann { HLIR.value = Identity ty }, 
-            ty
-          )
+      pure
+        ( HLIR.MkExprVariable ann {HLIR.value = Identity ty},
+          ty
+        )
     Nothing -> throw (M.VariableNotFound ann.name)
-typecheck (HLIR.MkExprLoc e p) = do
+synthesize (HLIR.MkExprLoc e p) = do
   HLIR.pushPosition p
-  (e', ty) <- typecheck e
+  (e', ty) <- synthesize e
   void HLIR.popPosition
   pure (HLIR.MkExprLoc e' p, ty)
-typecheck (HLIR.MkExprNative ann ty) = do
+synthesize (HLIR.MkExprNative ann ty) = do
   let ty' = List.foldl (flip replaceIdwithQuVar) ty ann.value
   let scheme = HLIR.Forall ann.value ty'
 
   pos <- HLIR.peekPosition'
 
-  modifyIORef' M.checkerState $ \st -> st { M.variables = Map.insert ann.name scheme st.variables, M.varPos = (ann.name, (scheme, pos)) : M.varPos st }
+  modifyIORef' M.checkerState $ \st -> st {M.variables = Map.insert ann.name scheme st.variables, M.varPos = (ann.name, (scheme, pos)) : M.varPos st}
 
   pure (HLIR.MkExprNative ann ty', ty')
+  where
+    replaceIdwithQuVar :: Text -> HLIR.Type -> HLIR.Type
+    replaceIdwithQuVar i (HLIR.MkTyId i')
+      | i == i' =
+          HLIR.MkTyQuantified i
+    replaceIdwithQuVar i (HLIR.MkTyApp t1 t2) =
+      HLIR.MkTyApp (replaceIdwithQuVar i t1) (replaceIdwithQuVar i <$> t2)
+    replaceIdwithQuVar _ t = t
+synthesize (HLIR.MkExprApplication f args) = do
+  (f', ty) <- synthesize f
+  case ty of
+    argsTys HLIR.:->: retTy -> do
+      when (length argsTys /= length args) $
+        throw (M.InvalidArgumentQuantity (length argsTys) (length args))
 
-  where replaceIdwithQuVar :: Text -> HLIR.Type -> HLIR.Type
-        replaceIdwithQuVar i (HLIR.MkTyId i') | i == i'
-          = HLIR.MkTyQuantified i
-        replaceIdwithQuVar i (HLIR.MkTyApp t1 t2)
-          = HLIR.MkTyApp (replaceIdwithQuVar i t1) (replaceIdwithQuVar i <$> t2)
-        replaceIdwithQuVar _ t = t
-typecheck (HLIR.MkExprApplication f args _) = do
-  (f', ty) <- typecheck f
-  (args', tys) <- unzip <$> traverse typecheck args
+      args' <- zipWithM check args argsTys
+      pure (HLIR.MkExprApplication f' args', retTy)
+    _ -> do
+      (args', tys) <- unzip <$> traverse synthesize args
 
-  ret <- M.fresh
-  ty `U.unifiesWith` (tys HLIR.:->: ret)
+      ret <- M.fresh
+      ty `U.unifiesWith` (tys HLIR.:->: ret)
 
-  pure (HLIR.MkExprApplication f' args' (Identity $ tys HLIR.:->: ret), ret)
-typecheck (HLIR.MkExprLambda args ret body) = do
-  args' <- traverse (\(HLIR.MkAnnotation ann annTy) -> case annTy of
-      Just ty -> pure (ann, ty)
-      Nothing -> do
-        ty <- M.fresh
-        pure (ann, ty)
-    ) args
+      pure (HLIR.MkExprApplication f' args', ret)
+synthesize (HLIR.MkExprLambda args ret body) = do
+  args' <-
+    traverse
+      ( \(HLIR.MkAnnotation ann annTy) -> case annTy of
+          Just ty -> pure (ann, ty)
+          Nothing -> do
+            ty <- M.fresh
+            pure (ann, ty)
+      )
+      args
 
   ret' <- maybe M.fresh pure ret
 
   let schemes = map (second $ HLIR.Forall []) args'
 
-  body' <- M.with
-    M.checkerState
-    (\st -> st { M.variables = Map.union (Map.fromList schemes) st.variables })
-    $ do
-      (body', ret'') <- typecheck body
-      ret' `U.unifiesWith` ret''
-      pure body'
+  old <- readIORef M.checkerState <&> M.returnType
+  modifyIORef' M.checkerState $ \st -> st {M.returnType = Just ret'}
+
+  body' <- case ret of
+    Just retTy -> do
+      M.with
+        M.checkerState
+        (\st -> st {M.variables = Map.union (Map.fromList schemes) st.variables})
+        $ check body retTy
+    Nothing -> do
+      M.with
+        M.checkerState
+        (\st -> st {M.variables = Map.union (Map.fromList schemes) st.variables})
+        $ do
+          (body', ret'') <- synthesize body
+          ret' `U.unifiesWith` ret''
+          pure body'
+
+  modifyIORef' M.checkerState $ \st -> st {M.returnType = old}
 
   let wfArgs = map (uncurry HLIR.MkAnnotation . second Identity) args'
 
   pure (HLIR.MkExprLambda wfArgs (Identity ret') body', map snd args' HLIR.:->: ret')
-typecheck (HLIR.MkExprLiteral l) = do
+synthesize (HLIR.MkExprLiteral l) = do
   let ty = case l of
         HLIR.MkLitChar _ -> HLIR.MkTyChar
         HLIR.MkLitInt _ -> HLIR.MkTyInt
@@ -95,163 +124,135 @@ typecheck (HLIR.MkExprLiteral l) = do
         HLIR.MkLitString _ -> HLIR.MkTyString
         HLIR.MkLitBool _ -> HLIR.MkTyBool
   pure (HLIR.MkExprLiteral l, ty)
-typecheck (HLIR.MkExprTernary c t e _) = do
-  (c', ty) <- typecheck c
-  (t', thenTy) <- typecheck t
-  (e', elseTy) <- typecheck e
+synthesize (HLIR.MkExprTernary c t e) = do
+  c' <- check c HLIR.MkTyBool
+  (t', thenTy) <- synthesize t
+  e' <- check e thenTy
 
-  thenTy `U.unifiesWith` elseTy
-  ty `U.unifiesWith` HLIR.MkTyBool
+  pure (HLIR.MkExprTernary c' t' e', thenTy)
+synthesize (HLIR.MkExprLet gens (Left ann) e b) | Just constrs <- getData e = do
+  let name = ann.name
+      generics = Set.toList gens
+      header = if null generics then HLIR.MkTyId name else HLIR.MkTyApp (HLIR.MkTyId name) (HLIR.MkTyQuantified <$> generics)
 
-  pure (HLIR.MkExprTernary c' t' e' (Identity thenTy), thenTy)
-typecheck (HLIR.MkExprLet generics ann expr) = do
+  let schemes =
+        map
+          ( \case
+              HLIR.MkDataConstructor constrName args ->
+                (constrName, HLIR.Forall generics (args HLIR.:->: header))
+              HLIR.MkDataVariable varName ->
+                (varName, HLIR.Forall generics header)
+          )
+          constrs
+
+  modifyIORef M.checkerState $ \st ->
+    st
+      { M.variables = st.variables,
+        M.dataConstructors = Map.fromList schemes <> st.dataConstructors
+      }
+
+  let record = foldl' (\acc dat -> case dat of
+        HLIR.MkDataConstructor n args -> HLIR.MkTyRowExtend n (args HLIR.:->: header) False acc
+        HLIR.MkDataVariable n -> HLIR.MkTyRowExtend n header False acc
+        ) HLIR.MkTyRowEmpty constrs
+
+  modifyIORef M.checkerState $ \st ->
+    st
+      { M.variables = Map.insert name (HLIR.Forall generics (HLIR.MkTyRecord record)) st.variables }
+
+  let e' = HLIR.MkExprData constrs
+
+  (b', bTy) <- synthesize b
+
+  pure (HLIR.MkExprLet gens (Left $ ann {HLIR.value = Identity record}) e' b', bTy)
+synthesize (HLIR.MkExprLet generics (Right pattern) expr body) = do
   M.enterLevel
-  ty <- M.fresh
-  let scheme = HLIR.Forall (toList generics) ty
 
-  (expr', exprTy) <- M.with
-    M.checkerState
-    (\st -> st { M.variables = Map.insert ann.name scheme st.variables })
-    $ typecheck expr
+  (pat, patTy, env) <- typecheckPattern False pattern
 
-  ty `U.unifiesWith` exprTy
+  (expr', exprTy) <- synthesize expr
+
+  exprTy `U.unifiesWith` patTy
   M.exitLevel
 
-  newScheme <- if null generics
-    then M.generalize ty
-    else pure $ HLIR.Forall (toList generics) ty
+  newSchemes <- forM (Map.toList env) $ \(name, HLIR.Forall _ ty') -> do
+    newScheme <-
+      if null generics
+        then M.generalize ty'
+        else pure $ HLIR.Forall (toList generics) ty'
+
+    pos <- HLIR.peekPosition'
+
+    modifyIORef' M.checkerState $ \st ->
+      st {M.variables = Map.insert name newScheme st.variables, M.varPos = (name, (newScheme, pos)) : M.varPos st}
+
+    pure (name, newScheme)
+
+  modifyIORef' M.checkerState $ \st -> st {M.variables = Map.fromList newSchemes <> st.variables }
+
+  (body', bodyTy) <- synthesize body
+
+  pure (HLIR.MkExprLet generics (Right pat) expr' body', bodyTy)
+synthesize (HLIR.MkExprLet generics (Left ann) expr body) = do
+  M.enterLevel
+  ty <- maybe M.fresh pure ann.value
+  let scheme = HLIR.Forall (toList generics) ty
+
+  (expr', exprTy) <-
+    M.with
+      M.checkerState
+      (\st -> st {M.variables = Map.insert ann.name scheme st.variables})
+      $ synthesize expr
+
+  exprTy `U.unifiesWith` ty
+  M.exitLevel
+
+  newScheme <-
+    if null generics
+      then M.generalize exprTy
+      else pure $ HLIR.Forall (toList generics) exprTy
 
   pos <- HLIR.peekPosition'
 
-  modifyIORef' M.checkerState $ \st -> st { M.variables = Map.insert ann.name newScheme st.variables, M.varPos = (ann.name, (newScheme, pos)) : M.varPos st }
+  modifyIORef' M.checkerState $ \st -> st {M.variables = Map.insert ann.name newScheme st.variables, M.varPos = (ann.name, (newScheme, pos)) : M.varPos st}
 
-  let finalExpr = case ty of
-          HLIR.MkTyLive ret -> HLIR.MkExprLambda [] (Identity ret) expr'
-          _ | containsLive expr' -> HLIR.MkExprLambda [] (Identity exprTy) expr'
-          _ -> expr'
+  (body', ty') <- synthesize body
 
-  pure (HLIR.MkExprLet generics ann { HLIR.value = Identity ty } finalExpr, HLIR.MkTyUnit)
-typecheck (HLIR.MkExprMut expr _) = do
+  pure (HLIR.MkExprLet generics (Left $ ann {HLIR.value = Identity ty}) expr' body', ty')
+synthesize (HLIR.MkExprMut expr) = do
   expectedTy <- M.fresh
-  (expr', ty) <- typecheck expr
+  (expr', ty) <- synthesize expr
 
   expectedTy `U.unifiesWith` HLIR.MkTyMutable ty
 
-  pure (HLIR.MkExprMut expr' (Identity ty), HLIR.MkTyMutable ty)
-typecheck (HLIR.MkExprBlock es _) = do
-  (es', tys) <- unzip <$> traverse typecheck es
+  pure (HLIR.MkExprMut expr', HLIR.MkTyMutable ty)
+synthesize (HLIR.MkExprBlock es) = do
+  (es', tys) <- unzip <$> traverse synthesize es
 
   retTy <- maybe M.fresh pure (viaNonEmpty last tys)
 
-  pure (HLIR.MkExprBlock es' (Identity retTy), retTy)
-typecheck (HLIR.MkExprUpdate u e) = do
+  pure (HLIR.MkExprBlock es', retTy)
+synthesize (HLIR.MkExprUpdate u e) = do
   (u', ty) <- typecheckUpdate u
-  (e', exprTy) <- typecheck e
+  e' <- case ty of
+    HLIR.MkTyMutable exprTy -> check e exprTy
+    _ ->
+      synthesize e >>= \case
+        (e', ty') -> do
+          ty `U.unifiesWith` HLIR.MkTyMutable ty'
+          pure e'
 
-  case ty of
-    HLIR.MkTyLive t -> do
-      exprTy `U.unifiesWith` t
-    
-    _ -> ty `U.unifiesWith` HLIR.MkTyMutable exprTy
+  pure (HLIR.MkExprUpdate u' e', HLIR.MkTyUnit)
+synthesize (HLIR.MkExprList es) = do
+  (es', t) <- case uncons es of
+    Just (hd, tl) -> do
+      (hd', ty) <- synthesize hd
+      tl' <- zipWithM check tl (repeat ty)
 
-  let modifier = case ty of
-        HLIR.MkTyLive _ -> HLIR.MkExprLambda [] (Identity exprTy) e'
-        _ | containsLive e' -> HLIR.MkExprLambda [] (Identity exprTy) e'
-        _ -> e'
-
-  pure (HLIR.MkExprUpdate u' modifier, HLIR.MkTyUnit)
-typecheck (HLIR.MkExprActor i es) = do
-
-  (header, tys) <- decomposeHeader i
-
-  interface <- U.findInterface header tys
-
-  methodsTys <- case interface of
-    Just methods -> pure methods
-    Nothing -> throw (M.ActorNotFound i)
-
-  (es', tys') <- unzip <$> traverse (`typecheckEvent` methodsTys) es
-
-  let names = map getName es
-
-  forM_ (zip names tys') $ \(name, ty) -> do
-    case Map.lookup name methodsTys of
-      Just ty' -> ty `U.unifiesWith` ty'
-      Nothing -> throw (M.EventNotFound name)
-
-  pure (HLIR.MkExprActor i es', HLIR.MkTyActor i)
-
-  where
-    typecheckEvent :: M.MonadChecker m => HLIR.HLIR "expression" -> Map Text HLIR.Type -> m (HLIR.TLIR "expression", HLIR.Type)
-    typecheckEvent (HLIR.MkExprOn ev args body) m = do
-      argsTys <- case Map.lookup ev m of
-        Just s -> case s of
-          argsTys HLIR.:->:_ -> pure argsTys
-          _ -> throw (M.EventNotFound ev)
-        Nothing -> throw (M.EventNotFound ev)
-
-      args' <- traverse (\(HLIR.MkAnnotation ann ty, expectedTy) -> case ty of
-          Just annotation -> pure (ann, annotation)
-          Nothing -> pure (ann, expectedTy)
-        ) (zip args argsTys)
-
-      let schemes = map (second $ HLIR.Forall []) args'
-
-      body' <- M.with
-        M.checkerState
-        (\st -> st { M.variables = Map.union (Map.fromList schemes) st.variables })
-        $ do
-          (body', ret') <- typecheck body
-          ret' `U.unifiesWith` HLIR.MkTyId "unit"
-          pure body'
-
-      let wfArgs = map (uncurry HLIR.MkAnnotation . second Identity) args'
-
-      pure (HLIR.MkExprOn ev wfArgs body', map snd args' HLIR.:->: HLIR.MkTyId "unit")
-    typecheckEvent (HLIR.MkExprLoc e p) m = do
-      HLIR.pushPosition p
-      (e', ty) <- typecheckEvent e m
-      void HLIR.popPosition
-      pure (HLIR.MkExprLoc e' p, ty)
-    typecheckEvent e _ = compilerError $ "typecheck: event block should only contain let bindings or events, received " <> toText e
-typecheck (HLIR.MkExprOn {}) = compilerError "typecheck: event block should only contain let bindings or events"
-typecheck (HLIR.MkExprSend e ev a _) = do
-  (e', ty) <- typecheck e
-  (a', elTys) <- mapAndUnzipM typecheck a
-  
-  (header, tys) <- decomposeHeader ty
-
-  interface <- U.findInterface header tys
-  case interface of
-    Just methodsTys -> do
-      case Map.lookup ev methodsTys of
-        Just (argsTy HLIR.:->: _) -> do
-          if length argsTy /= length elTys
-            then throw (M.InvalidArgumentQuantity (length argsTy) (length elTys))
-            else do
-              zipWithM_ U.unifiesWith elTys argsTy
-        _ -> throw (M.EventNotFound ev)
-    Nothing -> throw (M.ActorNotFound ty)
-
-  pure (HLIR.MkExprSend e' ev a' (Identity $ elTys HLIR.:->: HLIR.MkTyUnit), HLIR.MkTyId "unit")
-typecheck (HLIR.MkExprSpawn e) = do
-  (e', ty) <- typecheck e
-
-  (header, tys) <- decomposeHeader ty
-
-  interface <- U.findInterface header tys
-
-  when (null interface) $ throw (M.NotAnActor ty)
-
-  pure (HLIR.MkExprSpawn e', ty)
-typecheck (HLIR.MkExprList es) = do
-  (es', tys) <- unzip <$> traverse typecheck es
-
-  ty <- maybe M.fresh pure (viaNonEmpty head tys)
-  zipWithM_ U.unifiesWith tys (repeat ty)
-
-  pure (HLIR.MkExprList es', HLIR.MkTyList ty)
-typecheck (HLIR.MkExprInterface ann defs) = do
+      pure (hd' : tl', HLIR.MkTyList ty)
+    Nothing -> ([],) . HLIR.MkTyList <$> M.fresh
+  pure (HLIR.MkExprList es', t)
+synthesize (HLIR.MkExprInterface ann defs) = do
   let name = ann.name
       generics = ann.value
 
@@ -259,40 +260,46 @@ typecheck (HLIR.MkExprInterface ann defs) = do
 
   let schemes = map (\(HLIR.MkAnnotation funName funTy) -> (funName, funTy)) defs
 
-  modifyIORef M.checkerState $ \st -> st { M.interfaces = Map.insert actor (Map.fromList schemes) st.interfaces }
+  modifyIORef M.checkerState $ \st -> st {M.interfaces = Map.insert actor (Map.fromList schemes) st.interfaces}
 
   pure (HLIR.MkExprInterface ann defs, HLIR.MkTyId name)
-typecheck (HLIR.MkExprWhile c e) = do
-  (c', ty) <- typecheck c
-  (e', _) <- typecheck e
-
-  ty `U.unifiesWith` HLIR.MkTyBool
+synthesize (HLIR.MkExprWhile c e) = do
+  c' <- check c HLIR.MkTyBool
+  (e', _) <- synthesize e
 
   pure (HLIR.MkExprWhile c' e', HLIR.MkTyUnit)
-typecheck (HLIR.MkExprIndex e i) = do
-  (e', ty) <- typecheck e
-  (i', idxTy) <- typecheck i
-
+synthesize (HLIR.MkExprIndex e i) = do
   tvar <- M.fresh
 
-  ty `U.unifiesWith` HLIR.MkTyList tvar
-  idxTy `U.unifiesWith` HLIR.MkTyInt
+  e' <- check e (HLIR.MkTyList tvar)
+  i' <- check i HLIR.MkTyInt
 
   pure (HLIR.MkExprIndex e' i', tvar)
-typecheck (HLIR.MkExprMatch scrut _ cases _) = do
-  (scrut', scrutTy) <- typecheck scrut
+synthesize (HLIR.MkExprMatch scrut cases) = do
+  (scrut', scrutTy) <- synthesize scrut
 
-  (cases', tys) <- unzip <$> traverse (\(pat, e, pos) -> do
-      HLIR.pushPosition pos
-      (pat', patTy, env) <- typecheckPattern pat
-      scrutTy `U.unifiesWith` patTy
+  (_, cs) <-
+    mapMWithAcc
+      ( \acc (pat, e, p) -> do
+          Foldable.for_ p HLIR.pushPosition
+          (pat', patTy, env) <- typecheckPattern False pat
+          scrutTy `U.unifiesWith` patTy
+          Foldable.for_ p (const HLIR.popPosition)
 
-      (e', eTy) <- M.with M.checkerState (\st -> st { M.variables = env <> st.variables }) $ typecheck e
+          case acc of
+            Just ty -> do
+              e' <- M.with M.checkerState (\st -> st {M.variables = env <> st.variables}) $ check e ty
 
-      void HLIR.popPosition
+              pure (acc, ((pat', e', p), ty))
+            Nothing -> do
+              (e', eTy) <- M.with M.checkerState (\st -> st {M.variables = env <> st.variables}) $ synthesize e
 
-      pure ((pat', e', pos), eTy)
-    ) cases
+              pure (Just eTy, ((pat', e', p), eTy))
+      )
+      Nothing
+      cases
+
+  let (cases', tys) = unzip cs
 
   (exprTy, exprTys) <- case tys of
     [] -> throw M.EmptyMatch
@@ -301,71 +308,262 @@ typecheck (HLIR.MkExprMatch scrut _ cases _) = do
   -- Unify the return type with the type of the case expressions
   forM_ exprTys $ U.unifiesWith exprTy
 
-  pure (HLIR.MkExprMatch scrut' (Identity scrutTy) cases' (Identity exprTy), exprTy)
-
-typecheck (HLIR.MkExprData ann constrs) = do
-  let name = ann.name
-      generics = ann.value
-      header = if null generics then HLIR.MkTyId name else HLIR.MkTyApp (HLIR.MkTyId name) (HLIR.MkTyQuantified <$> generics)
+  pure (HLIR.MkExprMatch scrut' cases', exprTy)
+synthesize (HLIR.MkExprData constrs) = do
+  let record = foldl' (\acc dat -> case dat of
+        HLIR.MkDataConstructor n args -> HLIR.MkTyRowExtend n (args HLIR.:->: HLIR.MkTyAbstractType) False acc
+        HLIR.MkDataVariable n -> HLIR.MkTyRowExtend n HLIR.MkTyAbstractType False acc
+        ) HLIR.MkTyRowEmpty constrs
 
   let schemes = map (\case
           HLIR.MkDataConstructor constrName args ->
-            (constrName, HLIR.Forall generics (args HLIR.:->: header))
-
+            (constrName, HLIR.Forall [] (args HLIR.:->: HLIR.MkTyRecord record))
           HLIR.MkDataVariable varName ->
-            (varName, HLIR.Forall generics header)
+            (varName, HLIR.Forall [] (HLIR.MkTyRecord record))
         ) constrs
 
-  modifyIORef M.checkerState $ \st -> st { 
-    M.variables = Map.fromList schemes <> st.variables 
-  , M.dataConstructors = Set.fromList (map fst schemes) <> st.dataConstructors
-  }
+  modifyIORef' M.checkerState $ \st ->
+    st {
+      M.dataConstructors = Map.fromList schemes <> st.dataConstructors
+    }
 
-  pure (HLIR.MkExprData ann constrs, HLIR.MkTyId name)
-typecheck (HLIR.MkExprLive ann e) = do
+  pure (HLIR.MkExprData constrs, HLIR.MkTyRecord record)
+synthesize (HLIR.MkExprRecordExtension e k opt v) = do
+  (e', ty) <- synthesize e
+  (v', vTy) <- synthesize v
+
+  a <- M.fresh
+  r <- M.fresh
+
+  let funTy = [a, HLIR.MkTyRecord r] HLIR.:->: HLIR.MkTyRecord (HLIR.MkTyRowExtend k a opt r)
+
+  ret <- M.fresh
+
+  U.unifiesWith ([vTy, ty] HLIR.:->: ret) funTy
+
+  pure (HLIR.MkExprRecordExtension e' k opt v', ret)
+synthesize (HLIR.MkExprRecordAccess e k) = do
+  (e', ty) <- synthesize e
+
+  a <- M.fresh
+  r <- M.fresh
+
+  let funTy = [HLIR.MkTyRecord $ HLIR.MkTyRowExtend k a False r] HLIR.:->: a
+
+  ret <- M.fresh
+
+  U.unifiesWith ([ty] HLIR.:->: ret) funTy
+
+  pure (HLIR.MkExprRecordAccess e' k, ret)
+synthesize HLIR.MkExprRecordEmpty =
+  pure (HLIR.MkExprRecordEmpty, HLIR.MkTyRecord HLIR.MkTyRowEmpty)
+synthesize (HLIR.MkExprPublic e) = do
+  (e', ty) <- synthesize e
+  pure (HLIR.MkExprPublic e', ty)
+synthesize (HLIR.MkExprRequire _ _) = compilerError "typecheck: require should not appear in typechecking"
+synthesize (HLIR.MkExprSingleIf c t) = do
+  c' <- check c HLIR.MkTyBool
+  (t', ty) <- synthesize t
+
+  pure (HLIR.MkExprSingleIf c' t', ty)
+synthesize HLIR.MkExprBreak = do
+  pure (HLIR.MkExprBreak, HLIR.MkTyUnit)
+synthesize HLIR.MkExprContinue = do
+  pure (HLIR.MkExprContinue, HLIR.MkTyUnit)
+synthesize (HLIR.MkExprReturn e) = do
+  (e', ty) <- synthesize e
+
+  returnType <- readIORef M.checkerState <&> M.returnType
+  case returnType of
+    Just retTy -> do
+      retTy `U.unifiesWith` ty
+    Nothing -> do
+      modifyIORef' M.checkerState $ \st -> st {M.returnType = Just ty}
+
+  retTy <- M.fresh
+
+  pure (HLIR.MkExprReturn e', retTy)
+synthesize (HLIR.MkExprSpawn e) = do
+  (e', ty) <- synthesize e
+
+  retTy <- M.fresh
+  U.unifiesWith ty ([] HLIR.:->: retTy)
+
+  pure (HLIR.MkExprSpawn e', HLIR.MkTyApp (HLIR.MkTyId "Thread") [retTy])
+
+check :: (M.MonadChecker m) => HLIR.HLIR "expression" -> HLIR.Type -> m (HLIR.TLIR "expression")
+check (HLIR.MkExprLambda args ret body) (argsTys HLIR.:->: retTy) = do
+  args' <-
+    zipWithM
+      ( \(HLIR.MkAnnotation ann annTy) ty -> case annTy of
+          Just ty' -> pure (ann, ty')
+          Nothing -> pure (ann, ty)
+      )
+      args
+      argsTys
+
+  let schemes = map (second $ HLIR.Forall []) args'
+
+  let retTy' = fromMaybe retTy ret
+
+  old <- readIORef M.checkerState <&> M.returnType
+  modifyIORef' M.checkerState $ \st -> st {M.returnType = Just retTy'}
+
+  body' <-
+    M.with
+      M.checkerState
+      (\st -> st {M.variables = Map.union (Map.fromList schemes) st.variables})
+      $ check body retTy'
+
+  modifyIORef' M.checkerState $ \st -> st {M.returnType = old}
+
+  let wfArgs = map (uncurry HLIR.MkAnnotation . second Identity) args'
+
+  pure (HLIR.MkExprLambda wfArgs (Identity retTy) body')
+check (HLIR.MkExprLet generics (Left ann) expr body) ty = do
   M.enterLevel
-  ty <- M.fresh
-  let scheme = HLIR.Forall [] (HLIR.MkTyLive ty)
+  preExprTy <- M.fresh
+  let scheme = HLIR.Forall (toList generics) preExprTy
 
-  (expr', exprTy) <- M.with
-    M.checkerState
-    (\st -> st { M.variables = Map.insert ann.name scheme st.variables })
-    $ typecheck e
+  (expr', exprTy) <-
+    M.with
+      M.checkerState
+      (\st -> st {M.variables = Map.insert ann.name scheme st.variables})
+      $ synthesize expr
 
-  ty `U.unifiesWith` exprTy
+  preExprTy `U.unifiesWith` exprTy
+
   M.exitLevel
 
-  newScheme <- M.generalize (HLIR.MkTyLive ty)
+  newScheme <-
+    if null generics
+      then M.generalize ty
+      else pure $ HLIR.Forall (toList generics) ty
 
-  modifyIORef' M.checkerState $ \st -> st { M.variables = Map.insert ann.name newScheme st.variables }
+  pos <- HLIR.peekPosition'
 
-  pure (HLIR.MkExprLet mempty ann { HLIR.value = Identity (HLIR.MkTyLive ty) } (HLIR.MkExprWrapLive expr' (Identity ty)), HLIR.MkTyUnit)
-typecheck (HLIR.MkExprTryCatch e ann body) = do
-  (e', ty) <- typecheck e
+  modifyIORef' M.checkerState $ \st -> st {M.variables = Map.insert ann.name newScheme st.variables, M.varPos = (ann.name, (newScheme, pos)) : M.varPos st}
 
-  (body', ty') <- M.with M.checkerState (\st -> st { M.variables = Map.insert ann.name (HLIR.Forall [] HLIR.MkTyString) st.variables }) $ typecheck body
+  body' <- check body ty
 
-  ty `U.unifiesWith` ty'
+  pure (HLIR.MkExprLet generics (Left $ ann {HLIR.value = Identity ty}) expr' body')
+check (HLIR.MkExprMut expr) (HLIR.MkTyMutable ty) = do
+  expr' <- check expr ty
+  pure (HLIR.MkExprMut expr')
+check (HLIR.MkExprBlock es) ty = do
+  case unsnoc es of
+    Just (initEs, lastE) -> do
+      (initEs', _) <- unzip <$> traverse synthesize initEs
+      lastE' <- check lastE ty
+      pure (HLIR.MkExprBlock (initEs' <> [lastE']))
+    Nothing -> pure (HLIR.MkExprBlock [])
+check (HLIR.MkExprList es) (HLIR.MkTyList ty) = do
+  es' <- traverse (`check` ty) es
 
-  pure (HLIR.MkExprTryCatch e' ann { HLIR.value = Identity ty' } body', ty)
-typecheck (HLIR.MkExprPublic e) = typecheck e
-typecheck (HLIR.MkExprRequire _ _) = compilerError "typecheck: require should not appear in typechecking"
-typecheck (HLIR.MkExprUnwrapLive _ _) = compilerError "typecheck: unwrap should not appear in typechecking"
-typecheck (HLIR.MkExprWrapLive _ _) = compilerError "typecheck: wrap should not appear in typechecking"
+  pure (HLIR.MkExprList es')
+check (HLIR.MkExprMatch scrut cases) ty = do
+  (scrut', scrutTy) <- synthesize scrut
 
-typecheckPattern :: M.MonadChecker m => HLIR.HLIR "pattern" -> m (HLIR.TLIR "pattern", HLIR.Type, Map Text HLIR.Scheme)
-typecheckPattern (HLIR.MkPatVariable name varTy) = do
+  (cases', _) <-
+    unzip
+      <$> traverse
+        ( \(pat, e, p) -> do
+            Foldable.for_ p HLIR.pushPosition
+            (pat', patTy, env) <- typecheckPattern False pat
+            scrutTy `U.unifiesWith` patTy
+            Foldable.for_ p (const HLIR.popPosition)
+
+            e' <- M.with M.checkerState (\st -> st {M.variables = env <> st.variables}) $ check e ty
+
+            pure ((pat', e', p), ty)
+        )
+        cases
+
+  pure (HLIR.MkExprMatch scrut' cases')
+check (HLIR.MkExprTernary c t e) ty = do
+  c' <- check c HLIR.MkTyBool
+  t' <- check t ty
+  e' <- check e ty
+
+  pure (HLIR.MkExprTernary c' t' e')
+check (HLIR.MkExprWhile c e) ty = do
+  c' <- check c HLIR.MkTyBool
+  e' <- check e ty
+
+  pure (HLIR.MkExprWhile c' e')
+check (HLIR.MkExprIndex e i) ty = do
+  e' <- check e (HLIR.MkTyList ty)
+  i' <- check i HLIR.MkTyInt
+
+  pure (HLIR.MkExprIndex e' i')
+check (HLIR.MkExprLoc e p) ty = do
+  HLIR.pushPosition p
+  e' <- check e ty
+  void HLIR.popPosition
+  pure (HLIR.MkExprLoc e' p)
+check (HLIR.MkExprVariable ann) ty = do
+  st <- readIORef M.checkerState
+  case Map.lookup ann.name st.variables of
+    Just s -> do
+      ty' <- M.instantiate s
+      ty' `U.unifiesWith` ty
+      pure (HLIR.MkExprVariable ann {HLIR.value = Identity ty})
+    Nothing -> throw (M.VariableNotFound ann.name)
+check (HLIR.MkExprLiteral l) ty = do
+  let ty' = case l of
+        HLIR.MkLitChar _ -> HLIR.MkTyChar
+        HLIR.MkLitInt _ -> HLIR.MkTyInt
+        HLIR.MkLitFloat _ -> HLIR.MkTyFloat
+        HLIR.MkLitString _ -> HLIR.MkTyString
+        HLIR.MkLitBool _ -> HLIR.MkTyBool
+  ty' `U.unifiesWith` ty
+  pure (HLIR.MkExprLiteral l)
+check (HLIR.MkExprRecordAccess e k) ty = do
+  r <- M.fresh
+
+  e' <- check e (HLIR.MkTyRecord $ HLIR.MkTyRowExtend k ty False r)
+
+  pure $ HLIR.MkExprRecordAccess e' k
+check (HLIR.MkExprSingleIf c t) ty = do
+  c' <- check c HLIR.MkTyBool
+  t' <- check t ty
+
+  pure (HLIR.MkExprSingleIf c' t')
+check (HLIR.MkExprRequire _ _) _ = compilerError "typecheck: require should not appear in typechecking"
+check (HLIR.MkExprPublic e) ty = HLIR.MkExprPublic <$> check e ty
+check e ty = do
+  (e', ty') <- synthesize e
+  ty' `U.unifiesWith` ty
+  pure e'
+
+getData :: HLIR.HLIR "expression" -> Maybe [HLIR.DataConstructor HLIR.Type]
+getData (HLIR.MkExprData constrs) = Just constrs
+getData (HLIR.MkExprLoc e _) = getData e
+getData _ = Nothing
+
+unsnoc :: [a] -> Maybe ([a], a)
+unsnoc [] = Nothing
+unsnoc xs = (,) <$> viaNonEmpty init xs <*> viaNonEmpty last xs
+
+typecheckPattern :: (M.MonadChecker m) => Bool -> HLIR.HLIR "pattern" -> m (HLIR.TLIR "pattern", HLIR.Type, Map Text HLIR.Scheme)
+typecheckPattern isInRecord (HLIR.MkPatVariable name varTy) = do
   st <- readIORef M.checkerState
 
-  case Map.lookup name st.variables of
-    Just s | name `Set.member` st.dataConstructors -> do
+  case Map.lookup name st.dataConstructors of
+    Just s -> do
       ty' <- M.instantiate s
-      pure (HLIR.MkPatSpecial name, ty', Map.empty)
+      pure ( 
+          if isInRecord 
+            then HLIR.MkPatVariable name (Identity ty')
+            else HLIR.MkPatSpecial name, 
+          ty', 
+          Map.singleton name s
+        )
     _ -> do
       ty <- maybe M.fresh pure varTy
       let scheme = HLIR.Forall [] ty
       pure (HLIR.MkPatVariable name (Identity ty), ty, Map.singleton name scheme)
-typecheckPattern (HLIR.MkPatLiteral l) = do
+typecheckPattern _ (HLIR.MkPatLiteral l) = do
   let ty = case l of
         HLIR.MkLitChar _ -> HLIR.MkTyChar
         HLIR.MkLitInt _ -> HLIR.MkTyInt
@@ -373,89 +571,117 @@ typecheckPattern (HLIR.MkPatLiteral l) = do
         HLIR.MkLitString _ -> HLIR.MkTyString
         HLIR.MkLitBool _ -> HLIR.MkTyBool
   pure (HLIR.MkPatLiteral l, ty, Map.empty)
-typecheckPattern (HLIR.MkPatConstructor name pats) = do
+typecheckPattern _ (HLIR.MkPatConstructor name pats) = do
   st <- readIORef M.checkerState
-  case Map.lookup name st.variables of
-    Just sch | name `Set.member` st.dataConstructors -> do
+  case Map.lookup name st.dataConstructors of
+    Just sch -> do
       ty <- M.instantiate sch
       case ty of
         tys HLIR.:->: ret -> do
-          (pats', env) <- unzip <$> zipWithM (\pat ty' -> do
-              (pat', ty'', env) <- typecheckPattern pat
-              ty' `U.unifiesWith` ty''
-              pure (pat', env)
-            ) pats tys
+          (pats', env) <-
+            unzip
+              <$> zipWithM
+                ( \pat ty' -> do
+                    (pat', ty'', env) <- typecheckPattern False pat
+                    ty' `U.unifiesWith` ty''
+                    pure (pat', env)
+                )
+                pats
+                tys
 
           pure (HLIR.MkPatConstructor name pats', ret, Map.unions env)
         _ -> throw (M.InvalidConstructor name)
     _ -> throw (M.InvalidConstructor name)
-typecheckPattern HLIR.MkPatWildcard = do
+typecheckPattern _ HLIR.MkPatWildcard = do
   ty <- M.fresh
   pure (HLIR.MkPatWildcard, ty, Map.empty)
-typecheckPattern (HLIR.MkPatSpecial {}) =
+typecheckPattern _ (HLIR.MkPatSpecial {}) =
   throw (CompilerError "typecheckPattern: special patterns are not supported")
-typecheckPattern (HLIR.MkPatLocated p loc) =
-  HLIR.pushPosition loc *> typecheckPattern p <* HLIR.popPosition
-typecheckPattern (HLIR.MkPatOr p1 p2) = do
-  (p1', ty, env1) <- typecheckPattern p1
-  (p2', ty', env2) <- typecheckPattern p2
+typecheckPattern isInRecord (HLIR.MkPatLocated p loc) =
+  HLIR.pushPosition loc *> typecheckPattern isInRecord p <* HLIR.popPosition
+typecheckPattern _ (HLIR.MkPatOr p1 p2) = do
+  (p1', ty, env1) <- typecheckPattern False p1
+  (p2', ty', env2) <- typecheckPattern False p2
 
   ty `U.unifiesWith` ty'
 
-  instEnv1 <- traverse M.instantiate env1
-  instEnv2 <- traverse M.instantiate env2
+  dcs <- readIORef M.checkerState <&> M.dataConstructors
+
+  let env1' = Map.fromList $ filter (\(n, _) -> Map.notMember n dcs) (Map.toList env1)
+      env2' = Map.fromList $ filter (\(n, _) -> Map.notMember n dcs) (Map.toList env2)
+
+  instEnv1 <- traverse M.instantiate env1'
+  instEnv2 <- traverse M.instantiate env2'
 
   -- Check if the environments are disjoint
   common <- intersectionWithM U.doesUnifyWith instEnv1 instEnv2
 
-  if null common || (Map.size common /= Map.size env1 && Map.size common /= Map.size env2)
-    then throw (M.InvalidPatternUnion (Map.keysSet env1) (Map.keysSet env2)) 
-    else if and common
-      then pure (HLIR.MkPatOr p1' p2', ty, Map.union env1 env2)
-      else throw (M.InvalidPatternUnion (Map.keysSet env1) (Map.keysSet env2))
-typecheckPattern (HLIR.MkPatCondition e p) = do
-  (p', ty, env) <- typecheckPattern p
+  if Map.size common /= Map.size env1' && Map.size common /= Map.size env2'
+    then throw (M.InvalidPatternUnion (Map.keysSet env1') (Map.keysSet env2'))
+    else
+      if and common
+        then pure (HLIR.MkPatOr p1' p2', ty, Map.union env1 env2)
+        else throw (M.InvalidPatternUnion (Map.keysSet env1') (Map.keysSet env2'))
+typecheckPattern _ (HLIR.MkPatCondition e p) = do
+  (p', ty, env) <- typecheckPattern False p
 
-  (e', ty') <- M.with M.checkerState (\st -> st { M.variables = env <> st.variables }) $ typecheck e
+  (e', ty') <- M.with M.checkerState (\st -> st {M.variables = env <> st.variables}) $ synthesize e
 
   ty' `U.unifiesWith` HLIR.MkTyBool
 
   pure (HLIR.MkPatCondition e' p', ty, env)
-typecheckPattern (HLIR.MkPatList pats slice _) = do
+typecheckPattern _ (HLIR.MkPatList pats slice _) = do
   ty <- M.fresh
 
-  (pats', tys, env) <- unzip3 <$> traverse typecheckPattern pats
+  (pats', tys, env) <- unzip3 <$> traverse (typecheckPattern False) pats
 
   forM_ tys $ U.unifiesWith ty
 
   case slice of
     Just p -> do
-      (p', ty', env') <- typecheckPattern p
+      (p', ty', env') <- typecheckPattern False p
       HLIR.MkTyList ty `U.unifiesWith` ty'
       pure (HLIR.MkPatList pats' (Just p') (Identity (HLIR.MkTyList ty)), HLIR.MkTyList ty, Map.unions env <> env')
     Nothing -> pure (HLIR.MkPatList pats' Nothing (Identity (HLIR.MkTyList ty)), HLIR.MkTyList ty, Map.unions env)
+typecheckPattern isInRecord (HLIR.MkPatRecord pats) = do
+  (pats', env) <- unzip <$> traverse (\(k, p) -> do
+    (p', ty', env') <- typecheckPattern (isInRecord || True) p
+    pure ((k, p', ty'), env'))
+    (Map.toList pats)
+
+  let env' = Map.unions env
+
+  rest <- M.fresh
+
+  let record = foldl' (\acc (k, _, p) -> HLIR.MkTyRowExtend k p False acc) rest pats'
+
+  pure (HLIR.MkPatRecord (Map.fromList (map (\(k, p, _) -> (k, p)) pats')), HLIR.MkTyRecord record, env')
+
 
 intersectionWithM :: (Ord k, Monad m) => (a -> b -> m c) -> Map k a -> Map k b -> m (Map k c)
 intersectionWithM f m1 m2 = do
   let common = Map.intersection m1 m2
-  Foldable.foldlM (\m (k, v) -> do
-      v' <- f v (m2 Map.! k)
-      pure $ Map.insert k v' m
-    ) Map.empty (Map.toList common)
+  Foldable.foldlM
+    ( \m (k, v) -> do
+        v' <- f v (m2 Map.! k)
+        pure $ Map.insert k v' m
+    )
+    Map.empty
+    (Map.toList common)
 
-typecheckUpdate :: M.MonadChecker m => HLIR.HLIR "update" -> m (HLIR.TLIR "update", HLIR.Type)
+typecheckUpdate :: (M.MonadChecker m) => HLIR.HLIR "update" -> m (HLIR.TLIR "update", HLIR.Type)
 typecheckUpdate (HLIR.MkUpdtVariable ann) = do
   st <- readIORef M.checkerState
   case Map.lookup ann.name st.variables of
     Just s -> do
       ty <- M.instantiate s
-      pure (HLIR.MkUpdtVariable ann { HLIR.value = Identity ty }, ty)
+      pure (HLIR.MkUpdtVariable ann {HLIR.value = Identity ty}, ty)
     Nothing -> throw (M.VariableNotFound ann.name)
 typecheckUpdate (HLIR.MkUpdtField _ _) = compilerError "typecheckUpdate: field updates are not supported"
 typecheckUpdate (HLIR.MkUpdtIndex u e) = do
   elTy <- M.fresh
   (u', ty) <- typecheckUpdate u
-  (e', idxTy) <- typecheck e
+  (e', idxTy) <- synthesize e
 
   idxTy `U.unifiesWith` HLIR.MkTyInt
   HLIR.MkTyList elTy `U.unifiesWith` ty
@@ -470,55 +696,30 @@ runTypechecking es = do
           Map.empty
           mempty
           mempty
+          Nothing
+
   writeIORef M.checkerState st
   writeIORef M.typeCounter 0
   writeIORef M.currentLevel 0
-  res <- M.with M.checkerState (const st) $ runExceptT $ traverse typecheck es
+
+  res <- runExceptT $ traverse synthesize es
+
   pure $ case res of
     Left err -> Left err
     Right es' -> Right $ map fst es'
 
 -- | Get the binding name of an expression
 getName :: HLIR.HLIR "expression" -> Text
-getName (HLIR.MkExprLet _ ann _) = ann.name
-getName (HLIR.MkExprOn n _ _) = n
+getName (HLIR.MkExprLet _ (Left ann) _ _) = ann.name
 getName (HLIR.MkExprLoc e _) = getName e
 getName e = compilerError $ "typecheck: event block should only contain let bindings or events, received " <> toText e
-
--- | Check if an expression contains a live variable in order to 
--- | wrap it too in a lambda during type erasure pass.
-containsLive :: HLIR.TLIR "expression" -> Bool
-containsLive (HLIR.MkExprLive _ _) = True
-containsLive (HLIR.MkExprLoc e _) = containsLive e
-containsLive (HLIR.MkExprApplication f args _) = containsLive f || any containsLive args
-containsLive (HLIR.MkExprLambda _ _ body) = containsLive body
-containsLive (HLIR.MkExprLet _ _ e) = containsLive e
-containsLive (HLIR.MkExprBlock es _) = any containsLive es
-containsLive (HLIR.MkExprTernary c t e _) = containsLive c || containsLive t || containsLive e
-containsLive (HLIR.MkExprUpdate _ e) = containsLive e
-containsLive (HLIR.MkExprActor _ es) = any containsLive es
-containsLive (HLIR.MkExprOn _ _ e) = containsLive e
-containsLive (HLIR.MkExprSend e _ es _) = containsLive e || any containsLive es
-containsLive (HLIR.MkExprSpawn e) = containsLive e
-containsLive (HLIR.MkExprList es) = any containsLive es
-containsLive (HLIR.MkExprNative _ _) = False
-containsLive (HLIR.MkExprMut e _) = containsLive e
-containsLive (HLIR.MkExprInterface _ _) = False
-containsLive (HLIR.MkExprWhile c e) = containsLive c || containsLive e
-containsLive (HLIR.MkExprIndex e e') = containsLive e || containsLive e'
-containsLive (HLIR.MkExprData _ _) = False
-containsLive (HLIR.MkExprMatch e _ cs _) = containsLive e || any (containsLive . snd3) cs
-containsLive (HLIR.MkExprRequire _ _) = False
-containsLive (HLIR.MkExprUnwrapLive _ _) = True
-containsLive (HLIR.MkExprWrapLive e _) = containsLive e
-containsLive _ = False
 
 snd3 :: (a, b, c) -> b
 snd3 (_, x, _) = x
 
 -- | Decomposing actor header into name and type arguments
 -- | Used to lookup the interface of an actor.
-decomposeHeader :: M.MonadChecker m => HLIR.Type -> m (Text, [HLIR.Type])
+decomposeHeader :: (M.MonadChecker m) => HLIR.Type -> m (Text, [HLIR.Type])
 decomposeHeader (HLIR.MkTyActor t) = decomposeHeader t
 decomposeHeader (HLIR.MkTyApp (HLIR.MkTyId name) tys) = pure (name, tys)
 decomposeHeader (HLIR.MkTyId name) = pure (name, [])
@@ -528,3 +729,12 @@ decomposeHeader (HLIR.MkTyVar tv) = do
     HLIR.Link t -> decomposeHeader t
     HLIR.Unbound _ _ -> throw (M.InvalidHeader (HLIR.MkTyVar tv))
 decomposeHeader t = M.throw $ M.InvalidHeader t
+
+unrecord :: (MonadIO m) => HLIR.Type -> m HLIR.Type
+unrecord (HLIR.MkTyVar tv) = do
+  tv' <- readIORef tv
+  case tv' of
+    HLIR.Link t -> unrecord t
+    HLIR.Unbound _ _ -> pure (HLIR.MkTyVar tv)
+unrecord (HLIR.MkTyRecord t) = pure t
+unrecord t = pure t

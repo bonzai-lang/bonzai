@@ -1,4 +1,4 @@
-pub extern fn print<A>(x: A)
+pub extern fn print<A>(x: A): unit
 
 print("test 1")
 

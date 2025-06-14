@@ -1,20 +1,16 @@
-require "std:datatypes/mutable"
-require "std:math"
-require "std:io"
+require "std:foundation"
 
-interface Loopable {
-  fn loop(self: actor Loopable, i: int)
-}
+mut i = 0
 
-fn Loop(msg: string) => actor < Loopable {
-  on loop(self, i) => {
-    mut j = 0
-    while j.value < i {
-      j += 1
-    }
-    print(msg)
+while true {
+  if i.value >= 10 then {
+    break
   }
+
+  print("Iteration: $i")
+  i += 1
 }
 
-let l = spawn Loop("loop")
-l->loop(l, 100_000_000)
+for i in range(0, 10) {
+  print("For loop iteration: $i")
+}

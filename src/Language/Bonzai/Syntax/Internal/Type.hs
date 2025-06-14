@@ -33,6 +33,10 @@ data Type
   | MkTyApp Type [Type]
   | MkTyVar (IORef TyVar)
   | MkTyQuantified Text
+  | MkTyRowEmpty
+  | MkTyRowExtend Text Type Bool Type
+  | MkTyRecord Type
+  | MkTyAbstractType
   deriving (Ord, Generic)
 
 -- | ORD INSTANCE FOR TYPE
@@ -149,6 +153,21 @@ instance ToText Type where
     let a' = IO.unsafePerformIO $ readIORef a
     toText a'
   toText (MkTyQuantified a) = a
+  toText MkTyRowEmpty = "{}"
+  toText (MkTyRowExtend a b False c) = T.concat ["{", a, ": ", toText b, ", ", toText c, "}"]
+  toText (MkTyRowExtend a b True c) = T.concat ["{", a, "?: ", toText b, ", ", toText c, "}"]
+  toText (MkTyRecord a) = recordToString (MkTyRecord a)
+  toText MkTyAbstractType = "<abstract type>"
+
+recordToString :: Type -> Text
+recordToString (MkTyRowExtend a b False MkTyRowEmpty) = T.concat [a, ": ", toText b]
+recordToString (MkTyRowExtend a b True MkTyRowEmpty) = T.concat [a, "?: ", toText b]
+recordToString (MkTyRowExtend a b False c) = T.concat [a, ": ", toText b, ", ", toText c]
+recordToString (MkTyRowExtend a b True c) = T.concat [a, "?: ", toText b, ", ", toText c]
+recordToString MkTyRowEmpty = ""
+recordToString (MkTyRecord MkTyRowEmpty) = "{}"
+recordToString (MkTyRecord a) = T.concat ["{ ", recordToString a, " }"]
+recordToString a = toText a
 
 -- | TYPE SIMPLIFICATION
 -- | Given a type, simplify it by following the links of type variables until
@@ -165,6 +184,11 @@ simplify (MkTyApp a b) = do
   a' <- simplify a
   b' <- mapM simplify b
   pure $ MkTyApp a' b'
+simplify (MkTyRecord a) = MkTyRecord <$> simplify a
+simplify (MkTyRowExtend a b c d) = do
+  b' <- simplify b
+  d' <- simplify d
+  pure $ MkTyRowExtend a b' c d'
 simplify a = pure a
 
 instance ToText TyVar where

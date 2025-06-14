@@ -1,0 +1,40 @@
+require "std:datatypes/unit"
+pub require "std:datatypes/map"
+require "std:math"
+require "std:datatypes/string"
+require "std:datatypes/list"
+
+pub type HTML {
+  // HTML is a type that represents an HTML document.
+  // It can be used to create, manipulate, and render HTML content.
+  // This is a placeholder for the actual implementation.
+  // In a real-world scenario, this would include methods for parsing,
+  // rendering, and manipulating HTML elements.
+
+  Element(tagName: string, attributes: Map<string, string>, children: list<HTML>),
+
+  Text(content: string)
+}
+
+pub fn h(
+  tagName: string,
+  attributes: Map<string, string>,
+  children: list<HTML>
+): HTML => HTML->Element(tagName, attributes, children)
+
+pub fn text(content: string): HTML => HTML->Text(content)
+
+pub fn HTML::render(html: HTML): string => {
+  match html {
+    case Element(tagName, attributes, children) => {
+      let attrs = Map::foldl(
+        attributes,
+        fn(key, value, acc) => acc + " $key=\"$value\"",
+        ""
+      )
+      let childrenString = List::map(children, HTML::render)
+      "<$tagName$attrs>" + String::concat(childrenString) + "</$tagName>"
+    }
+    case Text(content) => content
+  }
+}

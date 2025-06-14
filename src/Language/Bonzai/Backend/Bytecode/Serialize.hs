@@ -6,6 +6,7 @@ import Data.Binary
 import Data.Binary.Put
 import Data.ByteString qualified as BS
 import qualified Data.ByteString.Lazy as BSL
+import Control.Monad.Result (compilerError)
 
 -- | BYTECODE SERIALIZATION
 -- | Bytecode serialization is the process of transforming the bytecode AST into
@@ -101,8 +102,8 @@ encodeInstruction (MakeFunctionAndStore i j k) =
   encodeInstr 21 >> encodeInteger i >> encodeInteger j >> encodeInteger k >> replicateNull 1
 encodeInstruction (LoadNative i) =
   encodeInstr 22 >> encodeInteger i >> replicateNull 3
-encodeInstruction (MakeEvent i j) = 
-  encodeInstr 23 >> encodeInteger i >> encodeInteger j >> replicateNull 2
+encodeInstruction UnLoc =
+  encodeInstr 23 >> replicateNull 4
 encodeInstruction ReturnEvent =
   encodeInstr 24 >> replicateNull 4
 encodeInstruction MakeMutable =
@@ -125,6 +126,13 @@ encodeInstruction (TryCatch i) =
   encodeInstr 33 >> encodeInteger i >> replicateNull 3
 encodeInstruction GetValue =
   encodeInstr 34 >> replicateNull 4
+encodeInstruction (GetRecordAccess i) =
+  encodeInstr 35 >> encodeInteger i >> replicateNull 3
+encodeInstruction (MakeRecord i) =
+  encodeInstr 36 >> encodeInteger i >> replicateNull 3
+encodeInstruction (Jump i) =
+  encodeInstr 37 >> encodeInteger i >> replicateNull 3
+encodeInstruction (MakeEvent {}) = compilerError "Anonymous events should not appear in the bytecode"
 
 encodeText :: Text -> Put
 encodeText w = do
@@ -137,7 +145,7 @@ encodeConstant :: Literal -> Put
 encodeConstant (MkLitInt i) = putWord8 0 >> encodeInteger i
 encodeConstant (MkLitFloat f) = putWord8 1 >> putDoublele f
 encodeConstant (MkLitString t) = putWord8 2 >> encodeText t
-encodeConstant (MkLitChar c) = putWord8 2 >> encodeText (fromString [c])
+encodeConstant (MkLitChar c) = putWord8 3 >> encodeInteger (fromIntegral $ fromEnum c :: Int)
 encodeConstant (MkLitBool True) = putWord8 0 >> encodeInteger (1 :: Int)
 encodeConstant (MkLitBool False) = putWord8 0 >> encodeInteger (0 :: Int)
 

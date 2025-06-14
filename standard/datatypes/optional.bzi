@@ -1,7 +1,25 @@
+require "std:datatypes/unit"
+
 pub type Optional<A> {
   Some(value: A),
   None
 }
+
+pub fn Optional::isNone<A>(x: Optional<A>): bool => {
+  match x {
+    case Some(_) => false
+    case None => true
+  }
+}
+
+pub fn Optional::isSome<A>(x: Optional<A>): bool => {
+  match x {
+    case Some(_) => true
+    case None => false
+  }
+}
+
+pub let { Some, None } = Optional
 
 pub fn Optional::or<A>(x: Optional<A>, y: Optional<A>): Optional<A> => {
   match x {
@@ -10,9 +28,16 @@ pub fn Optional::or<A>(x: Optional<A>, y: Optional<A>): Optional<A> => {
   }
 }
 
-pub fn Optional::unwrap_or<A>(x: Optional<A>, y: A): A => {
+pub fn Optional::unwrapOr<A>(x: Optional<A>, y: A): A => {
   match x {
     case Some(value) => value
     case None => y
+  }
+}
+
+pub fn Optional::map<A, B>(x: Optional<A>, f: fn(A): B): Optional<B> => {
+  match x {
+    case Some(value) => Some(f(value))
+    case None => None
   }
 }

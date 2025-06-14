@@ -12,10 +12,9 @@
 		"compile": "tsc -b",
 		"watch": "tsc -b -w",
 		"lint": "eslint",
-		"postinstall": "cd client && npm install && cd ../server && npm install && cd ..",
 		"test": "sh ./scripts/e2e.sh"
 	},
-  "version": "0.0.10",
+  "version": "0.0.13",
   "engines": {
     "vscode": "^1.89.0"
   },

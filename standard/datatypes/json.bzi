@@ -1,15 +1,14 @@
-require "std:language/parser": 
-  choice, right, char, Parser::bind, 
-  Parser::pure, many, satisfy, is_whitespace, 
-  left, Parser::map, or, implode, many1, 
-  is_digit, toInt, Parser::andThen, toFloat, 
-  string, sepBy, lazy, runParser
 require "std:datatypes/optional"
+require "std:language/parser"
 require "std:datatypes/tuple": Tuple::first, Tuple, Tuple::second, Map::toList
 require "std:datatypes/list"
+require "std:datatypes/map"
 require "std:datatypes/string"
 require "std:math"
 require "std:datatypes/error"
+require "std:datatypes/unit"
+require "std:io"
+require "std:datatypes/mutable"
 
 pub type JSON {
   Object(fields: list<(string, JSON)>),
@@ -21,104 +20,201 @@ pub type JSON {
   Null
 }
 
-pub fn jsonParser(): Parser<JSON> => {
-  let charLiteral = choice([
-    char('\\') :right: char('\\'),
-    char('\\') :right: char('"'),
-    char('\\') :right: char('/'),
-    char('\\') :right: char('b')  :Parser::bind: fn(_) => Parser::pure('\b'),
-    char('\\') :right: char('f')  :Parser::bind: fn(_) => Parser::pure('\f'),
-    char('\\') :right: char('n')  :Parser::bind: fn(_) => Parser::pure('\n'),
-    char('\\') :right: char('r')  :Parser::bind: fn(_) => Parser::pure('\r'),
-    char('\\') :right: char('t')  :Parser::bind: fn(_) => Parser::pure('\t')
-  ])
+fn jsonParser(input: list<char>): Throwable<JSON> => {
+  mut i = 0
+  let len = input.length
 
-  let ws = satisfy(is_whitespace).many()
+  fn whitespace(i: mut int) => {
+    while i.value < len {
+      if (input[i.value]).is_whitespace() then {
+        i += 1
+      } else {
+        break
+      }
+    }
 
-  let str = char('"') 
-            :right: (many(or(charLiteral, satisfy(fn (x) => x != '"')))
-              :Parser::map: fn(xs) => String(xs.implode()))
-            :left: char('"')
+    unit
+  }
 
-  let integer = satisfy(is_digit).many1() :Parser::map: fn(xs) => Integer(xs.implode().toInt())
+  fn parseString(i: mut int): Throwable<JSON> => {
+    if i.value < len && input[i.value] == '"' then {
+      i += 1 // Skip the opening quote
+      let start = i.value
 
-  let float = integer 
-            :Parser::bind: fn(intPart) => char('.')
-            :Parser::andThen: integer
-            :Parser::map: fn(fracPart) => 
-              Float((intPart.toString() + "." + fracPart.toString()).toFloat())
+      while i.value < len && input[i.value] != '"' {
+        i += 1
+      }
 
-  let boolean = choice([
-    string("true") :Parser::map: fn(_) => Boolean(true),
-    string("false") :Parser::map: fn(_) => Boolean(false)
-  ])
+      if i.value < len && input[i.value] == '"' then {
+        let strValue = input.slice(start, i.value)
+        i += 1 // Skip the closing quote
+        Ok(JSON->String(strValue.implode()))
+      } else {
+        Error("Unterminated string at position $i")
+      }
+    } else {
+      Error("Expected string at position $i")
+    }
+  }
 
-  let null = string("null") :Parser::map: fn(_) => Null
+  fn parseNumber(i: mut int): Throwable<JSON> => {
+    let start = i.value
 
-  let value = ws :right: choice([
-    str,
-    integer,
-    float,
-    boolean,
-    null
-  ]) :left: ws
+    while i.value < len && ((input[i.value]).is_digit() || input[i.value] == '.' || input[i.value] == '-') {
+      i += 1
+    }
 
-  let array = char('[') 
-              :right: jsonParser.lazy().sepBy(char(','))
-              :left: char(']')
-              :Parser::map: fn(xs) => Array(xs)
+    if start < i.value then {
+      let numStr = input.slice(start, i.value).implode()
+      if String::includes('.', numStr) then {
+        Ok(JSON->Float(numStr.toFloat()))
+      } else {
+        Ok(JSON->Integer(numStr.toInt()))
+      }
+    } else {
+      Error("Expected number at position $i")
+    }
+  }
 
-  let field = char('"') 
-              :right: (satisfy(fn (x) => x != '"').many()
-                :Parser::map: fn(xs) => xs.implode())
-              :left: char('"')
-              :Parser::bind: fn (key) =>
-              ws :right: char(':') :left: ws
-              :Parser::andThen: jsonParser.lazy()
-              :Parser::map: fn(value) => (key, value)
+  fn parseArray(i: mut int, parseValue: fn(mut int): Throwable<JSON>): Throwable<JSON> => {
+    if i.value < len && input[i.value] == '[' then {
+      i += 1 // Skip the opening bracket
+      whitespace(i)
 
-  let object = char('{') 
-              :right: ws
-              :right: field.sepBy(ws :left: char(',') :right: ws)
-              :left: ws
-              :left: char('}')
-              :Parser::map: fn(xs) => Object(xs)
+      mut values = []
 
-  choice([object, array, value])
+      while i.value < len && input[i.value] != ']' {
+        let val = parseValue(i)
+        match val {
+          case Ok(v) => { values += [v] }
+          case Error(e) => { return Error(e) }
+        }
+        whitespace(i)
+
+        if (i.value < len) && (input[i.value] == ',') then {
+          i += 1 // Skip the comma
+          whitespace(i)
+        }
+      }
+
+      if i.value < len && input[i.value] == ']' then {
+        i += 1 // Skip the closing bracket
+        Ok(JSON->Array(values.value))
+      } else {
+        Error("Expected ']' at position $i")
+      }
+    } else {
+      Error("Expected '[' at position $i")
+    }
+  }
+
+  fn parseValue(i: mut int): Throwable<JSON> => {
+    match input.sliceFrom(i.value) {
+      case [] => Error("Empty input")
+      case ['t', 'r', 'u', 'e' .. _] => {
+        i += 4 // Skip the 'true'
+        Ok(JSON->Boolean(true))
+      }
+      case ['f', 'a', 'l', 's', 'e' .. _] => {
+        i += 5 // Skip the 'false'
+        Ok(JSON->Boolean(false))
+      }
+      case ['n', 'u', 'l', 'l' .. _] => { 
+        i += 4 // Skip the 'null'
+        Ok(JSON->Null)
+      }
+      case ['"' .. _] => parseString(i)
+      case ['{' .. _] => {
+        i += 1 // Skip the opening brace
+        whitespace(i)
+
+        mut fields = []
+
+        while i.value < len && input[i.value] != '}' {
+          let key = parseString(i)
+          match key {
+            case Ok(String(k)) => {
+              whitespace(i)
+              if i.value < len && input[i.value] == ':' then {
+                i += 1 // Skip the colon
+                whitespace(i)
+                let val = parseValue(i)
+                match val {
+                  case Ok(v) => { fields += [(k, v)] }
+                  case Error(e) => { return Error(e) }
+                }
+              } else {
+                return Error("Expected ':' after key at position $i")
+              }
+            }
+            case Error(e) => { return Error(e) }
+          }
+
+          whitespace(i)
+
+          if i.value < len && input[i.value] == ',' then {
+            i += 1 // Skip the comma
+            whitespace(i)
+          }
+        }
+
+        if i.value < len && input[i.value] == '}' then {
+          i += 1 // Skip the closing brace
+          Ok(JSON->Object(fields.value))
+        } else {
+          Error("Expected '}' at position $i")
+        }
+      }
+
+      case ['[' .. _] => parseArray(i, parseValue)
+
+      case [c .. _] => {
+        if is_digit(c) || c == '-' then {
+          parseNumber(i)
+        } else {
+          Error("Unexpected character '$c' at position $i")
+        }
+      }
+    }
+  }
+
+  whitespace(i)
+  let result = parseValue(i)
+  whitespace(i)
+
+  result
 }
 
-pub fn parseJsonWithError(input: string): Throwable<JSON> => 
-  match jsonParser().runParser(input) {
-    case ParseResult(x, _) => Ok(x)
-    case ParseError(msg, _) => Error(msg)
+fn parseJsonWithError(input: string): Throwable<JSON> => jsonParser(input.explode()) 
+
+fn parseJSON(input: string): Optional<JSON> => 
+  match jsonParser(input.explode()) {
+    case Ok(x) => Some(x)
+    case Error(_) => None
   }
 
-pub fn parseJSON(input: string): Optional<JSON> => 
-  match jsonParser().runParser(input) {
-    case ParseResult(x, _) => Some(x)
-    case ParseError(_, _) => None
-  }
-
-pub fn getJSON(input: string): JSON =>
+fn getJSON(input: string): JSON =>
   match parseJSON(input) {
     case Some(x) => x
-    case None => Null
+    case None => JSON->Null
   }
 
-pub fn stringify(json: JSON): string =>
+pub fn JSON::parse(input: string): JSON => getJSON(input)
+
+pub fn JSON::stringify(json: JSON): string =>
   match json {
     case Object(fields) => {
       let pairs = List::map(fields, fn (v) => 
         "\"" 
           + Tuple::first(v) 
           + "\":" 
-          + stringify(Tuple::second(v))
+          + JSON::stringify(Tuple::second(v))
       )
 
       "{" + String::join(pairs, ",") + "}"
     }
     case Array(values) => 
-      "[" + String::join(List::map(values, stringify), ",") + "]"
+      "[" + String::join(List::map(values, JSON::stringify), ",") + "]"
     case String(val) => "\"" + val + "\""
     case Integer(val) => val.toString()
     case Float(val) => val.toString()
@@ -126,7 +222,7 @@ pub fn stringify(json: JSON): string =>
     case Null => "null"
   }
 
-fn getKey(json: JSON, key: string): Optional<JSON> =>
+pub fn getKey(json: JSON, key: string): Optional<JSON> =>
   match json {
     case Object(fields) => {
       List::foldl(fn (field, acc) =>
@@ -154,17 +250,48 @@ pub fn getKeys(json: JSON, keys: list<string>): Optional<JSON> =>
     keys
   )
 
-pub fn JSON::stringifyMap(json: Map<JSON>): string => {
-  let pairs = Map::toList(json)
-  let fields = List::map(pairs, fn (v) => 
-    "\"" 
-      + Tuple::first(v) 
-      + "\":" 
-      + stringify(Tuple::second(v))
-  )
+pub fn JSON::prettify(json: JSON, tabs _?: int): string => {
+  let i = Optional::unwrapOr(kwargs->tabs, 0)  
 
-  "{" + String::join(fields, ",") + "}"
+  match json {
+    case Object(fields) => {
+      let pairs = List::map(fields, fn (v) => 
+        String::concat([
+          String::repeat(" ", i + 2), 
+          "\"", 
+          Tuple::first(v), 
+          "\": ", 
+          JSON::prettify(Tuple::second(v), tabs: i + 2)
+        ])
+      )
+
+      String::concat([
+        "{\n", 
+        String::repeat(" ", i), 
+        String::join(pairs, ",\n"), 
+        "\n", 
+        String::repeat(" ", i), 
+        "}"
+      ])
+    }
+    case Array(values) => {
+      let items = List::map(values, fn (v) => 
+        String::concat([
+          "\n", 
+          String::repeat(" ", i + 2), 
+          JSON::prettify(v, tabs: i + 2)
+        ])
+      )
+
+      String::concat([
+        "[", 
+        String::repeat(" ", i), 
+        String::join(items, ","), 
+        "\n", 
+        String::repeat(" ", i), 
+        "]"
+      ])
+    }
+    case _ => JSON::stringify(json)
+  }
 }
-
-pub fn JSON::fromMap(json: Map<JSON>): JSON =>
-  Object(Map::toList(json))

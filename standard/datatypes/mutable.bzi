@@ -1,7 +1,9 @@
 require "std:math"
+require "std:datatypes/unit"
+require "std:datatypes/optional"
 
 extern fn mutable_value<A>(x: mutable<A>): A
-pub let value = mutable_value
+pub fn value<A>(x: mutable<A>): A => mutable_value(x)
 
 pub fn (+=)<A>(x: mutable<A>, y: A) => {
   x = x.value + y

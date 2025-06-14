@@ -3,6 +3,7 @@ build
 .xmake
 .vscode
 .idea
+.cache
 
 *.bin
 

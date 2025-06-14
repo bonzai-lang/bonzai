@@ -1,0 +1,13 @@
+name = "Bonzai"
+grammar = "bonzai"
+path_suffixes = ["bzi"]
+line_comments = ["// "]
+brackets = [
+    { start = "{", end = "}", close = true, newline = true },
+    { start = "[", end = "]", close = true, newline = true },
+    { start = "(", end = ")", close = true, newline = true },
+    { start = "\"", end = "\"", close = true, newline = false, not_in = [
+        "string_literal",
+        "comment",
+    ] },
+]

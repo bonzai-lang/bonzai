@@ -1,0 +1,36 @@
+{
+  "grammars": [
+    {
+      "name": "bonzai",
+      "camelcase": "Bonzai",
+      "scope": "source.bonzai",
+      "file-types": [
+        ".bzi"
+      ],
+      "injection-regex": "^bonzai$"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Bonzai grammar for tree-sitter",
+    "authors": [
+      {
+        "name": "Thomas Vergne",
+        "email": "contact@thomas-vergne.fr",
+        "url": "https://thomas-vergne.fr/"
+      }
+    ],
+    "links": {
+      "repository": "https://github.com/bonzai-lang/bonzai"
+    }
+  },
+  "bindings": {
+    "c": true,
+    "go": true,
+    "node": true,
+    "python": true,
+    "rust": true,
+    "swift": true
+  }
+}

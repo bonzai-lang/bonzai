@@ -1,0 +1,45 @@
+require "unit"
+require "../math"
+require "mutable"
+require "list"
+require "map"
+require "tuple"
+require "../io"
+require "optional"
+
+extern fn create_thread<A>(cb: fn(): A): Thread<A>
+extern fn wait_thread<A>(thread: Thread<A>): A
+extern fn create_detached_thread<A>(cb: fn(): A): Thread<A>
+extern fn lock<A>(x: A): int
+extern fn unlock<A>(x: A): int
+extern fn trylock<A>(x: A): bool
+
+pub fn Mutex::lock<A>(x: A): unit => {
+  while !x.trylock(){
+    sleep(1)
+  }
+
+  return unit
+}
+
+pub fn Mutex::unlock<A>(x: A): unit => {
+  x.unlock()
+  return unit
+}
+
+pub fn Thread::withVariable<A, B>(cb: fn(A): B, x: A): B => {
+  lock(x)
+  let res = cb(x)
+  unlock(x)
+
+  res
+}
+
+pub fn Thread::new<A>(cb: fn(): A): Thread<A> => create_thread(cb)
+// pub let Thread::wait = wait_thread
+pub fn Thread::wait<A>(thread: Thread<A>): A => wait_thread(thread)
+// pub let Thread::newDetached = create_detached_thread
+pub fn Thread::newDetached<A>(cb: fn(): A): Thread<A> => create_detached_thread(cb)
+
+// pub let wait = wait_thread
+pub fn wait<A>(thread: Thread<A>): A => wait_thread(thread)

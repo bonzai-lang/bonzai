@@ -1,8 +1,0 @@
-require "std:foundation"
-
-try {
-  print("test" - "test")
-} catch error {
-  print(error)
-  print("tset")
-}

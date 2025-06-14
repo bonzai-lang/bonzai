@@ -1,0 +1,34 @@
+require "std:foundation"
+require "std:datatypes/map"
+require "std:datatypes/json"
+require "std:http"
+
+let res = fetch(
+  "http://localhost:8000/",
+  method: "POST",
+  headers: [
+    "Content-Type: application/json"
+  ],
+  body: JSON::stringify(
+    JSON->Object([
+      ("name", JSON->String("John Doe")),
+      ("age", JSON->Integer(30)),
+      ("is_student", JSON->Boolean(false)),
+      ("courses", JSON->Array([
+        JSON->String("Math"),
+        JSON->String("Science")
+      ]))
+    ])
+  )
+)
+
+match res {
+  case Ok(Tuple(body, headers)) => {
+    let json = JSON::parse(body)
+    print(JSON::prettify(json))
+  }
+
+  case Error(err) => {
+    print(err)
+  }
+}
