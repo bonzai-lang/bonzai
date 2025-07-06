@@ -49,9 +49,7 @@ synthesize (HLIR.MkExprNative ann ty) = do
   let ty' = List.foldl (flip replaceIdwithQuVar) ty ann.value
   let scheme = HLIR.Forall ann.value ty'
 
-  pos <- HLIR.peekPosition'
-
-  modifyIORef' M.checkerState $ \st -> st {M.variables = Map.insert ann.name scheme st.variables, M.varPos = (ann.name, (scheme, pos)) : M.varPos st}
+  modifyIORef' M.checkerState $ \st -> st {M.variables = Map.insert ann.name scheme st.variables}
 
   pure (HLIR.MkExprNative ann ty', ty')
   where
@@ -181,10 +179,8 @@ synthesize (HLIR.MkExprLet generics (Right pattern) expr body) = do
         then M.generalize ty'
         else pure $ HLIR.Forall (toList generics) ty'
 
-    pos <- HLIR.peekPosition'
-
     modifyIORef' M.checkerState $ \st ->
-      st {M.variables = Map.insert name newScheme st.variables, M.varPos = (name, (newScheme, pos)) : M.varPos st}
+      st {M.variables = Map.insert name newScheme st.variables}
 
     pure (name, newScheme)
 
@@ -212,9 +208,7 @@ synthesize (HLIR.MkExprLet generics (Left ann) expr body) = do
       then M.generalize exprTy
       else pure $ HLIR.Forall (toList generics) exprTy
 
-  pos <- HLIR.peekPosition'
-
-  modifyIORef' M.checkerState $ \st -> st {M.variables = Map.insert ann.name newScheme st.variables, M.varPos = (ann.name, (newScheme, pos)) : M.varPos st}
+  modifyIORef' M.checkerState $ \st -> st {M.variables = Map.insert ann.name newScheme st.variables}
 
   (body', ty') <- synthesize body
 
@@ -252,17 +246,6 @@ synthesize (HLIR.MkExprList es) = do
       pure (hd' : tl', HLIR.MkTyList ty)
     Nothing -> ([],) . HLIR.MkTyList <$> M.fresh
   pure (HLIR.MkExprList es', t)
-synthesize (HLIR.MkExprInterface ann defs) = do
-  let name = ann.name
-      generics = ann.value
-
-  let actor = if null ann.value then (name, []) else (name, generics)
-
-  let schemes = map (\(HLIR.MkAnnotation funName funTy) -> (funName, funTy)) defs
-
-  modifyIORef M.checkerState $ \st -> st {M.interfaces = Map.insert actor (Map.fromList schemes) st.interfaces}
-
-  pure (HLIR.MkExprInterface ann defs, HLIR.MkTyId name)
 synthesize (HLIR.MkExprWhile c e) = do
   c' <- check c HLIR.MkTyBool
   (e', _) <- synthesize e
@@ -390,6 +373,14 @@ synthesize (HLIR.MkExprSpawn e) = do
   U.unifiesWith ty ([] HLIR.:->: retTy)
 
   pure (HLIR.MkExprSpawn e', HLIR.MkTyApp (HLIR.MkTyId "Thread") [retTy])
+synthesize (HLIR.MkExprTypeAlias ann t) = do
+  let sch = HLIR.Forall ann.value t
+
+  modifyIORef' M.checkerState $ \st -> st { M.typeAliases = Map.insert ann.name sch st.typeAliases }
+
+  pure (HLIR.MkExprTypeAlias ann t, t)
+synthesize (HLIR.MkExprInterface _ _) =
+  compilerError "typecheck: interface should not appear in typechecking"
 
 check :: (M.MonadChecker m) => HLIR.HLIR "expression" -> HLIR.Type -> m (HLIR.TLIR "expression")
 check (HLIR.MkExprLambda args ret body) (argsTys HLIR.:->: retTy) = do
@@ -440,9 +431,7 @@ check (HLIR.MkExprLet generics (Left ann) expr body) ty = do
       then M.generalize ty
       else pure $ HLIR.Forall (toList generics) ty
 
-  pos <- HLIR.peekPosition'
-
-  modifyIORef' M.checkerState $ \st -> st {M.variables = Map.insert ann.name newScheme st.variables, M.varPos = (ann.name, (newScheme, pos)) : M.varPos st}
+  modifyIORef' M.checkerState $ \st -> st {M.variables = Map.insert ann.name newScheme st.variables}
 
   body' <- check body ty
 
@@ -693,10 +682,9 @@ runTypechecking es = do
   let st =
         M.MkCheckerState
           Map.empty
-          Map.empty
-          mempty
           mempty
           Nothing
+          Map.empty
 
   writeIORef M.checkerState st
   writeIORef M.typeCounter 0

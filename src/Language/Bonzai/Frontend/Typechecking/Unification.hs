@@ -4,7 +4,6 @@ module Language.Bonzai.Frontend.Typechecking.Unification where
 import qualified Language.Bonzai.Syntax.HLIR as HLIR
 import qualified Language.Bonzai.Frontend.Typechecking.Monad as M
 import qualified Data.Map as Map
-import Control.Color (printText)
 
 -- Check to see if a TVar (the first argument) occurs in the type
 -- given as the second argument. Fail if it does.
@@ -39,6 +38,9 @@ unifiesWith :: M.MonadChecker m => HLIR.Type -> HLIR.Type -> m ()
 unifiesWith t t' = do
   t1 <- HLIR.simplify t
   t2 <- HLIR.simplify t'
+
+  typeAliases <- readIORef M.checkerState <&> M.typeAliases
+
   if t1 == t2
     then pure ()
     else case (t1, t2) of
@@ -52,6 +54,18 @@ unifiesWith t t' = do
       (HLIR.MkTyQuantified qv1, HLIR.MkTyQuantified qv2) | qv1 == qv2 -> pure ()
       (HLIR.MkTyQuantified _, _) -> pure ()
       (_, HLIR.MkTyQuantified _) -> pure ()
+      (HLIR.MkTyApp (HLIR.MkTyId n1) t1b, _) | Just scheme <- Map.lookup n1 typeAliases -> do
+        ty <- M.instantiate scheme
+        -- ^ instantiate the type alias to get the actual type
+
+        unifiesWith (HLIR.MkTyApp ty t1b) ty
+        unifiesWith ty t2
+      (_, HLIR.MkTyApp (HLIR.MkTyId n2) t2b) | Just scheme <- Map.lookup n2 typeAliases -> do
+        ty <- M.instantiate scheme
+        -- ^ instantiate the type alias to get the actual type
+
+        unifiesWith (HLIR.MkTyApp ty t2b) ty
+        unifiesWith t1 ty
       (HLIR.MkTyApp t1a t1b, HLIR.MkTyApp t2a t2b) | length t1b == length t2b -> do
         unifiesWith t1a t2a
         zipWithM_ unifiesWith t1b t2b
@@ -65,7 +79,6 @@ unifiesWith t t' = do
         -- ^ apply side-condition to ensure termination
         case snd $ toList' rowTail1 of
           Just tv -> do
-            readIORef tv >>= printText
             b <- liftIO $ doesOccurB tv fieldTy2
             when b $ M.throw (M.UnificationFail t1 t2)
           _ -> do
@@ -76,6 +89,12 @@ unifiesWith t t' = do
         unifiesWith rowTail1 HLIR.MkTyRowEmpty
       (HLIR.MkTyRowEmpty, HLIR.MkTyRowExtend _ _ opt rowTail2) | opt -> do
         unifiesWith HLIR.MkTyRowEmpty rowTail2
+      (HLIR.MkTyId n, _) | Just (HLIR.Forall [] ty) <- Map.lookup n typeAliases -> do
+        -- ^ instantiate the type alias to get the actual type
+        unifiesWith ty t2
+      (_, HLIR.MkTyId n') | Just (HLIR.Forall [] ty) <- Map.lookup n' typeAliases -> do
+        -- ^ instantiate the type alias to get the actual type
+        unifiesWith ty t1
       (HLIR.MkTyId n, HLIR.MkTyId n') | n == n' -> pure ()
       _ -> M.throw (M.UnificationFail t1 t2)
 
@@ -94,27 +113,6 @@ findM f (x : xs) = do
     Just _ -> pure res
     Nothing -> findM f xs
 findM _ [] = pure Nothing
-
--- | Find an interface by name and arguments
--- | The algorithm is as follows:
--- | 1. Get all interfaces from the checker state
--- | 2. Iterate over all interfaces and check if the name and
--- |    the number of arguments match
--- | 3. If they do, check if the arguments unify with the
--- |    arguments of the interface
--- | 4. If they do, return the interface
--- | 5. If no interface is found, return Nothing
-findInterface :: (M.MonadChecker m) => Text -> [HLIR.Type] -> m (Maybe (Map Text HLIR.Type))
-findInterface name args = do
-  interfaces <- Map.toList . M.interfaces <$> readIORef M.checkerState
-
-  findM (\((name', args'), m) -> do
-    if name == name' && length args == length args'
-      then do
-        let subst = Map.fromList (zip args' args)
-        Just <$> mapM ((fst <$>) . M.instantiateWithSub subst . HLIR.Forall []) m
-      else pure Nothing
-    ) interfaces
 
 rewriteRow :: M.MonadChecker m => Bool -> HLIR.Type -> Text -> m (HLIR.Type, HLIR.Type)
 rewriteRow _ HLIR.MkTyRowEmpty newLabel = M.throw $ M.CannotInsertLabel newLabel

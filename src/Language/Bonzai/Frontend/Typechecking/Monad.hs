@@ -22,7 +22,6 @@ import Control.Monad.Except
 import Control.Monad.Result as R
 import qualified GHC.IO as IO
 import qualified Language.Bonzai.Syntax.Internal.Type as HLIR
-import qualified Language.Bonzai.Syntax.HLIR as HLIR
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified Data.Set as Set
@@ -43,10 +42,9 @@ currentLevel = IO.unsafePerformIO $ newIORef 0
 
 data CheckerState = MkCheckerState {
     variables :: Map Text HLIR.Scheme
-  , interfaces :: Map (Text, [HLIR.QuVar]) (Map Text HLIR.Type)
-  , varPos :: [(Text, (HLIR.Scheme, HLIR.Position))]
   , dataConstructors :: Map Text HLIR.Scheme
   , returnType :: Maybe HLIR.Type
+  , typeAliases :: Map Text HLIR.Scheme
 } deriving (Eq, Show)
 
 -- | Helper function to update the state of the typechecker
@@ -63,10 +61,9 @@ checkerState :: IORef CheckerState
 checkerState = IO.unsafePerformIO . newIORef $
   MkCheckerState
     Map.empty
-    Map.empty
-    mempty
     mempty
     Nothing
+    Map.empty
 
 enterLevel :: (MonadChecker m) => m ()
 enterLevel = modifyIORef' currentLevel (+ 1)
@@ -103,12 +100,30 @@ instantiateWithSub s (HLIR.Forall qvars ty) = do
   pure (res, s2)
   where
     go :: (MonadChecker m) => Substitution -> HLIR.Type -> m (HLIR.Type, Substitution)
+    go subst (HLIR.MkTyApp (HLIR.MkTyId n) xs) = do
+      typeAls <- readIORef checkerState <&> typeAliases
+
+      case Map.lookup n typeAls of
+        Just (HLIR.Forall qvars' ty') -> do
+          sub <- Map.fromList <$> mapM (\x -> (x,) <$> fresh) qvars'
+          let s' = Map.union sub subst
+          (res, s2) <- go s' ty'
+          (res', s3) <- goMany s2 xs
+          pure (HLIR.MkTyApp res res', s3)
+        Nothing -> do
+          (xs', subst') <- goMany subst xs
+          pure (HLIR.MkTyApp (HLIR.MkTyId n) xs', subst')
     go subst (HLIR.MkTyQuantified name) = case Map.lookup name subst of
       Just t -> pure (t, subst)
       Nothing -> pure (HLIR.MkTyQuantified name, subst)
     go subst (HLIR.MkTyId name) = case Map.lookup name subst of
       Just t -> pure (t, subst)
-      Nothing -> pure (HLIR.MkTyId name, subst)
+      Nothing -> do
+        typeAls <- readIORef checkerState <&> typeAliases
+        case Map.lookup name typeAls of
+          Just (HLIR.Forall [] ty') -> go s ty'
+          Just (HLIR.Forall qvars' _) -> throw $ R.InvalidArgumentQuantity 0 (length qvars')
+          Nothing -> pure (HLIR.MkTyId name, subst)
     go subst (HLIR.MkTyApp t ts) = do
       (t', subst') <- go subst t
       (ts', subst'') <- goMany subst' ts

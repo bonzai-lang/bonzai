@@ -128,6 +128,7 @@ convert (HLIR.MkExprData cs) = do
   let funs = map (createFunction' Nothing) cs
   MLIR.MkExprRecord (Map.fromList funs)
 convert (HLIR.MkExprSpawn e) = MLIR.MkExprSpawn (convert e)
+convert (HLIR.MkExprTypeAlias {}) = compilerError "type alias is not supported in MLIR"
 
 unit :: MLIR.Expression 
 unit = MLIR.MkExprVariable "unit"
@@ -245,6 +246,7 @@ convertUpdate (HLIR.MkUpdtField u f) = MLIR.MkUpdtField (convertUpdate u) f
 convertUpdate (HLIR.MkUpdtIndex u e) = MLIR.MkUpdtIndex (convertUpdate u) (convert e)
 
 eraseTypes :: [HLIR.TLIR "expression"] -> [MLIR.MLIR "expression"]
+eraseTypes (HLIR.MkExprTypeAlias {} : xs) = eraseTypes xs
 eraseTypes (HLIR.MkExprLet _ (Left ann) e b : xs) | Just constrs <- getData e = do
   let funs = map (createFunction' (Just ann.name)) constrs
   let e' = MLIR.MkExprLet ann.name (MLIR.MkExprRecord (Map.fromList funs))

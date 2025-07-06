@@ -577,6 +577,17 @@ parseForIn = do
         ]
     )
 
+parseTypeAlias :: (MonadIO m) => P.Parser m (HLIR.Position, HLIR.HLIR "expression")
+parseTypeAlias = do
+  ((start, _), _) <- Lex.reserved "type"
+  (_, name) <- Lex.identifier
+  gens <- P.option [] $ snd <$> Lex.angles (map snd <$> P.sepBy Lex.identifier Lex.comma)
+  void $ Lex.symbol "="
+  ((_, end), ty) <- Typ.parseType
+  let ty' = HLIR.MkExprTypeAlias (HLIR.MkAnnotation name gens) ty
+
+  pure ((start, end), ty')
+
 -- | PARSE MODULE EXPRESSION
 -- | Parse a module expression. A module expression is an expression that consists
 -- | of a module definition. It is used to define a module in Bonzai.
@@ -1246,6 +1257,7 @@ parseToplevel =
   Lex.locateWith
     <$> P.choice
       [ parsePublic,
+        P.try parseTypeAlias,
         P.try parseDatatype,
         P.try parseDirectData,
         parseRequire,

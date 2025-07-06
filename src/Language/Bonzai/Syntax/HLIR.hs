@@ -77,6 +77,7 @@ data Expression f t
   | MkExprContinue
   | MkExprReturn (Expression f t)
   | MkExprSpawn (Expression f t)
+  | MkExprTypeAlias (Annotation [Text]) t
   deriving (Generic)
 
 -- | DATA CONSTRUCTOR TYPE
@@ -171,6 +172,7 @@ instance (ToText t, ToText (f t)) => ToText (Expression f t) where
   toText MkExprContinue = "continue"
   toText (MkExprReturn e) = T.concat ["return ", toText e]
   toText (MkExprSpawn e) = T.concat ["spawn ", toText e]
+  toText (MkExprTypeAlias ann t) = T.concat ["type ", toText ann.name, " = ", toText t]
 
 instance (ToText t) => ToText (DataConstructor t) where
   toText (MkDataVariable v) = v

@@ -349,6 +349,9 @@ resolveImports m (HLIR.MkExprReturn e) = do
   void $ resolveImports m e
   pure m
 resolveImports m (HLIR.MkExprSpawn e) = resolveImports m e
+resolveImports m (HLIR.MkExprTypeAlias ann _) = do
+  let m' = m {types = Set.singleton ann.name <> types m}
+  pure m'
 
 resolveImportsPattern :: (MonadConversion m) => ModuleUnit -> HLIR.HLIR "pattern" -> m ModuleUnit
 resolveImportsPattern m (HLIR.MkPatVariable n _) = pure m {variables = Set.insert n m.variables}
