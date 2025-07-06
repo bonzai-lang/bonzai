@@ -157,7 +157,7 @@ pub fn Request::information(req: Request): list<string> => {
       Request::headers(req), 
       fn(Header(top, _, _)) => top
     ), 
-    "GET /404 HTTP/1.1"
+    "GET / HTTP/1.1"
   )
 
   String::split(headers, " ")
