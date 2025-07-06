@@ -87,10 +87,9 @@ runModuleConversion path = do
 runTypechecking' 
   :: HLIR.HLIR "expression" 
   -> Map Text HLIR.Scheme 
-  -> Map Text (Map Text HLIR.Type)
   -> IO (Either Error HLIR.Type)
-runTypechecking' ast vars interfaces = do
-  let st = MkCheckerState vars (Map.mapKeys (,[]) interfaces) mempty mempty Nothing
+runTypechecking' ast vars = do
+  let st = MkCheckerState vars  mempty Nothing mempty
   res <- M.with M.checkerState (const st) $ runExceptT $ traverse synthesize [ast]
   
   case res of
@@ -125,6 +124,8 @@ removeLocation (HLIR.MkExprSingleIf c e) = HLIR.MkExprSingleIf (removeLocation c
 removeLocation (HLIR.MkExprReturn e) = HLIR.MkExprReturn (removeLocation e)
 removeLocation HLIR.MkExprBreak = HLIR.MkExprBreak
 removeLocation HLIR.MkExprContinue = HLIR.MkExprContinue
+removeLocation (HLIR.MkExprSpawn e) = HLIR.MkExprSpawn (removeLocation e)
+removeLocation (HLIR.MkExprTypeAlias ann t) = HLIR.MkExprTypeAlias ann t 
 
 removeLocationPattern :: HLIR.HLIR "pattern" -> HLIR.HLIR "pattern"
 removeLocationPattern (HLIR.MkPatVariable a t) = HLIR.MkPatVariable a t
@@ -136,3 +137,4 @@ removeLocationPattern (HLIR.MkPatSpecial a) = HLIR.MkPatSpecial a
 removeLocationPattern (HLIR.MkPatCondition a b) = HLIR.MkPatCondition (removeLocation a) (removeLocationPattern b)
 removeLocationPattern (HLIR.MkPatLocated p _) = removeLocationPattern p
 removeLocationPattern (HLIR.MkPatOr a b) = HLIR.MkPatOr (removeLocationPattern a) (removeLocationPattern b)
+removeLocationPattern (HLIR.MkPatRecord m) = HLIR.MkPatRecord (Map.map removeLocationPattern m)

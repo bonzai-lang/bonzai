@@ -145,141 +145,141 @@ testTypechecking = do
   describe "variable typechecking" $ do
     it "typechecks print" $ do
       let var' = HLIR.MkExprVariable (HLIR.MkAnnotation "print" Nothing)
-      res <- runTypechecking' var' env mempty
+      res <- runTypechecking' var' env 
       shouldBeRight' res
     
     it "typechecks +" $ do
       let var' = HLIR.MkExprVariable (HLIR.MkAnnotation "+" Nothing)
-      res <- runTypechecking' var' env mempty
+      res <- runTypechecking' var' env 
       shouldBeRight' res
     
     it "typechecks -" $ do
       let var' = HLIR.MkExprVariable (HLIR.MkAnnotation "-" Nothing)
-      res <- runTypechecking' var' env mempty
+      res <- runTypechecking' var' env 
       shouldBeRight' res
     
     it "typechecks const" $ do
       let var' = HLIR.MkExprVariable (HLIR.MkAnnotation "const" Nothing)
-      res <- runTypechecking' var' env mempty
+      res <- runTypechecking' var' env 
       shouldBeRight' res
     
     it "does not typecheck an unknown variable" $ do
       let var' = HLIR.MkExprVariable (HLIR.MkAnnotation "unknown" Nothing)
-      res <- runTypechecking' var' env mempty
+      res <- runTypechecking' var' env 
       shouldBeError' res (VariableNotFound "unknown")
     
   describe "application typechecking" $ do
     it "typechecks a function application" $ do
       let var' = HLIR.MkExprVariable (HLIR.MkAnnotation "print" Nothing)
       let app = HLIR.MkExprApplication var' [HLIR.MkExprLiteral (HLIR.MkLitInt 42)]
-      res <- runTypechecking' app env mempty
+      res <- runTypechecking' app env 
       shouldBeRight' res
     
     it "does not typecheck an unknown function" $ do
       let var' = HLIR.MkExprVariable (HLIR.MkAnnotation "unknown" Nothing)
       let app = HLIR.MkExprApplication var' [HLIR.MkExprLiteral (HLIR.MkLitInt 42)]
-      res <- runTypechecking' app env mempty
+      res <- runTypechecking' app env 
       shouldBeError' res (VariableNotFound "unknown")
     
     it "does not typecheck an application with the wrong number of arguments" $ do
       let var' = HLIR.MkExprVariable (HLIR.MkAnnotation "print" Nothing)
       let app = HLIR.MkExprApplication var' []
-      res <- runTypechecking' app env mempty
+      res <- runTypechecking' app env 
       shouldBeError res
     
     it "does not typecheck an application with the wrong argument type" $ do
       let var' = HLIR.MkExprVariable (HLIR.MkAnnotation "intEq" Nothing)
       let app = HLIR.MkExprApplication var' [HLIR.MkExprLiteral (HLIR.MkLitChar 'a')]
-      res <- runTypechecking' app env mempty
+      res <- runTypechecking' app env 
       shouldBeError res
     
   describe "lambda typechecking" $ do
     it "typechecks a lambda" $ do
       let lam = HLIR.MkExprLambda [HLIR.MkAnnotation "x" Nothing] Nothing (HLIR.MkExprVariable (HLIR.MkAnnotation "x" Nothing))
-      res <- runTypechecking' lam env mempty
+      res <- runTypechecking' lam env 
       shouldBeRight' res
     
     it "does not typecheck a lambda with an unknown variable" $ do
       let lam = HLIR.MkExprLambda [HLIR.MkAnnotation "x" Nothing] Nothing (HLIR.MkExprVariable (HLIR.MkAnnotation "y" Nothing))
-      res <- runTypechecking' lam env mempty
+      res <- runTypechecking' lam env 
       shouldBeError' res (VariableNotFound "y")
 
   describe "let typechecking" $ do
     it "typechecks a let" $ do
       let let' = HLIR.MkExprLet mempty (Left (HLIR.MkAnnotation "x" Nothing)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
-      res <- runTypechecking' let' env mempty
+      res <- runTypechecking' let' env 
       shouldBeRight' res
     
     it "does not typecheck a let with an unknown variable" $ do
       let let' = HLIR.MkExprLet mempty (Left (HLIR.MkAnnotation "x" Nothing) )(HLIR.MkExprVariable (HLIR.MkAnnotation "y" Nothing)) (HLIR.MkExprVariable (HLIR.MkAnnotation "unit" Nothing))
-      res <- runTypechecking' let' env mempty
+      res <- runTypechecking' let' env 
       shouldBeError' res (VariableNotFound "y")
     
   describe "if-then-else typechecking" $ do
     it "typechecks an if-then-else" $ do
       let if' = ifThenElse (bool True) (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
-      res <- runTypechecking' if' env mempty
+      res <- runTypechecking' if' env 
       shouldBeRight' res
     
     it "does not typecheck an if-then-else with a non-boolean condition" $ do
       let if' = ifThenElse (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
-      res <- runTypechecking' if' env mempty
+      res <- runTypechecking' if' env 
       shouldBeError res
     
     it "does not typecheck an if-then-else with different branches" $ do
       let if' = ifThenElse (bool True) (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) (HLIR.MkExprLiteral (HLIR.MkLitFloat 42.0))
-      res <- runTypechecking' if' env mempty
+      res <- runTypechecking' if' env 
       shouldBeError res
     
   describe "block typechecking" $ do
     it "typechecks a block" $ do
       let block = HLIR.MkExprBlock [HLIR.MkExprLiteral (HLIR.MkLitInt 42), HLIR.MkExprLiteral (HLIR.MkLitInt 42)]
-      res <- runTypechecking' block env mempty
+      res <- runTypechecking' block env 
       
       res `shouldTypeBe` HLIR.MkTyInt
     
     it "does not typecheck a block with an unknown variable" $ do
       let block = HLIR.MkExprBlock [HLIR.MkExprVariable (HLIR.MkAnnotation "x" Nothing)]
-      res <- runTypechecking' block env mempty
+      res <- runTypechecking' block env 
       shouldBeError' res (VariableNotFound "x")
     
   describe "mutable typechecking" $ do
     it "typechecks a mutable" $ do
       let mut = HLIR.MkExprMut (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
-      res <- runTypechecking' mut env mempty
+      res <- runTypechecking' mut env 
       shouldBeRight' res
     
     it "does not typecheck a mutable with an unknown variable" $ do
       let mut = HLIR.MkExprMut (HLIR.MkExprVariable (HLIR.MkAnnotation "y" Nothing))
-      res <- runTypechecking' mut env mempty
+      res <- runTypechecking' mut env 
       shouldBeError' res (VariableNotFound "y")
     
   describe "while typechecking" $ do
     it "typechecks a while" $ do
       let while' = HLIR.MkExprWhile (bool True) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
-      res <- runTypechecking' while' env mempty
+      res <- runTypechecking' while' env
       shouldBeRight' res
     
     it "does not typecheck a while with a non-boolean condition" $ do
       let while' = HLIR.MkExprWhile (HLIR.MkExprLiteral (HLIR.MkLitInt 42)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
-      res <- runTypechecking' while' env mempty
+      res <- runTypechecking' while' env
       shouldBeError res
     
   describe "list typechecking" $ do
     it "typechecks a list" $ do
       let list = HLIR.MkExprList [HLIR.MkExprLiteral (HLIR.MkLitInt 42), HLIR.MkExprLiteral (HLIR.MkLitInt 42)]
-      res <- runTypechecking' list env mempty
+      res <- runTypechecking' list env 
       res `shouldTypeBe` HLIR.MkTyList HLIR.MkTyInt
     
     it "does not typecheck a list with different types" $ do
       let list = HLIR.MkExprList [HLIR.MkExprLiteral (HLIR.MkLitInt 42), HLIR.MkExprLiteral (HLIR.MkLitFloat 42.0)]
-      res <- runTypechecking' list env mempty
+      res <- runTypechecking' list env 
       shouldBeError res
     
   describe "native typechecking" $ do
     it "typechecks a native" $ do
       let native = HLIR.MkExprNative (HLIR.MkAnnotation "print" ["a"]) HLIR.MkTyUnit
-      res <- runTypechecking' native env mempty
+      res <- runTypechecking' native env 
       shouldBeRight' res
     
     -- Native functions are likely to be fault-tolerant, so I'm not going to test them further
@@ -287,7 +287,7 @@ testTypechecking = do
   describe "interface typechecking" $ do
     it "typechecks an interface" $ do
       let interface' = HLIR.MkExprInterface (HLIR.MkAnnotation "interface" []) []
-      res <- runTypechecking' interface' env mempty
+      res <- runTypechecking' interface' env 
       shouldBeRight' res
 
     -- Interfaces are likely to be fault-tolerant, so I'm not going to test them further
@@ -300,27 +300,27 @@ testTypechecking = do
 
     it "typechecks a variable update" $ do
       let update = HLIR.MkExprUpdate (HLIR.MkUpdtVariable (HLIR.MkAnnotation "x" Nothing)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
-      res <- runTypechecking' update env' mempty
+      res <- runTypechecking' update env' 
       shouldBeRight' res
     
     it "does not typecheck an update with an unknown variable" $ do
       let update = HLIR.MkExprUpdate (HLIR.MkUpdtVariable (HLIR.MkAnnotation "x" Nothing)) (HLIR.MkExprVariable (HLIR.MkAnnotation "z" Nothing))
-      res <- runTypechecking' update env' mempty
+      res <- runTypechecking' update env' 
       shouldBeError' res (VariableNotFound "z")
     
     it "does not typecheck an update with an index that is not an integer" $ do
       let update = HLIR.MkExprUpdate (HLIR.MkUpdtIndex (HLIR.MkUpdtVariable (HLIR.MkAnnotation "x" Nothing)) (HLIR.MkExprLiteral (HLIR.MkLitChar 'a'))) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
-      res <- runTypechecking' update env' mempty
+      res <- runTypechecking' update env' 
       shouldBeError res
     
     it "does not typechecking a non-mutable variable" $ do
       let update = HLIR.MkExprUpdate (HLIR.MkUpdtVariable (HLIR.MkAnnotation "y" Nothing)) (HLIR.MkExprLiteral (HLIR.MkLitInt 42))
-      res <- runTypechecking' update env' mempty
+      res <- runTypechecking' update env' 
       shouldBeError res
     
     it "does not typecheck an update with a type mismatch" $ do
       let update = HLIR.MkExprUpdate (HLIR.MkUpdtVariable (HLIR.MkAnnotation "x" Nothing)) (HLIR.MkExprLiteral (HLIR.MkLitFloat 42.0))
-      res <- runTypechecking' update env' mempty
+      res <- runTypechecking' update env' 
       shouldBeError res
   
     
