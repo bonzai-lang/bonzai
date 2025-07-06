@@ -22,6 +22,7 @@ Value wait_thread(Module* mod, Value* args, int argc) {
   Value object = *thread_returned;
 
   free(thread_returned);
+  atomic_fetch_sub(&mod->gc->thread_quantity, 1);
 
   return object;
 }
