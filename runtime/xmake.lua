@@ -7,7 +7,7 @@ end
 set_warnings("allextra")
 
 target("bonzai-runtime")
-  -- add_rules("mode.release")
+  add_rules("mode.release")
 
   -- Adding the runtime source files
   add_files("src/**.c")
