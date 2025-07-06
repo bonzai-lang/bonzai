@@ -57,10 +57,6 @@ void free_libraries(LibraryOption* head) {
 int main(int argc, char* argv[]) {
   Module module;
   module.latest_position_index = 0;
-  module.latest_position_capacity = 10;
-  module.latest_position =
-      malloc(sizeof(Position) * module.latest_position_capacity);
-  module.file = malloc(sizeof(char*) * module.latest_position_capacity);
 
   gc_t* gc = malloc(sizeof(gc_t));
   init_gc(gc, &module);

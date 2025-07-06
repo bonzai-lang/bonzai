@@ -72,7 +72,5 @@ void* value_to_function(void* value) {
 
   *object_as_ptr = ret;
 
-  atomic_fetch_sub(&module->gc->thread_quantity, 1);
-
   return object_as_ptr;
 }
