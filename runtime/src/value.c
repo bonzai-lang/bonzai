@@ -184,11 +184,19 @@ void mark_all(struct Module* vm) {
     trylock(&stack->mutex);
     Value* values = stack->values;
     int stack_pointer = stack->stack_pointer;
+    int stack_capacity = stack->stack_capacity;
     pthread_mutex_unlock(&stack->mutex);
 
-    for (int j = 0; j <= stack_pointer; j++) {
+    for (int j = 0; j <= stack_capacity; j++) {
       Value value = values[j];
       if (value == kNull) continue;
+      if (j >= stack_pointer) {
+        trylock(&stack->mutex);
+        values[j] = kNull;
+        pthread_mutex_unlock(&stack->mutex);
+        continue;
+      }
+
       mark_value(vm, value);
     }
   }
@@ -287,8 +295,6 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
     }
   }
 
-  safe_point(mod);
-
   HeapValue* v = malloc(sizeof(HeapValue));
 
   v->type = type;
@@ -303,15 +309,15 @@ HeapValue* allocate(struct Module* mod, ValueType type) {
   pthread_cond_init(&v->cond, NULL);
 
   // Insert in young generation
-  // if (atomic_load(&gc_->gc_enabled)) {
-  //   trylock(&gc_->gc_mutex);
-  // }
+  if (atomic_load(&gc_->gc_enabled)) {
+    trylock(&gc_->gc_mutex);
+  }
   gc_->young.first_object = v;
   gc_->young.num_objects++;
 
-  // if (atomic_load(&gc_->gc_enabled)) {
-  //   pthread_mutex_unlock(&gc_->gc_mutex);
-  // }
+  if (atomic_load(&gc_->gc_enabled)) {
+    pthread_mutex_unlock(&gc_->gc_mutex);
+  }
 
   return v;
 }
