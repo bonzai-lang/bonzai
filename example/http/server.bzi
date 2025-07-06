@@ -3,13 +3,12 @@ require "std:foundation"
 require "std:datatypes/json"
 
 mut i = 0
-
-let { Object, String, Integer } = JSON
+let port = 8080 
 
 let thread = spawn HTTP::create(
   fn(req) => {
     let [method, path, version] = Request::information(req)
-    print("[$method] Received request for $path")
+    Logger->info("Received $method request for $path")
 
     Request::sendHTML(
       req,
@@ -27,11 +26,11 @@ let thread = spawn HTTP::create(
     
     i += 1
 
-    true
+    return true
   },
-  8080
+  port
 )
 
-print("Server started on port 8000")
+Logger->success("Server started on port $port")
 
 thread.wait()
