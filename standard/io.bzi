@@ -1,9 +1,12 @@
 require "std:datatypes/unit"
+require "std:datatypes/color"
+require "std:math"
 
 extern fn exit_with<A>(code: int): A
 pub extern fn print<A>(x: A): unit
 extern fn panic_<A>(msg: string): A
 extern fn wait_time(time: int): unit
+extern fn toString<A>(x: A): string
 
 pub fn exit<A>(): A => exit_with(0)
 pub fn panic<A>(msg: string): A => panic_(msg)
@@ -23,4 +26,30 @@ pub fn every<A>(time: int, f: fn(): A): unit => {
   }
 
   unit
+}
+
+pub mod Logger {
+  pub fn info<A>(msg: string): unit => {
+    print(reset(bgBlue(white(" INFO "))) + " $msg")
+  }
+
+  pub fn warn<A>(msg: string): unit => {
+    print(reset(bgYellow(black(" WARN "))) + " $msg")
+  }
+
+  pub fn error<A>(msg: string): unit => {
+    print(reset(bgRed(white(" ERROR "))) + " $msg")
+  }
+
+  pub fn debug<A>(msg: string): unit => {
+    print(reset(bgCyan(white(" DEBUG "))) + " $msg")
+  }
+
+  pub fn success<A>(msg: string): unit => {
+    print(reset(bgGreen(white(" SUCCESS "))) + " $msg")
+  }
+
+  pub fn log<A>(msg: string): unit => {
+    print(reset(bgMagenta(white(" LOG "))) + " $msg")
+  }
 }
