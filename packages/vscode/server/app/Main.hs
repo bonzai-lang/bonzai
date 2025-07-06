@@ -8,7 +8,6 @@ module Main where
 import Data.Char qualified as Char
 import Data.Map qualified as Map
 import Data.Maybe (fromJust)
-import Data.Row
 import Data.Text qualified as Text
 import GHC.IO (unsafePerformIO)
 import Language.Bonzai.Frontend.Module.Conversion (ModuleState (MkModuleState), moduleState, removeRequires, resolve, resolveContent, resultState)
@@ -126,6 +125,7 @@ getVar (HLIR.MkExprReturn e) pos = getVar e pos
 getVar (HLIR.MkExprSpawn e) pos = getVar e pos
 getVar HLIR.MkExprBreak _ = Nothing
 getVar HLIR.MkExprContinue _ = Nothing
+getVar (HLIR.MkExprTypeAlias {}) _ = Nothing
 
 getVarInPattern :: HLIR.TLIR "pattern" -> (Position, Uri) -> Maybe (Text, HLIR.Type)
 getVarInPattern (HLIR.MkPatVariable name ty) _ = Just (name, runIdentity ty)
@@ -499,12 +499,9 @@ handlers =
           let content =
                 foldr
                   ( \(TextDocumentContentChangeEvent opt) acc -> case opt of
-                      InR ((Label :: Label "text") :== text) -> acc <> text
+                      InR ((TextDocumentContentChangeWholeDocument {_text=text})) -> acc <> text
                       InL
-                        ( ((Label :: Label "range") :== _)
-                            :+ ((Label :: Label "rangeLength") :== _)
-                            :+ (Label :== text)
-                          ) -> acc <> text
+                        ( TextDocumentContentChangePartial _ _ text) -> acc <> text
                   )
                   ""
                   updates
