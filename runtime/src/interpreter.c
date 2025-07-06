@@ -383,7 +383,14 @@ case_spawn: {
   new_module->is_terminated = 0;
   new_module->pc = module->pc;
   new_module->call_function = module->call_function;
-  new_module->file = module->file;
+  // Clone the latest position
+  for (int i = 0; i < module->latest_position_index; i++)
+    new_module->latest_position[i][0] = module->latest_position[i][0];
+  for (int i = 0; i < module->latest_position_index; i++)
+    new_module->latest_position[i][1] = module->latest_position[i][1];
+  for (int i = 0; i < module->latest_position_index; i++)
+    new_module->file[i] = strdup(module->file[i]);
+  new_module->latest_position_index = module->latest_position_index;
 
   new_module->callstack = 1;
   pthread_mutex_init(&new_module->module_mutex, NULL);
@@ -453,16 +460,8 @@ case_make_mutable: {
 case_loc: {
   safe_point(module);
 
-  if (module->latest_position_index >= module->latest_position_capacity) {
-    module->latest_position_capacity *= 1.5;
-    module->latest_position = realloc(
-        module->latest_position,
-        module->latest_position_capacity * sizeof(Position));
-    module->file = realloc(module->file,
-                           module->latest_position_capacity * sizeof(char *));
-    if (module->latest_position == NULL || module->file == NULL) {
-      THROW(module, "Failed to allocate memory for latest positions");
-    }
+  if (module->latest_position_index >= 512) {
+    module->latest_position_index = 511;
   }
 
   module->latest_position[module->latest_position_index][0] = i1;
