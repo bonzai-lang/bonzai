@@ -13,7 +13,7 @@
   if (module->file && module->latest_position[0] != 0 &&            \
       module->latest_position[1] != 0) {                            \
     for (int i = module->latest_position_index - 1; i >= module->latest_position_index - 5; i--) {        \
-      if (i >= module->latest_position_index) break;                \
+      if (i >= module->latest_position_index || !module->file[i]) break;                \
       printf("   %s- at %s:%d:%d\n", BLK, module->file[i],              \
              module->latest_position[i][0], module->latest_position[i][1]); \
     }                                                               \
@@ -29,9 +29,9 @@
   printf("\n");                                                             \
   if (module->file && module->latest_position[0] != 0 &&                    \
       module->latest_position[1] != 0) {                                    \
-    for (int i = module->latest_position_index - 1;                             \
-         i >= module->latest_position_index - 5; i--) {                          \
-      if (i >= module->latest_position_index) break;                        \
+    for (int i = module->latest_position_index - 1;                         \
+         i >= module->latest_position_index - 5; i--) {                     \
+      if (i >= module->latest_position_index || !module->file[i]) break;    \
       printf("  %s- at %s:%d:%d\n", BLK, module->file[i],                   \
              module->latest_position[i][0], module->latest_position[i][1]); \
     }                                                                       \
